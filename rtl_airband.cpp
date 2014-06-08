@@ -611,9 +611,9 @@ int main(int argc, char* argv[]) {
 			continue;
 		}
 #ifdef _WIN32
-		bins[i] = (int)((freqs[i] + SOURCE_RATE - center + correction) / (double)(SOURCE_RATE / FFT_SIZE) - 1.2f) % FFT_SIZE;
+		bins[i] = (int)ceil((freqs[i] + SOURCE_RATE - center + correction) / (double)(SOURCE_RATE / FFT_SIZE) - 2.0f) % FFT_SIZE;
 #else
-		bins[i] = (int)((freqs[i] + SOURCE_RATE - center + correction) / (double)(SOURCE_RATE / FFT_SIZE) - 0.6f) % FFT_SIZE;
+		bins[i] = (int)ceil((freqs[i] + SOURCE_RATE - center + correction) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
 #endif
 	}
 	fclose(f);

@@ -12,6 +12,14 @@ Features
  * Low CPU usage on Windows (<4% on i5-2430m) thanks to SSE and AVX instructions
  * FFT using GPU on Raspberry Pi (50-55% CPU with default clock)
 
+Demo
+---------------------
+![Demo (Windows version)](demo.png?raw=true)
+
+Windows Binary
+---------------------
+The latest Windows binary can be downloaded [here](http://www.microtony.com/rtlsdr_airband.zip).
+
 Building
 ---------------------
 ### Windows using VS Express 2013 for Desktop

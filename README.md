@@ -18,7 +18,7 @@ Demo
 
 Windows Binary
 ---------------------
-The latest Windows binary can be downloaded [here](http://www.microtony.com/rtlsdr_airband.zip).
+The latest Windows binary can be downloaded [here](http://www.microtony.com/rtl_airband.zip).
 
 Building
 ---------------------
@@ -84,7 +84,7 @@ Building
  * Copy win32/Release/libshout.lib to win32/lib
  * Copy include/shout (the folder) to win32/include
  
-#### Builing this project
+#### Building this project
  * Browse into win32 and open the solution
  * Simply build solution or click the "Start Local Windows Debugger" button
  

@@ -71,7 +71,7 @@ Building
  * Add HAVE_SYS_TIMEB_H and HAVE_FTIME
  * Try to build, you should get errors
  * One of the error is "error C1083: Cannot open include file: 'compat.h': No such file or directory"
- * Double click on it and change that line from #include <compat.h> to #include <os.h>
+ * Double click on it and change that line from #include &lt;compat.h&gt; to #include &lt;os.h&gt;
  * Build again
  * Copy win32/Release/libshout.lib to win32/lib
  * Copy include/shout (the folder) to win32/include

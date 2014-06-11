@@ -120,7 +120,7 @@ void rtlsdr_exec(void* params) {
 #else
 void* rtlsdr_exec(void* params) {
 #endif
-	// params is int[2], params[0] = devindex, params[1] = center frequency
+	// params is int[3], params[0] = devindex, params[1] = center frequency, params[2] = gain
 	int r;
 	int device_count = rtlsdr_get_device_count();
 	if (!device_count) {
@@ -131,7 +131,6 @@ void* rtlsdr_exec(void* params) {
 	printf("Found %d device(s).\n", device_count);
 
 	int* p = (int*) params;
-	printf("%d %d\n", p[0], p[1], p[2]);
 	rtlsdr_open(&dev, p[0]);
 	if (NULL == dev) {
 		fprintf(stderr, "Failed to open rtlsdr device #%d.\n", p[0]);
@@ -459,8 +458,8 @@ void demodulate() {
 		gpu_fft_execute(fft);
 
 		bufs += speed2 * FFT_BATCH;
-		base = fft->out;
 		for (int j = 0; j < CHANNELS; j++) {
+			base = fft->out;
 			if (freqs[j] == 0) continue;
 			for (int i = 0; i < FFT_BATCH; i++) {
 				waves[j][wavecount + i] = sqrt(base[bins[j]].re * base[bins[j]].re + base[bins[j]].im * base[bins[j]].im) +
@@ -632,7 +631,7 @@ int main(int argc, char* argv[]) {
 #ifdef _WIN32
 	thread1 = (THREAD)_beginthread(rtlsdr_exec, 0, rtlargs);
 #else
-	pthread_create(&thread1, NULL, &rtlsdr_exec, NULL);
+	pthread_create(&thread1, NULL, &rtlsdr_exec, rtlargs);
 #endif
 	printf("Starting RTLSDR...\n");
 	while (bufe == 0) {

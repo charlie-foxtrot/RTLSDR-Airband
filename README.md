@@ -10,7 +10,7 @@ Features
  * MP3 encoding
  * Stream to Icecast or SHOUTcast server
  * Low CPU usage on Windows (<4% on i5-2430m) thanks to SSE and AVX instructions
- * FFT using GPU on Raspberry Pi (50-55% CPU with default clock)
+ * FFT using GPU on Raspberry Pi (1.28Msamples/s, 50-55% CPU with default clock)
 
 Demo
 ---------------------

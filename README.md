@@ -96,6 +96,7 @@ Building
  * cp -r /opt/vc/src/hello_pi/hello_fft .
  * sudo mknod char_dev c 100 0
  * make
+ * You need to run the program with sudo
 
 Configuring
 --------------------

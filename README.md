@@ -18,7 +18,9 @@ Demo
 
 Windows Binary
 ---------------------
-The latest Windows binary can be downloaded [here](http://www.microtony.com/rtl_airband.zip).
+Requires [Visual C++ 2013](http://www.microsoft.com/en-us/download/details.aspx?id=40784)
+* [CPUs with AVX](http://en.wikipedia.org/wiki/Advanced_Vector_Extensions#CPUs_with_AVX) support: [download](http://www.microtony.com/rtl_airband.zip).
+* CPUs without SSE4: Coming soon
 
 Building
 ---------------------

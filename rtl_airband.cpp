@@ -602,7 +602,6 @@ int main(int argc, char* argv[]) {
 		printf("Unsupported CPU.\n");
 		error();
 	}
-	avx = 0;
 #endif
 	
 	int devindex;

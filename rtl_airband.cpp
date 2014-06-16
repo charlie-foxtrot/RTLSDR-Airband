@@ -100,7 +100,14 @@ char stream_password[256];
 char stream_mountpoints[CHANNELS][100];
 int freqs[CHANNELS];
 int bins[CHANNELS];
+int avx;
 
+void error() {
+#ifdef _WIN32
+	system("pause");
+#endif
+	exit(1);
+}
 unsigned char * buffer;
 int bufs = 0, bufe;
 
@@ -125,7 +132,7 @@ void* rtlsdr_exec(void* params) {
 	int device_count = rtlsdr_get_device_count();
 	if (!device_count) {
 		fprintf(stderr, "No supported devices found.\n");
-		exit(1);
+		error();
 	}
 
 	printf("Found %d device(s).\n", device_count);
@@ -134,7 +141,7 @@ void* rtlsdr_exec(void* params) {
 	rtlsdr_open(&dev, p[0]);
 	if (NULL == dev) {
 		fprintf(stderr, "Failed to open rtlsdr device #%d.\n", p[0]);
-		exit(1);
+		error();
 	}
 	rtlsdr_set_sample_rate(dev, SOURCE_RATE);
 	rtlsdr_set_center_freq(dev, p[1]);
@@ -169,9 +176,9 @@ void mp3_setup(int channel) {
 	}
 	char mp[100];
 #ifdef _WIN32
-	sprintf_s(mp, 80, "/%s.mp3", stream_mountpoints[channel]);
+	sprintf_s(mp, 80, "/%s", stream_mountpoints[channel]);
 #else
-	sprintf(mp, "/%s.mp3", stream_mountpoints[channel]);
+	sprintf(mp, "/%s", stream_mountpoints[channel]);
 #endif
 	if (shout_set_mount(shouttemp, mp) != SHOUTERR_SUCCESS) {
 		printf("cannot set mount %d\n", shout_get_error(shouttemp));
@@ -198,8 +205,8 @@ void mp3_setup(int channel) {
 	if (ret == SHOUTERR_SUCCESS) {
 		lame[channel] = lame_init();
 		lame_set_in_samplerate(lame[channel], WAVE_RATE);
-		lame_set_VBR(lame[channel], vbr_mtrh);
-		lame_set_VBR_quality(lame[channel], 3);
+		lame_set_VBR(lame[channel], vbr_off);
+		lame_set_brate(lame[channel], 16);
 		lame_set_out_samplerate(lame[channel], MP3_RATE);
 		lame_set_num_channels(lame[channel], 1);
 		lame_set_mode(lame[channel], MONO);
@@ -207,7 +214,7 @@ void mp3_setup(int channel) {
 		SLEEP(100);
 		shout[channel] = shouttemp;
 	} else {
-		printf("Cannot connect %d", ret);
+		printf("Channel %d failed to connect %d\n", channel, ret);
 		shout_free(shouttemp);
 		return;
 	}
@@ -323,11 +330,7 @@ void demodulate() {
 			waves2[i][j] = 0.5;
 		}
 	}
-
-#ifdef _WIN32	
-	__m256 m256c = _mm256_set1_ps(127.5f);
-#endif
-
+	
 	int row = 2;
 	while (true) {
 		int available = bufe - bufs;
@@ -339,37 +342,60 @@ void demodulate() {
 			SLEEP(20);
 			continue;
 		}
-		__m128i m, m2;
 		
 		// process 8 rtl samples (16 bytes)
-		for (int i = 0; i < FFT_SIZE; i += 8) {
-			m2 = _mm_loadu_si128((const __m128i*) &buffer[bufs + i * 2]);
-			m = _mm_cvtepu8_epi32(m2);
-			m2 = _mm_slli_si128(m2, 4);
-			__m256 m256a1 = _mm256_cvtepi32_ps(_mm256_set_m128i(m, _mm_cvtepu8_epi32(m2)));
-			m2 = _mm_slli_si128(m2, 4);
-			m = _mm_cvtepu8_epi32(m2);
-			m2 = _mm_slli_si128(m2, 4);
-			__m256 m256a2 = _mm256_cvtepi32_ps(_mm256_set_m128i(m, _mm_cvtepu8_epi32(m2)));
-			__m256 m256b1 = _mm256_load_ps(&window[i * 2]);
-			__m256 m256b2 = _mm256_load_ps(&window[i * 2 + 8]);
-			m256b1 = _mm256_mul_ps(_mm256_sub_ps(m256a1, m256c), m256b1);
-			m256b2 = _mm256_mul_ps(_mm256_sub_ps(m256a2, m256c), m256b2);
-			_mm256_store_ps(&fftin[i][0], m256b1);
-			_mm256_store_ps(&fftin[i + 4][0], m256b2);
+		if (avx || true) {
+			__m128i m, m2;
+			__m256 m256c = _mm256_set1_ps(127.5f);
+			for (int i = 0; i < FFT_SIZE; i += 8) {
+				m2 = _mm_loadu_si128((const __m128i*) &buffer[bufs + i * 2]);
+				m = _mm_cvtepu8_epi32(m2);
+				m2 = _mm_srli_si128(m2, 4);
+				__m256 m256a1 = _mm256_cvtepi32_ps(_mm256_set_m128i(_mm_cvtepu8_epi32(m2), m));
+				m2 = _mm_srli_si128(m2, 4);
+				m = _mm_cvtepu8_epi32(m2);
+				m2 = _mm_srli_si128(m2, 4);
+				__m256 m256a2 = _mm256_cvtepi32_ps(_mm256_set_m128i(_mm_cvtepu8_epi32(m2), m));
+				__m256 m256b1 = _mm256_load_ps(&window[i * 2]);
+				__m256 m256b2 = _mm256_load_ps(&window[i * 2 + 8]);
+				m256b1 = _mm256_mul_ps(_mm256_sub_ps(m256a1, m256c), m256b1);
+				m256b2 = _mm256_mul_ps(_mm256_sub_ps(m256a2, m256c), m256b2);
+				_mm256_store_ps(&fftin[i][0], m256b1);
+				_mm256_store_ps(&fftin[i + 4][0], m256b2);
+			}
+		} else {
+			__m128 m128c = _mm_set1_ps(127.5f);
+			for (int i = 0; i < FFT_SIZE; i += 2) {
+				__m128 a3 = _mm_set_ps(buffer[bufs + i * 2 + 3], buffer[bufs + i * 2 + 2], buffer[bufs + i * 2 + 1], buffer[bufs + i * 2 + 0]);
+				__m128 b3 = _mm_load_ps(&window[i * 2]);
+				a3 = _mm_mul_ps(_mm_sub_ps(a3, m128c), b3);
+				_mm_store_ps(&fftin[i][0], a3);
+			}
 		}
 		
 		fftwf_execute(fft);
 
-		// sum up the power of 6 bins 
-		// windows: SAMPLE_RATE = 2.56M and FFT_SIZE = 2048, so width = 7.5 kHz
-		for (int j = 0; j < CHANNELS; j++) {
-			__m256 a = _mm256_loadu_ps(&fftout[bins[j]][0]);
-			a = _mm256_mul_ps(a, a);
-			a = _mm256_hadd_ps(a, a);
-			a = _mm256_sqrt_ps(a);
-			a = _mm256_hadd_ps(a, a);
-			waves[j][wavecount] = a.m256_f32[0] + a.m256_f32[4];
+		// sum up the power of 4 bins 
+		// windows: SAMPLE_RATE = 2.56M and FFT_SIZE = 2048, so width = 5 kHz
+		if (avx) {
+			for (int j = 0; j < CHANNELS; j++) {
+				__m256 a = _mm256_loadu_ps(&fftout[bins[j]][0]);
+				a = _mm256_mul_ps(a, a);
+				a = _mm256_hadd_ps(a, a);
+				a = _mm256_sqrt_ps(a);
+				a = _mm256_hadd_ps(a, a);
+				waves[j][wavecount] = a.m256_f32[0] + a.m256_f32[4];
+			}
+		} else {
+			for (int j = 0; j < CHANNELS; j++) {
+				__m128 a = _mm_loadu_ps(&fftout[bins[j]][0]);
+				__m128 b = _mm_loadu_ps(&fftout[bins[j]+2][0]);
+				a = _mm_mul_ps(a, a);
+				b = _mm_mul_ps(b, b);
+				a = _mm_hadd_ps(a, b);
+				a = _mm_sqrt_ps(a);
+				waves[j][wavecount] = a.m128_f32[0] + a.m128_f32[1] + a.m128_f32[2] + a.m128_f32[3];
+			}
 		}
 		bufs += speed2;
 		wavecount++;
@@ -476,10 +502,18 @@ void demodulate() {
 			for (int i = 0; i < CHANNELS; i++) {
 				if (freqs[i] == 0) continue;
 #ifdef _WIN32
-				__m256 agccap = _mm256_set1_ps(agcmin[i] * 4.5f);
-				for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j += 8) {
-					__m256 t = _mm256_load_ps(&waves[i][j]);
-					_mm256_store_ps(&wavessqrt[j], _mm256_min_ps(t, agccap));
+				if (avx) {
+					__m256 agccap = _mm256_set1_ps(agcmin[i] * 4.5f);
+					for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j += 8) {
+						__m256 t = _mm256_load_ps(&waves[i][j]);
+						_mm256_store_ps(&wavessqrt[j], _mm256_min_ps(t, agccap));
+					}
+				} else {
+					__m128 agccap = _mm_set1_ps(agcmin[i] * 4.5f);
+					for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j += 4) {
+						__m128 t = _mm_load_ps(&waves[i][j]);
+						_mm_store_ps(&wavessqrt[j], _mm_min_ps(t, agccap));
+					}
 				}
 #else
 				float agcmin2 = agcmin[i] * 4.5f;
@@ -554,26 +588,43 @@ int main(int argc, char* argv[]) {
 	tempptr &= ~0x0F;
 	buffer = (unsigned char *)tempptr;
 
+#ifdef _WIN32
+	// check cpu features
+	int cpuinfo[4];
+	__cpuid(cpuinfo, 1);
+	if (cpuinfo[2] & 1 << 28) {
+		avx = 1;
+		printf("AVX support detected.\n");
+	} else if (cpuinfo[1] & 1) {
+		avx = 0;
+		printf("SSE3 suport detected.\n");
+	} else {
+		printf("Unsupported CPU.\n");
+		error();
+	}
+	avx = 0;
+#endif
+	
 	int devindex;
 	char config[256];
 	if (argc == 3) {
 		if (sscanf(argv[1], "%d", &devindex) < 1 || sscanf(argv[2], "%80s", &config, 80) < 1) {
-			printf("Usage: rtl_airband <device> <config>");
-			exit(1);
+			printf("Usage: rtl_airband <device> <config>\n");
+			error();
 		}
 	} else if (argc != 1) {
-		printf("Usage: rtl_airband <device> <config>");
-		exit(1);
+		printf("Usage: rtl_airband <device> <config>\n");
+		error();
 	} else {
 		printf("Device index: ");
 		if (scanf("%d", &devindex) < 1) {
 			printf("Invalid device index\n");
-			exit(0);
+			error();
 		}
 		printf("Config Name: ");
 		if (scanf("%80s", config, 80) < 1) {
 			printf("Invalid config name\n");
-			exit(0);
+			error();
 		}
 	}
 	char filename[100];
@@ -582,14 +633,14 @@ int main(int argc, char* argv[]) {
 	FILE* f;
 	if (fopen_s(&f, filename, "r") != 0) {
 		printf("Config %s not found.\n", config);
-		exit(1);
+		error();
 	}
 #else
 	sprintf(filename, "config/%s.txt", config);
 	FILE* f = fopen(filename, "r");
 	if (f == NULL) {
 		printf("Config %s not found.\n", config);
-		exit(1);
+		error();
 	}
 #endif
 

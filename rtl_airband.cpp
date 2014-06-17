@@ -344,7 +344,7 @@ void demodulate() {
 		}
 		
 		// process 8 rtl samples (16 bytes)
-		if (avx || true) {
+		if (avx) {
 			__m128i m, m2;
 			__m256 m256c = _mm256_set1_ps(127.5f);
 			for (int i = 0; i < FFT_SIZE; i += 8) {

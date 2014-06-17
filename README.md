@@ -20,7 +20,7 @@ Windows Binary
 ---------------------
 * Requires CPU with SSE3 support.
 * Requires [Visual C++ 2013](http://www.microsoft.com/en-us/download/details.aspx?id=40784)
-* [Download (build 2014-06-16)](http://www.microtony.com/rtl_airband_20140616.zip)
+* [Download (build 2014-06-17)](http://www.microtony.com/rtl_airband_20140617.zip)
 
 Building
 ---------------------

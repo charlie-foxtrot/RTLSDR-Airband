@@ -80,8 +80,8 @@
 #define FFT_SIZE 2048
 #define CHANNELS 8
 #else
-#define BUF_SIZE 1280000
-#define SOURCE_RATE 1280000
+#define BUF_SIZE 2560000
+#define SOURCE_RATE 2560000
 #define WAVE_RATE 8000
 #define WAVE_BATCH 1000
 #define MP3_RATE 8000
@@ -411,6 +411,7 @@ void demodulate() {
 			bs2 = buffer + bufs + i * 2;
 			w0 = window2[i];
 			for (int j = 0; j < FFT_BATCH; j++) {
+				__builtin_prefetch(bs2 + speed2);
 				unsigned char t0 = bs2[0];
 				unsigned char t1 = bs2[1];
 				unsigned char t2 = bs2[2];
@@ -485,8 +486,7 @@ void demodulate() {
 			if (freqs[j] == 0) continue;
 			for (int i = 0; i < FFT_BATCH; i++) {
 				waves[j][wavecount + i] = sqrt(base[bins[j]].re * base[bins[j]].re + base[bins[j]].im * base[bins[j]].im) +
-					sqrt(base[bins[j] + 1].re * base[bins[j] + 1].re + base[bins[j] + 1].im * base[bins[j] + 1].im) + 
-					sqrt(base[bins[j] + 2].re * base[bins[j] + 2].re + base[bins[j] + 2].im * base[bins[j] + 2].im);
+					sqrt(base[bins[j] + 1].re * base[bins[j] + 1].re + base[bins[j] + 1].im * base[bins[j] + 1].im);
 				base += fft->step;
 			}
 		}

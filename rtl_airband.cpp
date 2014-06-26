@@ -257,6 +257,7 @@ void* mp3_check(void* params) {
 fftwf_complex* fftin;
 fftwf_complex* fftout;
 ALIGN float window[FFT_SIZE * 2];
+ALIGN float levels[256];
 float window2[FFT_SIZE][256];
 float waves[CHANNELS][WAVE_BATCH + FFT_SIZE * 2];
 float waves2[CHANNELS][WAVE_BATCH + FFT_SIZE * 2];
@@ -271,6 +272,10 @@ void demodulate() {
 	fftout = fftwf_alloc_complex(FFT_SIZE);
 
 	fft = fftwf_plan_dft_1d(FFT_SIZE, fftin, fftout, FFTW_FORWARD, FFTW_MEASURE);
+
+	for (int i=0; i<256; i++) {
+		levels[i] = i-127.5f;
+	}
 #else
 	int mb = mbox_open();
 	struct GPU_FFT *fft;
@@ -343,36 +348,27 @@ void demodulate() {
 			continue;
 		}
 		
-		// process 8 rtl samples (16 bytes)
+		// process 4 rtl samples (16 bytes)
 		if (avx) {
-			__m128i m, m2;
-			__m256 m256c = _mm256_set1_ps(127.5f);
 			for (int i = 0; i < FFT_SIZE; i += 8) {
-				m2 = _mm_loadu_si128((const __m128i*) &buffer[bufs + i * 2]);
-				m = _mm_cvtepu8_epi32(m2);
-				m2 = _mm_srli_si128(m2, 4);
-				__m256 m256a1 = _mm256_cvtepi32_ps(_mm256_set_m128i(_mm_cvtepu8_epi32(m2), m));
-				m2 = _mm_srli_si128(m2, 4);
-				m = _mm_cvtepu8_epi32(m2);
-				m2 = _mm_srli_si128(m2, 4);
-				__m256 m256a2 = _mm256_cvtepi32_ps(_mm256_set_m128i(_mm_cvtepu8_epi32(m2), m));
-				__m256 m256b1 = _mm256_load_ps(&window[i * 2]);
-				__m256 m256b2 = _mm256_load_ps(&window[i * 2 + 8]);
-				m256b1 = _mm256_mul_ps(_mm256_sub_ps(m256a1, m256c), m256b1);
-				m256b2 = _mm256_mul_ps(_mm256_sub_ps(m256a2, m256c), m256b2);
-				_mm256_store_ps(&fftin[i][0], m256b1);
-				_mm256_store_ps(&fftin[i + 4][0], m256b2);
+				unsigned char* buf2 = buffer + bufs + i * 2;
+				__m256 a = _mm256_set_ps(levels[*(buf2+7)], levels[*(buf2+6)], levels[*(buf2+5)], levels[*(buf2+4)], levels[*(buf2+3)], levels[*(buf2+2)], levels[*(buf2+1)], levels[*(buf2)]);
+				__m256 b = _mm256_load_ps(&window[i * 2]);
+				a = _mm256_mul_ps(a, b);
+				_mm_prefetch((const CHAR *)&window[i * 2 + 128], _MM_HINT_T0);
+				_mm_prefetch((const CHAR *)buf2 + 128, _MM_HINT_T0);
+				_mm256_store_ps(&fftin[i][0], a);
+
 			}
 		} else {
-			__m128 m128c = _mm_set1_ps(127.5f);
-			for (int i = 0; i < FFT_SIZE; i += 2) {
-				__m128 a3 = _mm_set_ps(buffer[bufs + i * 2 + 3], buffer[bufs + i * 2 + 2], buffer[bufs + i * 2 + 1], buffer[bufs + i * 2 + 0]);
-				__m128 b3 = _mm_load_ps(&window[i * 2]);
-				a3 = _mm_mul_ps(_mm_sub_ps(a3, m128c), b3);
-				_mm_store_ps(&fftin[i][0], a3);
+			for (int i = 0; i < FFT_SIZE; i += 4) {
+				unsigned char* buf2 = buffer + bufs + i * 2;
+				__m128 a = _mm_set_ps(levels[*(buf2 + 3)], levels[*(buf2 + 2)], levels[*(buf2 + 1)], levels[*(buf2)]);
+				__m128 b = _mm_load_ps(&window[i * 2]);
+				a = _mm_mul_ps(a, b);
+				_mm_store_ps(&fftin[i][0], a);
 			}
 		}
-		
 		fftwf_execute(fft);
 
 		// sum up the power of 4 bins 

@@ -149,7 +149,7 @@ void* rtlsdr_exec(void* params) {
 	rtlsdr_set_tuner_gain(dev, p[2]);
 	rtlsdr_set_agc_mode(dev, 0);
 	rtlsdr_reset_buffer(dev);
-	r = rtlsdr_read_async(dev, rtlsdr_callback, NULL, 40, 25600);
+	r = rtlsdr_read_async(dev, rtlsdr_callback, NULL, 20, 128000);
 }
 
 FILE* oggfiles[CHANNELS];
@@ -207,6 +207,7 @@ void mp3_setup(int channel) {
 		lame_set_in_samplerate(lame[channel], WAVE_RATE);
 		lame_set_VBR(lame[channel], vbr_off);
 		lame_set_brate(lame[channel], 16);
+		lame_set_quality(lame[channel], 7);
 		lame_set_out_samplerate(lame[channel], MP3_RATE);
 		lame_set_num_channels(lame[channel], 1);
 		lame_set_mode(lame[channel], MONO);
@@ -220,11 +221,11 @@ void mp3_setup(int channel) {
 	}
 }
 
-void mp3_process(int channel, float* data, int size) {
+void mp3_process(int channel, float* data) {
 	if (shout[channel] == NULL) {
 		return;
 	}
-	int bytes = lame_encode_buffer_ieee_float(lame[channel], data, NULL, size, lamebuf, 22000);
+	int bytes = lame_encode_buffer_ieee_float(lame[channel], data, NULL, WAVE_BATCH, lamebuf, 22000);
 	if (bytes > 0) {
 		int ret = shout_send(shout[channel], lamebuf, bytes);
 		if (ret < 0) {
@@ -328,7 +329,7 @@ void demodulate() {
 		agcsq[i] = 1;
 		agcavgfast[i] = 0.5;
 		agcavgslow[i] = 0.5;
-		agcmin[i] = 40;
+		agcmin[i] = 100;
 		agcindicate[i] = ' ';
 		for (int j = 0; j < AGC_EXTRA; j++) {
 			waves[i][j] = 20;
@@ -350,7 +351,7 @@ void demodulate() {
 		
 		// process 4 rtl samples (16 bytes)
 		if (avx) {
-			for (int i = 0; i < FFT_SIZE; i += 8) {
+			for (int i = 0; i < FFT_SIZE; i += 4) {
 				unsigned char* buf2 = buffer + bufs + i * 2;
 				__m256 a = _mm256_set_ps(levels[*(buf2+7)], levels[*(buf2+6)], levels[*(buf2+5)], levels[*(buf2+4)], levels[*(buf2+3)], levels[*(buf2+2)], levels[*(buf2+1)], levels[*(buf2)]);
 				__m256 b = _mm256_load_ps(&window[i * 2]);
@@ -361,7 +362,7 @@ void demodulate() {
 
 			}
 		} else {
-			for (int i = 0; i < FFT_SIZE; i += 4) {
+			for (int i = 0; i < FFT_SIZE; i += 2) {
 				unsigned char* buf2 = buffer + bufs + i * 2;
 				__m128 a = _mm_set_ps(levels[*(buf2 + 3)], levels[*(buf2 + 2)], levels[*(buf2 + 1)], levels[*(buf2)]);
 				__m128 b = _mm_load_ps(&window[i * 2]);
@@ -406,16 +407,17 @@ void demodulate() {
 		struct GPU_FFT_COMPLEX* base;
 		unsigned char* bs2;
 		float* w0;
-		for (int i = 0; i < FFT_SIZE; i += 8) {
+		for (int i = 0; i < FFT_SIZE;) {
 			base = fft->in + i;
 			bs2 = buffer + bufs + i * 2;
 			w0 = window2[i];
 			for (int j = 0; j < FFT_BATCH; j++) {
-				__builtin_prefetch(bs2 + speed2);
 				unsigned char t0 = bs2[0];
 				unsigned char t1 = bs2[1];
 				unsigned char t2 = bs2[2];
 				unsigned char t3 = bs2[3];
+				__builtin_prefetch(bs2 + speed2);
+				__builtin_prefetch(bs2 + speed2 + 8);
 				float s0 = w0[t0];
 				float s1 = w0[t1];
 				w0 += 256;
@@ -476,6 +478,15 @@ void demodulate() {
 				base[7].im = s3;
 				base += fft->step;
 				bs2 += speed2;
+			}
+			if (i < 192) {
+				i += 320;
+			} else if (i >= 320) {
+				i -= 312;
+			} else if (i == 312) {
+				break;
+			} else {
+				i += 8;
 			}
 		}
 		gpu_fft_execute(fft);
@@ -538,8 +549,7 @@ void demodulate() {
 								}
 							}
 						}
-					}
-					else {
+					} else {
 						if (waves[i][j] > agcmin[i] * 3.0f) {
 							agcavgfast[i] = agcavgfast[i] * 0.995f + waves[i][j] * 0.005f;
 							agcsmall = 0;
@@ -556,15 +566,15 @@ void demodulate() {
 							}
 						}
 					}
-					waves2[i][j] = agcsq[i] > 0 ? 0 : (waves[i][j - AGC_EXTRA] - agcavgfast[i]) / (agcavgfast[i] * (3.7f - 0.2f * log(agcavgfast[i])));
+					waves2[i][j] = agcsq[i] > 0 ? 0 : (waves[i][j - AGC_EXTRA] - agcavgfast[i]) / (agcavgfast[i] * 2.5f);
 					if (abs(waves2[i][j]) > 0.8f) {
 						waves2[i][j] *= 0.85f;
 						agcavgfast[i] *= 1.15f;
 					}
 				}
-				mp3_process(i, waves2[i], WAVE_BATCH);
+				mp3_process(i, waves2[i]);
 				memcpy(waves[i], waves[i] + WAVE_BATCH, (wavecount - WAVE_BATCH) * 4);
-				memcpy(waves2[i], waves2[i] + WAVE_BATCH, (wavecount - WAVE_BATCH) * 4);
+				memcpy(waves2[i], waves2[i] + WAVE_BATCH, AGC_EXTRA * 4);
 				printf("%4.0f/%2.0f%c  ", agcavgslow[i], agcmin[i], agcindicate[i]);
 			}
 			printf("\n");

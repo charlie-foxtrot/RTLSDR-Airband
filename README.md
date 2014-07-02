@@ -20,7 +20,7 @@ Windows Binary
 ---------------------
 * Requires CPU with SSE3 support.
 * Requires [Visual C++ 2013](http://www.microsoft.com/en-us/download/details.aspx?id=40784)
-* [Download (build 2014-06-26)](http://www.microtony.com/rtl_airband_20140626.zip)
+* [Download (build 2014-07-02)](http://www.microtony.com/rtl_airband_20140702.zip)
 
 Building
 ---------------------
@@ -92,7 +92,7 @@ Building
  
 ### Raspberry Pi (Raspbian)
  * I assume you already have RTLSDR library installed: http://www.hamradioscience.com/raspberry-pi-as-remote-server-for-rtl2832u-sdr/
- * sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev 
+ * sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev libfftw3-dev
  * sudo rpi-update && sudo reboot
  * cd into the project folder (where makefile is located)
  * cp -r /opt/vc/src/hello_pi/hello_fft .

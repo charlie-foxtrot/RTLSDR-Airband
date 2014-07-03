@@ -10,7 +10,7 @@ Features
  * MP3 encoding
  * Stream to Icecast or SHOUTcast server
  * Low CPU usage on Windows (<4% on i5-2430m) thanks to SSE and AVX instructions
- * FFT using GPU on Raspberry Pi (1.28Msamples/s, 50-55% CPU with default clock)
+ * FFT using GPU on Raspberry Pi (2.56Msamples/s, 65% CPU with default clock)
 
 Demo
 ---------------------
@@ -20,7 +20,7 @@ Windows Binary
 ---------------------
 * Requires CPU with SSE3 support.
 * Requires [Visual C++ 2013](http://www.microsoft.com/en-us/download/details.aspx?id=40784)
-* [Download (build 2014-07-02)](http://www.microtony.com/rtl_airband_20140702.zip)
+* [Download (build 2014-07-03)](http://www.microtony.com/rtl_airband_20140703.zip)
 
 Building
 ---------------------

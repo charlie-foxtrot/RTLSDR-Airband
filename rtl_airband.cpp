@@ -90,6 +90,9 @@
 #define FFT_SIZE_LOG 9
 #define FFT_BATCH 250
 #define CHANNELS 8
+
+extern "C" void samplefft(GPU_FFT_COMPLEX* dest, unsigned char* buffer, float* window, float* levels);
+
 #endif
 using namespace std;
 
@@ -110,10 +113,14 @@ void error() {
 }
 unsigned char * buffer;
 int bufs = 0, bufe;
-
+int lock = 0;
 rtlsdr_dev_t * dev;
 
 void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx) {
+	// don't copy memory during sample conversion
+	while (lock) {
+		SLEEP(5);
+	}
 	memcpy(buffer + bufe, buf, len);
 	if (bufe == 0) {
 		memcpy(buffer + BUF_SIZE, buf, FFT_SIZE * 2);
@@ -259,7 +266,6 @@ fftwf_complex* fftin;
 fftwf_complex* fftout;
 ALIGN float window[FFT_SIZE * 2];
 ALIGN float levels[256];
-float window2[FFT_SIZE][256];
 float waves[CHANNELS][WAVE_BATCH + FFT_SIZE * 2];
 float waves2[CHANNELS][WAVE_BATCH + FFT_SIZE * 2];
 
@@ -273,10 +279,6 @@ void demodulate() {
 	fftout = fftwf_alloc_complex(FFT_SIZE);
 
 	fft = fftwf_plan_dft_1d(FFT_SIZE, fftin, fftout, FFTW_FORWARD, FFTW_MEASURE);
-
-	for (int i=0; i<256; i++) {
-		levels[i] = i-127.5f;
-	}
 #else
 	int mb = mbox_open();
 	struct GPU_FFT *fft;
@@ -288,7 +290,11 @@ void demodulate() {
 	case -3: printf("Out of memory.  Try a smaller batch or increase GPU memory.\n"); return;
 	}
 #endif
-	
+		
+	for (int i=0; i<256; i++) {
+		levels[i] = i-127.5f;
+	}
+
 	// initialize fft window
 	// blackman 7
 	// for raspberry pi, the whole matrix is computed
@@ -299,19 +305,13 @@ void demodulate() {
 	const double a5 = 0.00077658482522f;   const double a6 = 0.00001388721735f;
 
 	for (int i = 0; i < FFT_SIZE; i++) {
-		double x = a0 - (a1 * cos((2.0 * M_PI * i) / FFT_SIZE))
-			+ (a2 * cos((4.0 * M_PI * i) / FFT_SIZE))
-			- (a3 * cos((6.0 * M_PI * i) / FFT_SIZE))
-			+ (a4 * cos((8.0 * M_PI * i) / FFT_SIZE))
-			- (a5 * cos((10.0 * M_PI * i) / FFT_SIZE))
-			+ (a6 * cos((12.0 * M_PI * i) / FFT_SIZE));
-#ifdef _WIN32
+		double x = a0 - (a1 * cos((2.0 * M_PI * i) / (FFT_SIZE-1)))
+			+ (a2 * cos((4.0 * M_PI * i) / (FFT_SIZE - 1)))
+			- (a3 * cos((6.0 * M_PI * i) / (FFT_SIZE - 1)))
+			+ (a4 * cos((8.0 * M_PI * i) / (FFT_SIZE - 1)))
+			- (a5 * cos((10.0 * M_PI * i) / (FFT_SIZE - 1)))
+			+ (a6 * cos((12.0 * M_PI * i) / (FFT_SIZE - 1)));
 		window[i * 2] = window[i * 2 + 1] = (float)x;
-#else
-		for (int j = 0; j < 256; j++) {
-			window2[i][j] = j*x;
-		}
-#endif
 	}
 
 	// speed2 = number of bytes per wave sample (x 2 for I and Q)
@@ -405,89 +405,8 @@ void demodulate() {
 		}
 
 		struct GPU_FFT_COMPLEX* base;
-		unsigned char* bs2;
-		float* w0;
-		for (int i = 0; i < FFT_SIZE;) {
-			base = fft->in + i;
-			bs2 = buffer + bufs + i * 2;
-			w0 = window2[i];
-			for (int j = 0; j < FFT_BATCH; j++) {
-				unsigned char t0 = bs2[0];
-				unsigned char t1 = bs2[1];
-				unsigned char t2 = bs2[2];
-				unsigned char t3 = bs2[3];
-				__builtin_prefetch(bs2 + speed2);
-				__builtin_prefetch(bs2 + speed2 + 8);
-				float s0 = w0[t0];
-				float s1 = w0[t1];
-				w0 += 256;
-				t0 = bs2[4];
-				t1 = bs2[5];
-				float s2 = w0[t2];
-				float s3 = w0[t3];
-				w0 += 256;
-
-				t2 = bs2[6];
-				t3 = bs2[7];
-				base[0].re = s0;
-				base[0].im = s1;
-				s0 = w0[t0];
-				s1 = w0[t1];
-				w0 += 256;
-
-				t0 = bs2[8];
-				t1 = bs2[9];
-				base[1].re = s2;
-				base[1].im = s3;
-				s2 = w0[t2];
-				s3 = w0[t3];
-				w0 += 256;
-
-				t2 = bs2[10];
-				t3 = bs2[11];
-				base[2].re = s0;
-				base[2].im = s1;
-				s0 = w0[t0];
-				s1 = w0[t1];
-				w0 += 256;
-
-				t0 = bs2[12];
-				t1 = bs2[13];
-				base[3].re = s2;
-				base[3].im = s3;
-				s2 = w0[t2];
-				s3 = w0[t3];
-				w0 += 256;
-
-				t2 = bs2[14];
-				t3 = bs2[15];
-				base[4].re = s0;
-				base[4].im = s1;
-				s0 = w0[t0];
-				s1 = w0[t1];
-				w0 += 256;
-
-				base[5].re = s2;
-				base[5].im = s3;
-				s2 = w0[t2];
-				s3 = w0[t3];
-				base[6].re = s0;
-				base[6].im = s1;
-				w0 -= 1792;
-				base[7].re = s2;
-				base[7].im = s3;
-				base += fft->step;
-				bs2 += speed2;
-			}
-			if (i < 192) {
-				i += 320;
-			} else if (i >= 320) {
-				i -= 312;
-			} else if (i == 312) {
-				break;
-			} else {
-				i += 8;
-			}
+		for (int i = 0; i < FFT_BATCH; i++) {
+			samplefft(fft->in + i * fft->step, buffer + bufs + i * speed2, window, levels);
 		}
 		gpu_fft_execute(fft);
 
@@ -541,7 +460,7 @@ void demodulate() {
 					if (agcsq[i] > 0) {
 						agcsq[i] = max(agcsq[i] - 1, 1);
 						if (agcsq[i] == 1 && agcavgslow[i] > 3.0f * agcmin[i]) {
-							agcsq[i] = -AGC_EXTRA;
+							agcsq[i] = -AGC_EXTRA * 2;
 							agcindicate[i] = '*';
 							for (int k = j - AGC_EXTRA; k < j; k++) {
 								if (waves[i][k] > agcmin[i] * 3.0f) {
@@ -566,7 +485,7 @@ void demodulate() {
 							}
 						}
 					}
-					waves2[i][j] = agcsq[i] > 0 ? 0 : (waves[i][j - AGC_EXTRA] - agcavgfast[i]) / (agcavgfast[i] * 2.5f);
+					waves2[i][j] = (agcsq[i] != -1) ? 0 : (waves[i][j - AGC_EXTRA] - agcavgfast[i]) / (agcavgfast[i] * 2.5f);
 					if (abs(waves2[i][j]) > 0.8f) {
 						waves2[i][j] *= 0.85f;
 						agcavgfast[i] *= 1.15f;
@@ -590,7 +509,7 @@ void demodulate() {
 
 int main(int argc, char* argv[]) {
 
-	uintptr_t tempptr = (uintptr_t)malloc(BUF_SIZE + FFT_SIZE * 2 + 15);
+	uintptr_t tempptr = (uintptr_t)malloc(BUF_SIZE + FFT_SIZE * 2 + 31);
 	tempptr &= ~0x0F;
 	buffer = (unsigned char *)tempptr;
 
@@ -663,6 +582,7 @@ int main(int argc, char* argv[]) {
 		if (freqs[i] != 0) {
 			fscanf(f, "%80s", stream_mountpoints[i], 80);
 		} else {
+			bins[i] = 0;
 			continue;
 		}
 #ifdef _WIN32

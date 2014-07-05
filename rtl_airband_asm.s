@@ -27,7 +27,7 @@
 
 samplefft:
  
-push {r0-r11, r12, lr}
+push {r4-r12, lr}
 fstmdbs sp!, {s8-s31}
 
 fmrx r4, fpscr
@@ -84,7 +84,7 @@ bic r4, #0x00370000
 fmxr fpscr, r4
 
 fldmias sp!, {s8-s31}
-pop {r0-r11, r12, pc}
+pop {r4-r12, pc}
 
 
 fftwave:
@@ -92,12 +92,16 @@ fftwave:
 push {r4-r12, lr}
 fstmdbs sp!, {s8-s31}
 
-fmrx r12, fpscr
 fmrx r11, fpscr
 bic r11, #0x00370000
 orr r11, #0x00070000
 fmxr fpscr, r11
 
+#r2 is int[2]
+#[r2, #0] is fftstep
+#[r2, #4] is wavestep
+ldr r12, [r2, #4]
+ldr r2, [r2]
 ldmia r3, {r4-r11}
 mov r3, #8
 mla r4, r3, r4, r1
@@ -169,14 +173,14 @@ pld [r9]
 pld [r10]
 pld [r11]
 push {r4-r11}
-add r4, r0, #0
-add r5, r0, #8192
-add r6, r0, #16384
-add r7, r0, #24576
-add r8, r0, #32768
-add r9, r0, #40960
-add r10, r0, #49152
-add r11, r0, #57344
+mov r4, r0
+add r5, r4, r12
+add r6, r5, r12
+add r7, r6, r12
+add r8, r7, r12
+add r9, r8, r12
+add r10, r9, r12
+add r11, r10, r12
 fadds s8, s8, s16
 fsts s8, [r4]
 fsts s9, [r5]
@@ -192,7 +196,9 @@ add r0, r0, #4
 subs r3, r3, #1
 bne .b
 
-fmxr fpscr, r12
+fmrx r4, fpscr
+bic r4, #0x00370000
+fmxr fpscr, r4
 
 fldmias sp!, {s8-s31}
 pop {r4-r12, pc}

@@ -5,12 +5,21 @@ RTLSDR Airband is intended for Airband reception and online streaming to service
 
 Features
 ---------------------
- * Decode multiple AM channels per dongle (within bandwidth frequency range)
+ * Decode up to eight AM channels per dongle (within bandwidth frequency range)
+ * Decode multiple dongles simutaneously
  * Auto squelch and Automatic Gain Control
  * MP3 encoding
  * Stream to Icecast or SHOUTcast server
- * Low CPU usage on Windows (<4% on i5-2430m) thanks to SSE and AVX instructions
- * FFT using GPU on Raspberry Pi (2.56Msamples/s, 65% CPU with default clock)
+ 
+Performance
+---------------------
+### Windows
+ * ~4% per dongle on i5-2430m at 2.1 GHz
+ 
+### Raspberry Pi 
+ * FFT using Broadcom Videocore IV GPU
+ * No overclock required when using 1 dongle plus another dongle running dump1090
+ * Turbo overclock setting recommended when using 2 dongles
 
 Demo
 ---------------------
@@ -20,7 +29,7 @@ Windows Binary
 ---------------------
 * Requires CPU with SSE3 support.
 * Requires [Visual C++ 2013](http://www.microsoft.com/en-us/download/details.aspx?id=40784)
-* [Download (build 2014-07-03)](http://www.microtony.com/rtl_airband_20140703.zip)
+* [Download (build 2014-07-05)](http://www.microtony.com/rtl_airband_20140705.zip)
 
 Building
 ---------------------
@@ -102,54 +111,20 @@ Building
 
 Configuring
 --------------------
-All configurations are saved in the config folder
+All configurations are saved in config.txt file. Fields should be separated by space(s) or tab(s).
 
-Naming: configname.txt
+You may edit config.txt.example using a spreadsheet program.
 
 Format:
 
-    Server hostname
-    Server port
-    Username (default: source)
-    Password
-    Center frequency in Hz
-    Frequency correction (negative = signal appears to have lower frequency)
-    Gain x 10 (e.g. 0, ... 280, 297, 338, ... 496)
-    Frequency [Mountpoint]
-    ... Repeat 7 more times ...
-    ... Frequency = 0 to disable ...
-
-Example:
-
-    icecast.microtony.com
-    80
-    source
-    ABCDEFGH
-    120118000
-    -8000
-    297
-    118925000 118925
-    119100000 119100
-    119500000 119500
-    120600000 120600
-    121000000 121000
-    121300000 121300
-    0
-    0
-
-Usage
---------------------
-There are two ways to start the program
-
-### Command line argument
-
-    rtl_airband <device> <configname>
-    Example: rtl_airband 0 approach
-    
-    
-### Interactive
-
-Program will prompt you for the RTLSDR device ID and config name
+    NumDongles
+    DongleNo NumChannels Gain CenterFreq FreqCorrection
+    Hostname Port MountPoint Frequency Username Password
+    Hostname Port MountPoint Frequency Username Password
+    ....
+    DongleNo NumChannels Gain CenterFreq FreqCorrection
+    Hostname Port MountPoint Frequency Username Password
+    .....
 
 License
 --------------------

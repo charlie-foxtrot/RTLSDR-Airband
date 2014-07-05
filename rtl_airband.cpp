@@ -28,6 +28,7 @@
 #include <MMSystem.h>
 #include <xmmintrin.h>
 #define ALIGN __declspec(align(32))
+#define ALIGN2
 #define SLEEP(x) Sleep(x)
 #define THREAD HANDLE
 #define GOTOXY(x, y) COORD xy; xy.X = x; xy.Y = y; SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), xy)
@@ -38,6 +39,7 @@
 #include "hello_fft/mailbox.h"
 #include "hello_fft/gpu_fft.h"
 #define ALIGN
+#define ALIGN2 __attribute__((aligned(32)))
 #define SLEEP(x) usleep(x * 1000)
 #define THREAD pthread_t
 #define GOTOXY(x, y) printf("%c[%d;%df",0x1B,y,x)
@@ -75,6 +77,7 @@
 #define SOURCE_RATE 2560000
 #define WAVE_RATE 8000
 #define WAVE_BATCH 1000
+#define WAVE_LEN 2048
 #define MP3_RATE 16000
 #define AGC_EXTRA 48
 #define FFT_SIZE 2048
@@ -84,6 +87,7 @@
 #define SOURCE_RATE 2560000
 #define WAVE_RATE 8000
 #define WAVE_BATCH 1000
+#define WAVE_LEN 2048
 #define MP3_RATE 8000
 #define AGC_EXTRA 48
 #define FFT_SIZE 512
@@ -92,6 +96,7 @@
 #define CHANNELS 8
 
 extern "C" void samplefft(GPU_FFT_COMPLEX* dest, unsigned char* buffer, float* window, float* levels);
+extern "C" void fftwave(float* dest, GPU_FFT_COMPLEX* src, int step, int* bins);
 
 #endif
 using namespace std;
@@ -264,10 +269,10 @@ void* mp3_check(void* params) {
 
 fftwf_complex* fftin;
 fftwf_complex* fftout;
-ALIGN float window[FFT_SIZE * 2];
-ALIGN float levels[256];
-float waves[CHANNELS][WAVE_BATCH + FFT_SIZE * 2];
-float waves2[CHANNELS][WAVE_BATCH + FFT_SIZE * 2];
+ALIGN float ALIGN2 window[FFT_SIZE * 2];
+ALIGN float ALIGN2 levels[256];
+float waves[CHANNELS][WAVE_LEN];
+float waves2[CHANNELS][WAVE_LEN];
 
 void demodulate() {
 
@@ -411,15 +416,9 @@ void demodulate() {
 		gpu_fft_execute(fft);
 
 		bufs += speed2 * FFT_BATCH;
-		for (int j = 0; j < CHANNELS; j++) {
-			base = fft->out;
-			if (freqs[j] == 0) continue;
-			for (int i = 0; i < FFT_BATCH; i++) {
-				waves[j][wavecount + i] = sqrt(base[bins[j]].re * base[bins[j]].re + base[bins[j]].im * base[bins[j]].im) +
-					sqrt(base[bins[j] + 1].re * base[bins[j] + 1].re + base[bins[j] + 1].im * base[bins[j] + 1].im);
-				base += fft->step;
-			}
-		}
+				
+		fftwave(waves[0] + wavecount, fft->out, fft->step * sizeof(GPU_FFT_COMPLEX), bins);
+
 		wavecount += FFT_BATCH;
 #endif
 
@@ -509,8 +508,8 @@ void demodulate() {
 
 int main(int argc, char* argv[]) {
 
-	uintptr_t tempptr = (uintptr_t)malloc(BUF_SIZE + FFT_SIZE * 2 + 31);
-	tempptr &= ~0x0F;
+	uintptr_t tempptr = (uintptr_t)malloc(BUF_SIZE + FFT_SIZE * 2 + 63);
+	tempptr &= ~0x1F;
 	buffer = (unsigned char *)tempptr;
 
 #ifdef _WIN32

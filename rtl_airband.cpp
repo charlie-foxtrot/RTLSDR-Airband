@@ -175,6 +175,7 @@ void* rtlsdr_exec(void* params) {
     if (NULL == dev) {
         fprintf(stderr, "Failed to open rtlsdr device #%d.\n", dev->device);
         error();
+        return;
     }
     rtlsdr_set_sample_rate(dev->rtlsdr, SOURCE_RATE);
     rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);
@@ -184,7 +185,7 @@ void* rtlsdr_exec(void* params) {
     rtlsdr_reset_buffer(dev->rtlsdr);
     printf("Device %d started.\n", dev->device);
     device_opened++;
-    r = rtlsdr_read_async(dev->rtlsdr, rtlsdr_callback, params, 20, 128000);
+    r = rtlsdr_read_async(dev->rtlsdr, rtlsdr_callback, params, 20, 320000);
 }
 
 void mp3_setup(channel_t* channel) {
@@ -419,11 +420,11 @@ void demodulate() {
             }
         }
 #else
-        struct GPU_FFT_COMPLEX* base;
         for (int i = 0; i < FFT_BATCH; i++) {
             samplefft(fft->in + i * fft->step, dev->buffer + dev->bufs + i * speed2, window, levels);
         }
 
+        // allow mp3 encoding thread to run while waiting for GPU to finish
         pthread_cond_signal(&mp3_cond);
 
         gpu_fft_execute(fft);
@@ -472,6 +473,7 @@ void demodulate() {
                         if (channel->agcsq == 1 && channel->agcavgslow > 3.0f * channel->agcmin) {
                             channel->agcsq = -AGC_EXTRA * 2;
                             channel->agcindicate = '*';
+                            // fade in
                             for (int k = j - AGC_EXTRA; k < j; k++) {
                                 if (channel->wavein[k] > channel->agcmin * 3.0f) {
                                     channel->agcavgfast = channel->agcavgfast * 0.98f + channel->wavein[k] * 0.02f;
@@ -489,6 +491,7 @@ void demodulate() {
                         if (channel->agcsq == -1 && channel->agcavgslow < 2.4f * channel->agcmin || channel->agclow == AGC_EXTRA - 12) {
                             channel->agcsq = AGC_EXTRA * 2;
                             channel->agcindicate = ' ';
+                            // fade out
                             for (int k = j - AGC_EXTRA + 1; k < j; k++) {
                                 channel->waveout[k] = channel->waveout[k - 1] * 0.94f;
                             }
@@ -536,7 +539,7 @@ int main(int argc, char* argv[]) {
     if (cpuinfo[2] & 1 << 28) {
         avx = 1;
         printf("AVX support detected.\n");
-    } else if (cpuinfo[1] & 1) {
+    } else if (cpuinfo[2] & 1) {
         avx = 0;
         printf("SSE3 suport detected.\n");
     } else {
@@ -577,12 +580,18 @@ int main(int argc, char* argv[]) {
     }
 
     printf("Allocating memory\n");
-    devices = new device_t[device_count];
+    uintptr_t tempptr = (uintptr_t)malloc(device_count * sizeof(device_t)+31);
+    tempptr &= ~0x0F;
+    devices = (device_t *)tempptr;
     shout_init();
 
     printf("Starting devices\n");
     for (int i = 0; i < device_count; i++) {
         device_t* dev = devices + i;
+        if (dev->device >= device_count2) {
+            fprintf(stderr, "Specified device id %d is >= number of devices %d...\n", dev->device, device_count2);
+            error();
+        }
         fscanf(f, "%d %d %d %d %d\n", &dev->device, &dev->channel_count, &dev->gain, &dev->centerfreq, &dev->correction);
         dev->bins[0] = dev->bins[1] = dev->bins[2] = dev->bins[3] = dev->bins[4] = dev->bins[5] = dev->bins[6] = dev->bins[7] = 0;
         dev->bufs = dev->bufe = dev->waveend = dev->waveavail = dev->row = 0;

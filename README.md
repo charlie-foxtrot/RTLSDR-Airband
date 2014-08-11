@@ -28,8 +28,8 @@ Demo
 Windows Binary
 ---------------------
 * Requires CPU with SSE3 support.
-* Requires [Visual C++ 2013](http://www.microsoft.com/en-us/download/details.aspx?id=40784)
-* [Download (build 2014-07-05)](http://www.microtony.com/rtl_airband_20140705.zip)
+* Requires [Visual C++ 2013 vcredist_x86.exe](http://www.microsoft.com/en-us/download/details.aspx?id=40784)
+* [Download (build 2014-08-11)](http://www.microtony.com/rtl_airband_20140811.zip)
 
 Building
 ---------------------

@@ -258,6 +258,8 @@ void mp3_setup(channel_t* channel) {
 
     ret = shout_open(shouttemp);
     if (ret == SHOUTERR_SUCCESS) {
+        if(quiet) printf("Connected to %s:%d/%s\n", 
+            channel->hostname, channel->port, channel->mountpoint);
         channel->lame = lame_init();
         lame_set_in_samplerate(channel->lame, WAVE_RATE);
         lame_set_VBR(channel->lame, vbr_off);
@@ -285,6 +287,8 @@ void mp3_process(channel_t* channel) {
         int ret = shout_send(channel->shout, lamebuf, bytes);
         if (ret < 0) {
             // reset connection
+            if(quiet) printf("Lost connection to %s:%d/%s\n",
+                channel->hostname, channel->port, channel->mountpoint);
             shout_close(channel->shout);
             shout_free(channel->shout);
             channel->shout = NULL;
@@ -326,6 +330,8 @@ void* mp3_check(void* params) {
             device_t* dev = devices + i;
             for (int j = 0; j < dev->channel_count; j++) {
                 if (dev->channels[j].shout == NULL){
+                    if(quiet) printf("Trying to reconnect to %s:%d/%s...\n",
+                        dev->channels[j].hostname, dev->channels[j].port, dev->channels[j].mountpoint);
                     mp3_setup(dev->channels + j);
                 }
             }

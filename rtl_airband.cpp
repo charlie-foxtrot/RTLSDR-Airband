@@ -175,7 +175,7 @@ void* rtlsdr_exec(void* params) {
     if (NULL == dev) {
         fprintf(stderr, "Failed to open rtlsdr device #%d.\n", dev->device);
         error();
-        return;
+        return NULL;
     }
     rtlsdr_set_sample_rate(dev->rtlsdr, SOURCE_RATE);
     rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);

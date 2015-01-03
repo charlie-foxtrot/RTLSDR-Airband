@@ -46,6 +46,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <algorithm>
+#include <csignal>
 #endif  
 
 #include <cstring>
@@ -146,6 +147,7 @@ int device_count;
 int device_opened = 0;
 int avx;
 int quiet;
+static volatile int do_exit = 0;
 
 void error() {
 #ifdef _WIN32
@@ -155,6 +157,7 @@ void error() {
 }
 
 void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx) {
+    if(do_exit) return;
     device_t *dev = (device_t*)ctx;
     memcpy(dev->buffer + dev->bufe, buf, len);
     if (dev->bufe == 0) {
@@ -163,6 +166,28 @@ void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx) {
     dev->bufe = dev->bufe + len;
     if (dev->bufe == BUF_SIZE) dev->bufe = 0;
 }
+
+#ifdef _WIN32
+BOOL WINAPI sighandler(int sig) {
+    if (CTRL_C_EVENT == sig) {
+        printf("Got signal %d, exiting\n", sig);
+        do_exit = 1;
+        for (int i = 0; i < device_count; i++) {
+            rtlsdr_cancel_async(devices[i].rtlsdr);
+        }
+        return TRUE;
+    }
+    return FALSE;
+}
+#else
+void sighandler(int sig) {
+    printf("Got signal %d, exiting\n", sig);
+    do_exit = 1;
+    for (int i = 0; i < device_count; i++) {
+        rtlsdr_cancel_async(devices[i].rtlsdr);
+    }
+}
+#endif
 
 #ifdef _WIN32
 void rtlsdr_exec(void* params) {
@@ -186,6 +211,7 @@ void* rtlsdr_exec(void* params) {
     printf("Device %d started.\n", dev->device);
     device_opened++;
     r = rtlsdr_read_async(dev->rtlsdr, rtlsdr_callback, params, 20, 320000);
+    return 0;
 }
 
 void mp3_setup(channel_t* channel) {
@@ -272,7 +298,7 @@ void mp3_process(channel_t* channel) {
 pthread_cond_t      mp3_cond = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t     mp3_mutex = PTHREAD_MUTEX_INITIALIZER;
 void* mp3_thread(void* params) {
-    while (true) {
+    while (!do_exit) {
         pthread_cond_wait(&mp3_cond, &mp3_mutex);
         for (int i = 0; i < device_count; i++) {
             if (devices[i].waveavail) {
@@ -360,6 +386,13 @@ void demodulate() {
 
     int device_num = 0;
     while (true) {
+        if(do_exit) {
+#ifndef _WIN32
+            printf("Freeing GPU memory\n");
+            gpu_fft_release(fft);
+#endif
+            return;
+        }
         device_t* dev = devices + device_num;
         int available = dev->bufe - dev->bufs;
         if (dev->bufe < dev->bufs) {
@@ -578,6 +611,20 @@ int main(int argc, char* argv[]) {
     } else {
         fprintf(stderr, "%d device(s) found.\n", device_count2);
     }
+#ifndef _WIN32
+    struct sigaction sigact, pipeact;
+
+    pipeact.sa_handler = SIG_IGN;
+    sigact.sa_handler = &sighandler;
+    sigaction(SIGPIPE, &pipeact, NULL);
+    sigaction(SIGHUP, &sigact, NULL);
+    sigaction(SIGINT, &sigact, NULL);
+    sigaction(SIGCHLD, &sigact, NULL);
+    sigaction(SIGQUIT, &sigact, NULL);
+    sigaction(SIGTERM, &sigact, NULL);
+#else
+    SetConsoleCtrlHandler( (PHANDLER_ROUTINE) sighandler, TRUE );
+#endif
 
     printf("Allocating memory\n");
     uintptr_t tempptr = (uintptr_t)malloc(device_count * sizeof(device_t)+31);
@@ -658,5 +705,11 @@ int main(int argc, char* argv[]) {
 
     demodulate();
 
+    printf("Cleaning up\n");
+    for (int i = 0; i < device_count; i++) {
+        rtlsdr_cancel_async(devices[i].rtlsdr);
+        pthread_join(devices[i].thread, NULL);
+    }
+    printf("rtlsdr threads closed\n");
     return 0;
 }

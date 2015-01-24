@@ -80,6 +80,7 @@
 #define WAVE_BATCH 1000
 #define WAVE_LEN 2048
 #define MP3_RATE 16000
+#define MAX_SHOUT_QUEUELEN 65536
 #define AGC_EXTRA 48
 #define FFT_SIZE 2048
 #define FFT_BATCH 1
@@ -91,6 +92,7 @@
 #define WAVE_BATCH 1000
 #define WAVE_LEN 2048
 #define MP3_RATE 8000
+#define MAX_SHOUT_QUEUELEN 32768
 #define AGC_EXTRA 48
 #define FFT_SIZE 512
 #define FFT_SIZE_LOG 9
@@ -303,7 +305,10 @@ void mp3_process(channel_t* channel) {
     int bytes = lame_encode_buffer_ieee_float(channel->lame, channel->waveout, NULL, WAVE_BATCH, lamebuf, 22000);
     if (bytes > 0) {
         int ret = shout_send(channel->shout, lamebuf, bytes);
-        if (ret != SHOUTERR_SUCCESS) {
+        if (ret != SHOUTERR_SUCCESS || shout_queuelen(channel->shout) > MAX_SHOUT_QUEUELEN) {
+            if (quiet && shout_queuelen(channel->shout) > MAX_SHOUT_QUEUELEN)
+                printf("Exceeded max backlog for %s:%d/%s, disconnecting\n",
+                    channel->hostname, channel->port, channel->mountpoint);
             // reset connection
             if(quiet) printf("Lost connection to %s:%d/%s\n",
                 channel->hostname, channel->port, channel->mountpoint);
@@ -312,6 +317,7 @@ void mp3_process(channel_t* channel) {
             channel->shout = NULL;
             lame_close(channel->lame);
             channel->lame = NULL;
+            return;
         }
     }
 }

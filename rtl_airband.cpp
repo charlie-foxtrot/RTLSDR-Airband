@@ -256,8 +256,24 @@ void mp3_setup(channel_t* channel) {
     shout_set_audio_info(shouttemp, SHOUT_AI_SAMPLERATE, samplerates);
     shout_set_audio_info(shouttemp, SHOUT_AI_CHANNELS, "1");
 
+    if (shout_set_nonblocking(shouttemp, 1) != SHOUTERR_SUCCESS) {
+        if(quiet) printf("Error setting non-blocking mode: %s\n", shout_get_error(shouttemp));
+        return;
+    }
     ret = shout_open(shouttemp);
-    if (ret == SHOUTERR_SUCCESS) {
+    if (ret == SHOUTERR_SUCCESS)
+        ret = SHOUTERR_CONNECTED;
+
+    if (ret == SHOUTERR_BUSY)
+        if(quiet) printf("Connecting to %s:%d/%s...\n", 
+            channel->hostname, channel->port, channel->mountpoint);
+
+    while (ret == SHOUTERR_BUSY) {
+        usleep(10000);
+        ret = shout_get_connected(shouttemp);
+    }
+ 
+    if (ret == SHOUTERR_CONNECTED) {
         if(quiet) printf("Connected to %s:%d/%s\n", 
             channel->hostname, channel->port, channel->mountpoint);
         channel->lame = lame_init();
@@ -272,6 +288,8 @@ void mp3_setup(channel_t* channel) {
         SLEEP(100);
         channel->shout = shouttemp;
     } else {
+        if(quiet) printf("Could not connect to %s:%d/%s\n",
+            channel->hostname, channel->port, channel->mountpoint);
         shout_free(shouttemp);
         return;
     }
@@ -285,7 +303,7 @@ void mp3_process(channel_t* channel) {
     int bytes = lame_encode_buffer_ieee_float(channel->lame, channel->waveout, NULL, WAVE_BATCH, lamebuf, 22000);
     if (bytes > 0) {
         int ret = shout_send(channel->shout, lamebuf, bytes);
-        if (ret < 0) {
+        if (ret != SHOUTERR_SUCCESS) {
             // reset connection
             if(quiet) printf("Lost connection to %s:%d/%s\n",
                 channel->hostname, channel->port, channel->mountpoint);

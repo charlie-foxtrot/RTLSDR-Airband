@@ -1,25 +1,28 @@
-H = hello_fft/hex/shader_1k.hex \
-    hello_fft/hex/shader_2k.hex \
-    hello_fft/hex/shader_4k.hex \
-    hello_fft/hex/shader_8k.hex \
-    hello_fft/hex/shader_16k.hex \
-    hello_fft/hex/shader_32k.hex \
-    hello_fft/hex/shader_64k.hex \
-    hello_fft/hex/shader_128k.hex \
-    hello_fft/hex/shader_256.hex \
-    hello_fft/hex/shader_512.hex
+export CC = g++
+export CFLAGS = -O3 -I/opt/vc/include  -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux
+export CFLAGS += -mcpu=arm1176jzf-s -mtune=arm1176jzf-s -march=armv6zk -mfpu=vfp
+export CXXFLAGS = $(CFLAGS)
+export LDFLAGS = -L/opt/vc/lib
+LDLIBS = -lrt -lm -lbcm_host -lvorbisenc -lmp3lame -lshout -lpthread -lrtlsdr
 
-S = rtl_airband_asm.s
+SUBDIRS = hello_fft
+CLEANDIRS = $(SUBDIRS:%=clean-%)
 
-C = rtl_airband.cpp hello_fft/mailbox.c hello_fft/gpu_fft.c hello_fft/gpu_fft_base.c hello_fft/gpu_fft_twiddles.c hello_fft/gpu_fft_shaders.c
-
+OBJ = hello_fft/hello_fft.a rtl_airband.o rtl_airband_asm.o
 B = rtl_airband
 
-F = -O3 -mcpu=arm1176jzf-s -mtune=arm1176jzf-s -march=armv6zk -mfpu=vfp -L/opt/vc/lib/ -lbcm_host -I/opt/vc/include -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux -lrt -lm -lvorbisenc -lmp3lame -lshout -lpthread -lrtlsdr -o $(B)
+.PHONY: all clean $(SUBDIRS) $(CLEANDIRS)
 
-$(B):	$(H) $(C) $(S)
-	as -o rtl_airband_asm.o $(S)
-	g++ $(F) $(C) $(S)
+all: $(SUBDIRS) $(B)
 
-clean:
-	rm -f $(B)
+$(SUBDIRS):
+	$(MAKE) -C $@
+
+$(B): $(OBJ)
+
+clean: $(CLEANDIRS)
+	rm -f *.o $(B)
+
+$(CLEANDIRS):
+	$(MAKE) -C $(@:clean-%=%) clean
+

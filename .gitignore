@@ -7,4 +7,8 @@
 *.pdb
 *.opensdf
 *.sdf
-rtl_airband
+rtl_airband_vfp
+rtl_airband_neon
+
+# Config files
+config.txt

@@ -104,10 +104,10 @@ Building
  * sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev libfftw3-dev
  * sudo rpi-update && sudo reboot
  * cd into the project folder (where makefile is located)
- * cp -r /opt/vc/src/hello_pi/hello_fft .
+ * if you are building for RPi V1: make rtl_airband_vfp
+ * if you are building for RPi V2: make rtl_airband_neon
  * sudo mknod char_dev c 100 0
- * make
- * You need to run the program with sudo
+ * You need to run the program with root privileges (eg. sudo ./rtl_airband_neon)
 
 Configuring
 --------------------
@@ -129,6 +129,9 @@ Format:
 License
 --------------------
 Copyright (C) 2014 Wong Man Hang <microtony@gmail.com>
+
+Changes and updates published on http://github.com/szpajder/RTLSDR-Airband :
+Copyright (C) 2015 Tomasz Lemiech <szpajder@gmail.com>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

@@ -7,6 +7,8 @@
 *.pdb
 *.opensdf
 *.sdf
+*.o
+*.a
 rtl_airband_vfp
 rtl_airband_neon
 

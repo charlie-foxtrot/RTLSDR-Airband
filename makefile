@@ -12,7 +12,7 @@ FFT = hello_fft/hello_fft.a
 .PHONY: all clean $(SUBDIRS) $(CLEANDIRS)
 
 all:
-	@echo "\nPlease choose one of available platforms:\n \
+	@printf "\nPlease choose one of available platforms:\n \
 	\tmake rtl_airband_vfp\t\tbuild binary for Raspberry Pi V1 (optimized for VFP coprocessor)\n \
 	\tmake rtl_airband_neon\t\tbuild binary for Raspberry Pi V2 (optimized for NEON coprocessor)\n \
 	\tmake rtl_airband_win\t\tbuild Windows binary (not tested, unmaintained)\n"

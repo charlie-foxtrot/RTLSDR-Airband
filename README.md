@@ -110,7 +110,7 @@ Building
         blacklist rtl2830
         blacklist dvb_usb_rtl28xxu
 
- * sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev libfftw3-dev
+ * sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev
  * sudo rpi-update && sudo reboot
  * cd into the project folder (where makefile is located)
  * if you are building for RPi V1: make rtl_airband_vfp

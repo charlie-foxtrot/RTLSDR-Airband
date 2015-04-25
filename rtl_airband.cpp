@@ -41,6 +41,7 @@
 #include "hello_fft/gpu_fft.h"
 #else
 #include <xmmintrin.h>
+#include <fftw3.h>
 #endif /* !__arm__ */
 #define ALIGN
 #define ALIGN2 __attribute__((aligned(32)))
@@ -60,7 +61,6 @@
 #include <cstdlib>
 #include <ctime>
 
-#include <fftw3.h>
 #include <ogg/ogg.h>
 #include <vorbis/vorbisenc.h>
 #include <shout/shout.h>

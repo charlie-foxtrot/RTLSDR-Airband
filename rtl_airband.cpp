@@ -35,9 +35,13 @@
 #define scanf scanf_s
 #define sscanf sscanf_s
 #define fscanf fscanf_s
-#else
+#else /* !_WIN32 */
+#if defined __arm__
 #include "hello_fft/mailbox.h"
 #include "hello_fft/gpu_fft.h"
+#else
+#include <xmmintrin.h>
+#endif /* !__arm__ */
 #define ALIGN
 #define ALIGN2 __attribute__((aligned(32)))
 #define SLEEP(x) usleep(x * 1000)
@@ -47,7 +51,7 @@
 #include <pthread.h>
 #include <algorithm>
 #include <csignal>
-#endif  
+#endif /* !_WIN32 */ 
 
 #include <cstring>
 #include <cstdio>
@@ -68,24 +72,6 @@
 
 #include <rtl-sdr.h>
 
-#ifdef _WIN32
-
-#pragma comment (lib, "Ws2_32.lib")
-#pragma comment (lib, "Mswsock.lib")
-#pragma comment (lib, "AdvApi32.lib")
-
-#define BUF_SIZE 2560000
-#define SOURCE_RATE 2560000
-#define WAVE_RATE 8000
-#define WAVE_BATCH 1000
-#define WAVE_LEN 2048
-#define MP3_RATE 16000
-#define MAX_SHOUT_QUEUELEN 65536
-#define AGC_EXTRA 48
-#define FFT_SIZE 2048
-#define FFT_BATCH 1
-#define CHANNELS 8
-#else
 #define BUF_SIZE 2560000
 #define SOURCE_RATE 2560000
 #define WAVE_RATE 8000
@@ -95,14 +81,22 @@
 #define MAX_SHOUT_QUEUELEN 32768
 #define AGC_EXTRA 48
 #define FFT_SIZE 512
-#define FFT_SIZE_LOG 9
-#define FFT_BATCH 250
 #define CHANNELS 8
 
+#if defined __arm__
 extern "C" void samplefft(GPU_FFT_COMPLEX* dest, unsigned char* buffer, float* window, float* levels);
 extern "C" void fftwave(float* dest, GPU_FFT_COMPLEX* src, int* sizes, int* bins);
-
+#define FFT_SIZE_LOG 9
+#define FFT_BATCH 250
+#else
+#define FFT_BATCH 1
 #endif
+#if defined _WIN32
+#pragma comment (lib, "Ws2_32.lib")
+#pragma comment (lib, "Mswsock.lib")
+#pragma comment (lib, "AdvApi32.lib")
+#endif /* _WIN32 */
+
 using namespace std;
 
 struct channel_t {
@@ -147,7 +141,9 @@ struct device_t {
 device_t* devices;
 int device_count;
 int device_opened = 0;
+#ifdef _WIN32
 int avx;
+#endif
 int quiet;
 static volatile int do_exit = 0;
 
@@ -366,7 +362,7 @@ void* mp3_check(void* params) {
 void demodulate() {
 
     // initialize fft engine
-#ifdef _WIN32
+#ifndef __arm__
     fftwf_plan fft;
     fftwf_complex* fftin;
     fftwf_complex* fftout;
@@ -394,7 +390,7 @@ void demodulate() {
 
     // initialize fft window
     // blackman 7
-    // for raspberry pi, the whole matrix is computed
+    // the whole matrix is computed
     ALIGN float ALIGN2 window[FFT_SIZE * 2];
     const double a0 = 0.27105140069342f;
     const double a1 = 0.43329793923448f;   const double a2 = 0.21812299954311f;
@@ -417,7 +413,7 @@ void demodulate() {
     int device_num = 0;
     while (true) {
         if(do_exit) {
-#ifndef _WIN32
+#ifdef __arm__
             printf("Freeing GPU memory\n");
             gpu_fft_release(fft);
 #endif
@@ -436,8 +432,20 @@ void demodulate() {
             continue;
         }
 
-#ifdef _WIN32
+#ifdef __arm__
+        for (int i = 0; i < FFT_BATCH; i++) {
+            samplefft(fft->in + i * fft->step, dev->buffer + dev->bufs + i * speed2, window, levels);
+        }
+
+        // allow mp3 encoding thread to run while waiting for GPU to finish
+        pthread_cond_signal(&mp3_cond);
+
+        gpu_fft_execute(fft);
+
+        fftwave(dev->channels[0].wavein + dev->waveend, fft->out, sizes, dev->bins);
+#else
         // process 4 rtl samples (16 bytes)
+#ifdef _WIN32
         if (avx) {
             for (int i = 0; i < FFT_SIZE; i += 4) {
                 unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
@@ -449,6 +457,7 @@ void demodulate() {
                 _mm256_store_ps(&fftin[i][0], a);
             }
         } else {
+#endif /* _WIN32 */
             for (int i = 0; i < FFT_SIZE; i += 2) {
                 unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
                 __m128 a = _mm_set_ps(levels[*(buf2 + 3)], levels[*(buf2 + 2)], levels[*(buf2 + 1)], levels[*(buf2)]);
@@ -456,44 +465,21 @@ void demodulate() {
                 a = _mm_mul_ps(a, b);
                 _mm_store_ps(&fftin[i][0], a);
             }
+#ifdef _WIN32
         }
+#else
+        // allow mp3 encoding thread to run while waiting for FFT to finish
+        pthread_cond_signal(&mp3_cond);
+#endif
 
         fftwf_execute(fft);
 
-        // sum up the power of 4 bins 
-        // windows: SAMPLE_RATE = 2.56M and FFT_SIZE = 2048, so width = 5 kHz
-        if (avx) {
-            for (int j = 0; j < dev->channel_count; j++) {
-                __m256 a = _mm256_loadu_ps(&fftout[dev->bins[j]][0]);
-                a = _mm256_mul_ps(a, a);
-                a = _mm256_hadd_ps(a, a);
-                a = _mm256_sqrt_ps(a);
-                a = _mm256_hadd_ps(a, a);
-                dev->channels[j].wavein[dev->waveend] = a.m256_f32[0] + a.m256_f32[4];
-            }
-        } else {
-            for (int j = 0; j < dev->channel_count; j++) {
-                __m128 a = _mm_loadu_ps(&fftout[dev->bins[j]][0]);
-                __m128 b = _mm_loadu_ps(&fftout[dev->bins[j] + 2][0]);
-                a = _mm_mul_ps(a, a);
-                b = _mm_mul_ps(b, b);
-                a = _mm_hadd_ps(a, b);
-                a = _mm_sqrt_ps(a);
-                dev->channels[j].wavein[dev->waveend] = a.m128_f32[0] + a.m128_f32[1] + a.m128_f32[2] + a.m128_f32[3];
-            }
-        }
-#else
-        for (int i = 0; i < FFT_BATCH; i++) {
-            samplefft(fft->in + i * fft->step, dev->buffer + dev->bufs + i * speed2, window, levels);
-        }
+	for (int j = 0; j < dev->channel_count; j++) {
+		dev->channels[j].wavein[dev->waveend] = 
+		  sqrtf(fftout[dev->bins[j]][0] * fftout[dev->bins[j]][0] + fftout[dev->bins[j]][1] * fftout[dev->bins[j]][1]);
+	}
+#endif /* !__arm__ */
 
-        // allow mp3 encoding thread to run while waiting for GPU to finish
-        pthread_cond_signal(&mp3_cond);
-
-        gpu_fft_execute(fft);
-
-        fftwave(dev->channels[0].wavein + dev->waveend, fft->out, sizes, dev->bins);
-#endif
         dev->waveend += FFT_BATCH;
         
         if (dev->waveend >= WAVE_BATCH + AGC_EXTRA) {
@@ -502,6 +488,12 @@ void demodulate() {
             }
             for (int i = 0; i < dev->channel_count; i++) {
                 channel_t* channel = dev->channels + i;
+#ifdef __arm__
+                float agcmin2 = channel->agcmin * 4.5f;
+                for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j++) {
+                    channel->waveref[j] = min(channel->wavein[j], agcmin2);
+                }
+#else /* !__arm__ */
 #ifdef _WIN32
                 if (avx) {
                     __m256 agccap = _mm256_set1_ps(channel->agcmin * 4.5f);
@@ -510,18 +502,16 @@ void demodulate() {
                         _mm256_storeu_ps(channel->waveref + j, _mm256_min_ps(t, agccap));
                     }
                 } else {
+#endif /* _WIN32 */
                     __m128 agccap = _mm_set1_ps(channel->agcmin * 4.5f);
                     for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j += 4) {
                         __m128 t = _mm_loadu_ps(channel->wavein + j);
                         _mm_storeu_ps(channel->waveref + j, _mm_min_ps(t, agccap));
                     }
+#ifdef _WIN32
                 }
-#else
-                float agcmin2 = channel->agcmin * 4.5f;
-                for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j++) {
-                    channel->waveref[j] = min(channel->wavein[j], agcmin2);
-                }
-#endif
+#endif /* _WIN32 */
+#endif /* !__arm__ */
                 for (int j = AGC_EXTRA; j < WAVE_BATCH + AGC_EXTRA; j++) {
                     // auto noise floor
                     if (j % 16 == 0) {
@@ -587,7 +577,7 @@ void demodulate() {
         dev->bufs += speed2 * FFT_BATCH;
         if (dev->bufs >= BUF_SIZE) dev->bufs -= BUF_SIZE;
 #ifndef _WIN32
-        // always rotate to next device for rpi
+        // always rotate to next device on unix
         device_num = (device_num + 1) % device_count;
 #endif
     }
@@ -595,21 +585,26 @@ void demodulate() {
 
 int main(int argc, char* argv[]) {
 
+#ifndef __arm__
 #ifdef _WIN32
-    // check cpu features
-    int cpuinfo[4];
-    __cpuid(cpuinfo, 1);
-    if (cpuinfo[2] & 1 << 28) {
-        avx = 1;
-        printf("AVX support detected.\n");
-    } else if (cpuinfo[2] & 1) {
-        avx = 0;
-        printf("SSE3 suport detected.\n");
-    } else {
-        printf("Unsupported CPU.\n");
-        error();
-    }
-#endif
+// check cpu features
+	int cpuinfo[4];
+	__cpuid(cpuinfo, 1);
+	if (cpuinfo[2] & 1 << 28) {
+		avx = 1;
+		printf("AVX support detected.\n");
+	} else if (cpuinfo[2] & 1) {
+		avx = 0;
+		printf("SSE3 suport detected.\n");
+#else /* !_WIN32 */
+	if(__builtin_cpu_supports("sse")) {
+		printf("SSE suport detected.\n");
+#endif /* !_WIN32 */
+	} else {
+		printf("Unsupported CPU.\n");
+		error();
+	}
+#endif /* !__arm__ */
 
     quiet = (argc > 0) && (argv[1] != NULL) && (strncmp(argv[1], "--quiet", 10) == 0);
 
@@ -686,11 +681,10 @@ int main(int argc, char* argv[]) {
             channel->agclow = 0;
 #ifdef _WIN32
             fscanf_s(f, "%120s %d %120s %d %120s %120s\n", channel->hostname, 120, &channel->port, channel->mountpoint, 120, &channel->frequency, channel->username, 120, channel->password, 120);
-            dev->bins[j] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq + dev->correction) / (double)(SOURCE_RATE / FFT_SIZE) - 2.0f) % FFT_SIZE;
 #else
             fscanf(f, "%120s %d %120s %d %120s %120s\n", channel->hostname, &channel->port, channel->mountpoint, &channel->frequency, channel->username, channel->password);
-            dev->bins[j] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq + dev->correction) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
 #endif
+            dev->bins[j] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq + dev->correction) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
             mp3_setup(channel);
         }
 #ifdef _WIN32

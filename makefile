@@ -15,12 +15,12 @@ all:
 	@printf "\nPlease choose one of available platforms:\n \
 	\tmake rtl_airband_vfp\t\tbuild binary for Raspberry Pi V1 (optimized for VFP coprocessor)\n \
 	\tmake rtl_airband_neon\t\tbuild binary for Raspberry Pi V2 (optimized for NEON coprocessor)\n \
-	\tmake rtl_airband_win\t\tbuild Windows binary (not tested, unmaintained)\n"
+	\tmake rtl_airband\t\tbuild binary for x86\n"
 
 rtl_airband_vfp rtl_airband_neon: CFLAGS += -I/opt/vc/include  -I/opt/vc/include/interface/vcos/pthreads \
 	-I/opt/vc/include/interface/vmcs_host/linux
-	LDLIBS += -lbcm_host
-	export LDFLAGS = -L/opt/vc/lib
+rtl_airband_vfp rtl_airband_neon: LDLIBS += -lbcm_host
+rtl_airband_vfp rtl_airband_neon: export LDFLAGS = -L/opt/vc/lib
 
 rtl_airband_vfp: CFLAGS += -mcpu=arm1176jzf-s -mtune=arm1176jzf-s -march=armv6zk -mfpu=vfp
 rtl_airband_vfp: $(OBJ) $(FFT) rtl_airband_vfp.o
@@ -28,7 +28,8 @@ rtl_airband_vfp: $(OBJ) $(FFT) rtl_airband_vfp.o
 rtl_airband_neon: CFLAGS += -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard
 rtl_airband_neon: $(OBJ) $(FFT) rtl_airband_neon.o
 
-rtl_airband_win: $(OBJ)
+rtl_airband: CFLAGS += -march=native
+rtl_airband: LDLIBS += -lfftw3f
 
 $(FFT):	hello_fft
 

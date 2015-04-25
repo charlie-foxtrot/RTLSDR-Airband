@@ -13,13 +13,14 @@ Features
  
 Performance
 ---------------------
-### Windows
+### x86
  * ~4% per dongle on i5-2430m at 2.1 GHz
  
 ### Raspberry Pi 
  * FFT using Broadcom Videocore IV GPU
  * No overclock required when using 1 dongle plus another dongle running dump1090
- * Turbo overclock setting recommended when using 2 dongles
+ * Turbo overclock setting recommended on RPi V1 when using 2 dongles
+   (no overclocking is necessary on RPi V2)
 
 Demo
 ---------------------
@@ -101,12 +102,35 @@ Building
  
 ### Raspberry Pi (Raspbian)
  * I assume you already have RTLSDR library installed: http://www.hamradioscience.com/raspberry-pi-as-remote-server-for-rtl2832u-sdr/
+ * Blacklist DVB drivers to avoid conflict with SDR driver - before connecting
+   the USB dongle add following lines to /etc/modprobe.d/raspi-blacklist.conf:
+
+        blacklist r820t
+        blacklist rtl2832
+        blacklist rtl2830
+        blacklist dvb_usb_rtl28xxu
+
  * sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev libfftw3-dev
  * sudo rpi-update && sudo reboot
  * cd into the project folder (where makefile is located)
  * if you are building for RPi V1: make rtl_airband_vfp
  * if you are building for RPi V2: make rtl_airband_neon
  * sudo mknod char_dev c 100 0
+ * You need to run the program with root privileges (eg. sudo ./rtl_airband_neon)
+
+### Linux, x86
+ * Install RTLSDR library (http://sdr.osmocom.org/trac/wiki/rtl-sdr)
+ * Blacklist DVB drivers to avoid conflict with SDR driver - before connecting
+   the USB dongle add following lines to /etc/modprobe.d/dvb-blacklist.conf:
+
+        blacklist r820t
+        blacklist rtl2832
+        blacklist rtl2830
+        blacklist dvb_usb_rtl28xxu
+
+ * sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev libfftw3-dev
+ * cd into the project folder (where makefile is located)
+ * make rtl_airband
  * You need to run the program with root privileges (eg. sudo ./rtl_airband_neon)
 
 Configuring

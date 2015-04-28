@@ -131,7 +131,7 @@ Building
  * sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev libfftw3-dev
  * cd into the project folder (where makefile is located)
  * make rtl_airband
- * You need to run the program with root privileges (eg. sudo ./rtl_airband_neon)
+ * You need to run the program with root privileges (eg. sudo ./rtl_airband)
 
 Configuring
 --------------------

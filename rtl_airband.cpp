@@ -597,7 +597,12 @@ int main(int argc, char* argv[]) {
 		avx = 0;
 		printf("SSE3 suport detected.\n");
 #else /* !_WIN32 */
-	if(__builtin_cpu_supports("sse")) {
+#define cpuid(func,ax,bx,cx,dx)\
+	__asm__ __volatile__ ("cpuid":\
+        "=a" (ax), "=b" (bx), "=c" (cx), "=d" (dx) : "a" (func));
+	int a,b,c,d;
+	cpuid(1,a,b,c,d);
+	if((int)((d >> 25) & 0x1)) {
 		printf("SSE suport detected.\n");
 #endif /* !_WIN32 */
 	} else {

@@ -1,7 +1,7 @@
 export CC = g++
-export CFLAGS = -O3
+export CFLAGS = -O3 -g
 export CXXFLAGS = $(CFLAGS)
-LDLIBS = -lrt -lm -lvorbisenc -lmp3lame -lshout -lpthread -lrtlsdr
+LDLIBS = -lrt -lm -lvorbisenc -lmp3lame -lshout -lpthread -lrtlsdr -lconfig++
 
 SUBDIRS = hello_fft
 CLEANDIRS = $(SUBDIRS:%=clean-%)

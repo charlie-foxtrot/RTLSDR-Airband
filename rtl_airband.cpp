@@ -54,12 +54,14 @@
 #include <csignal>
 #endif /* !_WIN32 */ 
 
+#include <iostream>
 #include <cstring>
 #include <cstdio>
 #include <cassert>
 #include <cmath>
 #include <cstdlib>
 #include <ctime>
+#include <libconfig.h++>
 
 #include <ogg/ogg.h>
 #include <vorbis/vorbisenc.h>
@@ -98,6 +100,7 @@ extern "C" void fftwave(float* dest, GPU_FFT_COMPLEX* src, int* sizes, int* bins
 #endif /* _WIN32 */
 
 using namespace std;
+using namespace libconfig;
 
 struct channel_t {
     float wavein[WAVE_LEN];  // FFT output waveform
@@ -111,11 +114,11 @@ struct channel_t {
     int agclow;             // low level sample count
     int frequency;
 
-    char hostname[256];
+    const char *hostname;
     int port;
-    char username[256];
-    char password[256];
-    char mountpoint[256];
+    const char *username;
+    const char *password;
+    const char *mountpoint;
     shout_t * shout;
     lame_t lame;
 };
@@ -613,92 +616,108 @@ int main(int argc, char* argv[]) {
 
     quiet = (argc > 0) && (argv[1] != NULL) && (strncmp(argv[1], "--quiet", 10) == 0);
 
-    printf("Reading config.\n");
+    cout<<"Reading config.\n";
     // read config
-    FILE* f;
-#ifdef _WIN32
-    if (fopen_s(&f, "config.txt", "r") != 0) {
-#else
-    f = fopen("config.txt", "r");
-    if (f == NULL) {
-#endif
-        printf("Config config.txt not found.\nStarting from 2014-07-05 a new config file format is required.\n");
-        printf("Visit https ://www.github.com/microtony/RTLSDR-Airband for details.\n");
-        error();
-    }
-    fscanf(f, "%d\n", &device_count);
-    if (device_count < 1) {
-        printf("Device count is less than 1?\n");
-        error();
-    }
-    int device_count2 = rtlsdr_get_device_count();
-    if (!device_count2) {
-        fprintf(stderr, "No supported devices found.\n");
-        error();
-    } else if (device_count2 < device_count) {
-        fprintf(stderr, "Not enough devices... (only %d detected)\n", device_count2);
-        error();
-    } else {
-        fprintf(stderr, "%d device(s) found.\n", device_count2);
-    }
-#ifndef _WIN32
-    struct sigaction sigact, pipeact;
-
-    pipeact.sa_handler = SIG_IGN;
-    sigact.sa_handler = &sighandler;
-    sigaction(SIGPIPE, &pipeact, NULL);
-    sigaction(SIGHUP, &sigact, NULL);
-    sigaction(SIGINT, &sigact, NULL);
-    sigaction(SIGCHLD, &sigact, NULL);
-    sigaction(SIGQUIT, &sigact, NULL);
-    sigaction(SIGTERM, &sigact, NULL);
-#else
-    SetConsoleCtrlHandler( (PHANDLER_ROUTINE) sighandler, TRUE );
-#endif
-
-    printf("Allocating memory\n");
-    uintptr_t tempptr = (uintptr_t)malloc(device_count * sizeof(device_t)+31);
-    tempptr &= ~0x0F;
-    devices = (device_t *)tempptr;
-    shout_init();
-
-    printf("Starting devices\n");
-    for (int i = 0; i < device_count; i++) {
-        device_t* dev = devices + i;
-        if (dev->device >= device_count2) {
-            fprintf(stderr, "Specified device id %d is >= number of devices %d...\n", dev->device, device_count2);
+    try {
+        Config config;
+        config.readFile("config.txt");
+        Setting &devs = config.lookup("devices");
+	device_count = devs.getLength();
+        if (device_count < 1) {
+            cerr<<"Configuration error: no devices defined\n";
             error();
         }
-        fscanf(f, "%d %d %d %d %d\n", &dev->device, &dev->channel_count, &dev->gain, &dev->centerfreq, &dev->correction);
-        dev->bins[0] = dev->bins[1] = dev->bins[2] = dev->bins[3] = dev->bins[4] = dev->bins[5] = dev->bins[6] = dev->bins[7] = 0;
-        dev->bufs = dev->bufe = dev->waveend = dev->waveavail = dev->row = 0;
-        for (int j = 0; j < dev->channel_count; j++)  {
-            channel_t* channel = dev->channels + j;
-            for (int k = 0; k < AGC_EXTRA; k++) {
-                channel->wavein[k] = 20;
-                channel->waveout[k] = 0.5;
-            }
-            channel->agcsq = 1;
-            channel->agcindicate = ' ';
-            channel->agcavgfast = 0.5f;
-            channel->agcavgslow = 0.5f;
-            channel->agcmin = 100.0f;
-            channel->agclow = 0;
-#ifdef _WIN32
-            fscanf_s(f, "%120s %d %120s %d %120s %120s\n", channel->hostname, 120, &channel->port, channel->mountpoint, 120, &channel->frequency, channel->username, 120, channel->password, 120);
-#else
-            fscanf(f, "%120s %d %120s %d %120s %120s\n", channel->hostname, &channel->port, channel->mountpoint, &channel->frequency, channel->username, channel->password);
-#endif
-            dev->bins[j] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq + dev->correction) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
-            mp3_setup(channel);
+        int device_count2 = rtlsdr_get_device_count();
+        if (device_count2 < device_count) {
+            cerr<<"Not enough devices ("<<device_count<<" configured, "<<device_count2<<" detected)\n";
+            error();
+        } else {
+            cerr<<device_count2<<" device(s) found\n";
         }
-#ifdef _WIN32
-        dev->thread = (THREAD)_beginthread(rtlsdr_exec, 0, dev);
+#ifndef _WIN32
+        struct sigaction sigact, pipeact;
+
+        pipeact.sa_handler = SIG_IGN;
+        sigact.sa_handler = &sighandler;
+        sigaction(SIGPIPE, &pipeact, NULL);
+        sigaction(SIGHUP, &sigact, NULL);
+        sigaction(SIGINT, &sigact, NULL);
+        sigaction(SIGCHLD, &sigact, NULL);
+        sigaction(SIGQUIT, &sigact, NULL);
+        sigaction(SIGTERM, &sigact, NULL);
 #else
-        pthread_create(&dev->thread, NULL, &rtlsdr_exec, dev);
+        SetConsoleCtrlHandler( (PHANDLER_ROUTINE) sighandler, TRUE );
 #endif
+
+        cout<<"Allocating memory\n";
+        uintptr_t tempptr = (uintptr_t)malloc(device_count * sizeof(device_t)+31);
+        tempptr &= ~0x0F;
+        devices = (device_t *)tempptr;
+        shout_init();
+        cout<<"Starting devices\n";
+        for (int i = 0; i < devs.getLength(); i++) {
+            device_t* dev = devices + i;
+            if((int)devs[i]["index"] >= device_count2) {
+                cerr<<"Specified device id "<<(int)devs[i]["index"]<<" is >= number of devices "<<device_count2<<"\n";
+                error();
+            }
+            if(!devs[i].exists("correction")) devs[i].add("correction", Setting::TypeInt);
+//FIXME: default gain
+            dev->device = (int)devs[i]["index"];
+            dev->channel_count = devs[i]["channels"].getLength();
+            if(dev->channel_count < 1 || dev->channel_count > 8) {
+                cerr<<"Configuration error: devices.["<<i<<"]: invalid channel count (min 1, max 8)\n";
+                error();
+            }
+            dev->gain = (int)devs[i]["gain"];
+            dev->centerfreq = (int)devs[i]["centerfreq"];
+            dev->correction = (int)devs[i]["correction"];
+            dev->bins[0] = dev->bins[1] = dev->bins[2] = dev->bins[3] = dev->bins[4] = dev->bins[5] = dev->bins[6] = dev->bins[7] = 0;
+            dev->bufs = dev->bufe = dev->waveend = dev->waveavail = dev->row = 0;
+            for (int j = 0; j < dev->channel_count; j++)  {
+                channel_t* channel = dev->channels + j;
+                for (int k = 0; k < AGC_EXTRA; k++) {
+                    channel->wavein[k] = 20;
+                    channel->waveout[k] = 0.5;
+                }
+                channel->agcsq = 1;
+                channel->agcindicate = ' ';
+                channel->agcavgfast = 0.5f;
+                channel->agcavgslow = 0.5f;
+                channel->agcmin = 100.0f;
+                channel->agclow = 0;
+                channel->hostname = (const char *)devs[i]["channels"][j]["server"];
+// FIXME: default port number
+                channel->port = (int)devs[i]["channels"][j]["port"];
+                channel->mountpoint = (const char *)devs[i]["channels"][j]["mountpoint"];
+                channel->frequency = (int)devs[i]["channels"][j]["freq"];
+                channel->username = (const char *)devs[i]["channels"][j]["username"];
+                channel->password = (const char *)devs[i]["channels"][j]["password"];
+                dev->bins[j] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq + dev->correction) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
+                mp3_setup(channel);
+            }
+#ifdef _WIN32
+            dev->thread = (THREAD)_beginthread(rtlsdr_exec, 0, dev);
+#else
+            pthread_create(&dev->thread, NULL, &rtlsdr_exec, dev);
+#endif
+        }
+    } catch(FileIOException e) {
+            cerr<<"Cannot read configuration file config.txt<<\n";
+            error();
+    } catch(ParseException e) {
+            cerr<<"Error while parsing configuration file config.txt line "<<e.getLine()<<": "<<e.getError()<<"\n";
+            error();
+    } catch(SettingNotFoundException e) {
+            cerr<<"Configuration error: mandatory parameter missing: "<<e.getPath()<<"\n";
+            error();
+    } catch(SettingTypeException e) {
+            cerr<<"Configuration error: invalid parameter type: "<<e.getPath()<<"\n";
+            error();
+    } catch(ConfigException e) {
+            cerr<<"Unhandled config exception\n";
+            error();
     }
-    fclose(f);
 
     while (device_opened != device_count) {
         SLEEP(100);

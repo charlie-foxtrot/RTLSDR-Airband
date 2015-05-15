@@ -110,7 +110,7 @@ Building
         blacklist rtl2830
         blacklist dvb_usb_rtl28xxu
 
- * sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev
+ * sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev libconfig++-dev
  * sudo rpi-update && sudo reboot
  * cd into the project folder (where makefile is located)
  * if you are building for RPi V1: make rtl_airband_vfp
@@ -135,20 +135,11 @@ Building
 
 Configuring
 --------------------
-All configurations are saved in config.txt file. Fields should be separated by space(s) or tab(s).
+All configurations are saved in config.txt file.
 
-You may edit config.txt.example using a spreadsheet program.
+Refer to config.txt.example for the description of the format.
 
-Format:
-
-    NumDongles
-    DongleNo NumChannels Gain CenterFreq FreqCorrection
-    Hostname Port MountPoint Frequency Username Password
-    Hostname Port MountPoint Frequency Username Password
-    ....
-    DongleNo NumChannels Gain CenterFreq FreqCorrection
-    Hostname Port MountPoint Frequency Username Password
-    .....
+You can copy this file to config.txt and edit it to suit your needs.
 
 License
 --------------------

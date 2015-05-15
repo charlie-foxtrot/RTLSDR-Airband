@@ -1,18 +1,78 @@
+# Sample RTLSDR_Airband configuration file with a brief syntax explanation
+# 
+# General libconfig format description can be found in libconfig manual
+# (http://www.hyperrealm.com/libconfig/libconfig_manual.html)
+
+# Each parameter is specified as:
+# 
+#   key = value;
+# 
+# Remember about the semicolon at the end.
+# 
+# Keys can be scalars:
+# 
+#   myinteger = 5;
+#   myfloat = -3.5;
+#   mystring = "This is a string";
+# 
+# or lists (ordered):
+# 
+#   mylist = (5, 8, 3, "string");
+# 
+# Parameters can be grouped, like so:
+# 
+#   mygroup = {
+#     param1 = 3;
+#     param2 = -5;
+#     param3 = "some text";
+#   };
+# 
+# Parameter names inside the group must be unique.
+# Lists and groups can contain scalars as well as groups or lists.
+#
+# Three types of comments are allowed within a configuration:
+#
+# - Script-style comments (beginning with a '#' character)
+# - C-style comments, /* like so */
+# - C++-style comments (beginning with // sequence)
+
+# devices section contains all settings related to the RTLSDR receivers.
+#
+# It's a list of groups - each group contains settings for a single receiver,
+# ie.: devices = ( {dongle1 params}, {dongle2 params}, {dongle3 params} );
+
 devices = ( 
   {
+# Device index (as identified by librtlsdr library)
     index = 0;
+# Gain (in tenths of decibels)
     gain = 280;
+# Center frequency (in hertz)
     centerfreq = 120100000;
+# Tuning error (in parts per billion, ie. ppm * 1000).
+# Negative values indicate that the dongle should be tuned down.
+# Positive values indicate that the dongle should be tuned up.
     correction = -8000;
+# List of channels which should be received and streamed from this dongle.
+# It's a list of groups - each group contains settings for a single channel.
+# Maximum number of channels per dongle is 8.
     channels = ( 
       {
+# Channel frequency (in hertz)
+# The channel must fit in the dongle bandwidth, which is approximately 2.5 MHz
+# (ie. +- 1.25 MHz around center frequency)
         freq = 118925000;
+# Host name or IP address of Shoutcast/Icecast server
         server = "www.example.com";
+# Shoutcast port number
         port = 8000;
+# Shoutcast mountpoint path (without leading slash)
         mountpoint = "118925.mp3";
+# Username and password for the mountpoint
         username = "source";
         password = "password";
-      }, 
+      },
+# Subsequent channels
       {
         freq = 119100000;
         server = "www.example.com";
@@ -54,6 +114,7 @@ devices = (
         password = "password";
       } );
   }, 
+# Receiver 1
   {
     index = 1;
     gain = 280;
@@ -93,6 +154,7 @@ devices = (
         password = "password";
       } );
   }, 
+# Receiver 2
   {
     index = 2;
     gain = 280;

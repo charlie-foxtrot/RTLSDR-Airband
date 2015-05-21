@@ -71,6 +71,10 @@ devices = (
 # Username and password for the mountpoint
         username = "source";
         password = "password";
+# optional: name of the stream (default: none)
+        name = "Example ATC feed";
+# optional: genre (default: none)
+        genre = "ATC";
       },
 # Subsequent channels
       {

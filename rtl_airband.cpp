@@ -119,6 +119,8 @@ struct channel_t {
     const char *username;
     const char *password;
     const char *mountpoint;
+    const char *name;
+    const char *genre;
     shout_t * shout;
     lame_t lame;
 };
@@ -246,6 +248,12 @@ void mp3_setup(channel_t* channel) {
         shout_free(shouttemp); return;
     }
     if (shout_set_format(shouttemp, SHOUT_FORMAT_MP3) != SHOUTERR_SUCCESS){
+        shout_free(shouttemp); return;
+    }
+    if(channel->name && shout_set_name(shouttemp, channel->name) != SHOUTERR_SUCCESS) {
+        shout_free(shouttemp); return;
+    }
+    if(channel->genre && shout_set_genre(shouttemp, channel->genre) != SHOUTERR_SUCCESS) {
         shout_free(shouttemp); return;
     }
     char samplerates[20];
@@ -693,6 +701,10 @@ int main(int argc, char* argv[]) {
                 channel->frequency = (int)devs[i]["channels"][j]["freq"];
                 channel->username = (const char *)devs[i]["channels"][j]["username"];
                 channel->password = (const char *)devs[i]["channels"][j]["password"];
+		if(devs[i]["channels"][j].exists("name"))
+			channel->name = (const char *)devs[i]["channels"][j]["name"];
+		if(devs[i]["channels"][j].exists("genre"))
+			channel->genre = (const char *)devs[i]["channels"][j]["genre"];
                 dev->bins[j] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq + dev->correction) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
                 mp3_setup(channel);
             }

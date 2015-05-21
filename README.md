@@ -135,11 +135,18 @@ Building
 
 Configuring
 --------------------
-All configurations are saved in config.txt file.
+Configuration should be placed in config.txt file. Refer to config.txt.example 
+for the description of the format. You can copy this file to config.txt and 
+edit it to suit your needs.
 
-Refer to config.txt.example for the description of the format.
+A small utility convert_cfg is included and can be used to convert old-style 
+config.txt to the new format. To use it:
 
-You can copy this file to config.txt and edit it to suit your needs.
+make -C util
+util/convert_cfg config.txt config.txt.new
+
+Review the config.txt.new file and rename it to config.txt before launching 
+rtl_airband.
 
 License
 --------------------

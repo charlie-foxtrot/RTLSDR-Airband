@@ -694,17 +694,17 @@ int main(int argc, char* argv[]) {
                 channel->agcavgslow = 0.5f;
                 channel->agcmin = 100.0f;
                 channel->agclow = 0;
-                channel->hostname = (const char *)devs[i]["channels"][j]["server"];
+                channel->hostname = strdup(devs[i]["channels"][j]["server"]);
 // FIXME: default port number
-                channel->port = (int)devs[i]["channels"][j]["port"];
-                channel->mountpoint = (const char *)devs[i]["channels"][j]["mountpoint"];
-                channel->frequency = (int)devs[i]["channels"][j]["freq"];
-                channel->username = (const char *)devs[i]["channels"][j]["username"];
-                channel->password = (const char *)devs[i]["channels"][j]["password"];
+                channel->port = devs[i]["channels"][j]["port"];
+                channel->mountpoint = strdup(devs[i]["channels"][j]["mountpoint"]);
+                channel->frequency = devs[i]["channels"][j]["freq"];
+                channel->username = strdup(devs[i]["channels"][j]["username"]);
+                channel->password = strdup(devs[i]["channels"][j]["password"]);
 		if(devs[i]["channels"][j].exists("name"))
-			channel->name = (const char *)devs[i]["channels"][j]["name"];
+			channel->name = strdup(devs[i]["channels"][j]["name"]);
 		if(devs[i]["channels"][j].exists("genre"))
-			channel->genre = (const char *)devs[i]["channels"][j]["genre"];
+			channel->genre = strdup(devs[i]["channels"][j]["genre"]);
                 dev->bins[j] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq + dev->correction) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
                 mp3_setup(channel);
             }

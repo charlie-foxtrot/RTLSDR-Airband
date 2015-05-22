@@ -105,7 +105,9 @@ Building
 
         sudo apt-get update
         sudo apt-get upgrade
+        sudo apt-get install git cmake libusb-1.0-0.dev build-essential
         sudo rpi-update && sudo reboot
+
         git clone git://git.osmocom.org/rtl-sdr.git
         cd rtl-sdr/
         mkdir build
@@ -144,12 +146,13 @@ Building
  * Then
  
         sudo mknod char_dev c 100 0
+
  * You need to edit config.txt with your settings
- * 
+ 
           mv config.txt.example config.txt
+          nano config.txt
 
-
-  * You need to run the program with root privileges and recommend using screen
+  * You need to run the program with root privileges and recommending also using screen
         screen sudo ./rtl_airband_neon
 
 ### Linux, x86

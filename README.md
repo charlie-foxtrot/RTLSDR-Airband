@@ -101,22 +101,56 @@ Building
  * Simply build solution or click the "Start Local Windows Debugger" button
  
 ### Raspberry Pi (Raspbian)
- * I assume you already have RTLSDR library installed: http://www.hamradioscience.com/raspberry-pi-as-remote-server-for-rtl2832u-sdr/
+ *Installing RTLSDR library: 
+
+        sudo apt-get update
+        sudo apt-get upgrade
+        sudo rpi-update && sudo reboot
+        git clone git://git.osmocom.org/rtl-sdr.git
+        cd rtl-sdr/
+        mkdir build
+        cd build
+        cmake ../
+        make
+        sudo make install
+        sudo ldconfig
+        sudo mv /home/pi/rtl-sdr/rtl-sdr.rules /etc/udev/rules.d/rtl-sdr.rules
+
  * Blacklist DVB drivers to avoid conflict with SDR driver - before connecting
    the USB dongle add following lines to /etc/modprobe.d/raspi-blacklist.conf:
+
+        sudo nano /etc/modprobe.d/dvb-blacklist.conf
 
         blacklist r820t
         blacklist rtl2832
         blacklist rtl2830
         blacklist dvb_usb_rtl28xxu
 
- * sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev
- * sudo rpi-update && sudo reboot
- * cd into the project folder (where makefile is located)
- * if you are building for RPi V1: make rtl_airband_vfp
- * if you are building for RPi V2: make rtl_airband_neon
- * sudo mknod char_dev c 100 0
- * You need to run the program with root privileges (eg. sudo ./rtl_airband_neon)
+
+ *Installing RTLSDR-AIRBAND: 
+ 
+        sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev screen
+        git clone https://github.com/szpajder/RTLSDR-Airband.git
+        cd RTLSDR-Airband/
+        
+ * if you are building for RPi V1: 
+ * 
+        make rtl_airband_vfp
+
+ * if you are building for RPi V2: 
+ * 
+        make rtl_airband_neon
+
+ * Then
+ 
+        sudo mknod char_dev c 100 0
+ * You need to edit config.txt with your settings
+ * 
+          mv config.txt.example config.txt
+
+
+  * You need to run the program with root privileges and recommend using screen
+        screen sudo ./rtl_airband_neon
 
 ### Linux, x86
  * Install RTLSDR library (http://sdr.osmocom.org/trac/wiki/rtl-sdr)

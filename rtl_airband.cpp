@@ -50,8 +50,10 @@
 #define GOTOXY(x, y) printf("%c[%d;%df",0x1B,y,x)
 #include <unistd.h>
 #include <pthread.h>
+#include <syslog.h>
 #include <algorithm>
 #include <csignal>
+#include <cstdarg>
 #endif /* !_WIN32 */ 
 
 #include <iostream>
@@ -149,7 +151,7 @@ int device_opened = 0;
 #ifdef _WIN32
 int avx;
 #endif
-int quiet;
+int quiet = 0, do_syslog = 0;
 static volatile int do_exit = 0;
 
 void error() {
@@ -157,6 +159,19 @@ void error() {
     system("pause");
 #endif
     exit(1);
+}
+
+void log(int priority, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+#ifndef _WIN32
+    if(do_syslog) {
+        vsyslog(priority, format, args);
+    } else 
+#endif
+        if(quiet) 
+            vprintf(format, args);
+    va_end(args);
 }
 
 void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx) {
@@ -266,7 +281,7 @@ void mp3_setup(channel_t* channel) {
     shout_set_audio_info(shouttemp, SHOUT_AI_CHANNELS, "1");
 
     if (shout_set_nonblocking(shouttemp, 1) != SHOUTERR_SUCCESS) {
-        if(quiet) printf("Error setting non-blocking mode: %s\n", shout_get_error(shouttemp));
+        log(LOG_ERR, "Error setting non-blocking mode: %s\n", shout_get_error(shouttemp));
         return;
     }
     ret = shout_open(shouttemp);
@@ -274,7 +289,7 @@ void mp3_setup(channel_t* channel) {
         ret = SHOUTERR_CONNECTED;
 
     if (ret == SHOUTERR_BUSY)
-        if(quiet) printf("Connecting to %s:%d/%s...\n", 
+        log(LOG_NOTICE, "Connecting to %s:%d/%s...\n", 
             channel->hostname, channel->port, channel->mountpoint);
 
     while (ret == SHOUTERR_BUSY) {
@@ -283,7 +298,7 @@ void mp3_setup(channel_t* channel) {
     }
  
     if (ret == SHOUTERR_CONNECTED) {
-        if(quiet) printf("Connected to %s:%d/%s\n", 
+        log(LOG_NOTICE, "Connected to %s:%d/%s\n", 
             channel->hostname, channel->port, channel->mountpoint);
         channel->lame = lame_init();
         lame_set_in_samplerate(channel->lame, WAVE_RATE);
@@ -297,7 +312,7 @@ void mp3_setup(channel_t* channel) {
         SLEEP(100);
         channel->shout = shouttemp;
     } else {
-        if(quiet) printf("Could not connect to %s:%d/%s\n",
+        log(LOG_WARNING, "Could not connect to %s:%d/%s\n",
             channel->hostname, channel->port, channel->mountpoint);
         shout_free(shouttemp);
         return;
@@ -313,11 +328,11 @@ void mp3_process(channel_t* channel) {
     if (bytes > 0) {
         int ret = shout_send(channel->shout, lamebuf, bytes);
         if (ret != SHOUTERR_SUCCESS || shout_queuelen(channel->shout) > MAX_SHOUT_QUEUELEN) {
-            if (quiet && shout_queuelen(channel->shout) > MAX_SHOUT_QUEUELEN)
-                printf("Exceeded max backlog for %s:%d/%s, disconnecting\n",
+            if (shout_queuelen(channel->shout) > MAX_SHOUT_QUEUELEN)
+                log(LOG_WARNING, "Exceeded max backlog for %s:%d/%s, disconnecting\n",
                     channel->hostname, channel->port, channel->mountpoint);
             // reset connection
-            if(quiet) printf("Lost connection to %s:%d/%s\n",
+            log(LOG_WARNING, "Lost connection to %s:%d/%s\n",
                 channel->hostname, channel->port, channel->mountpoint);
             shout_close(channel->shout);
             shout_free(channel->shout);
@@ -361,7 +376,7 @@ void* mp3_check(void* params) {
             device_t* dev = devices + i;
             for (int j = 0; j < dev->channel_count; j++) {
                 if (dev->channels[j].shout == NULL){
-                    if(quiet) printf("Trying to reconnect to %s:%d/%s...\n",
+                    log(LOG_NOTICE, "Trying to reconnect to %s:%d/%s...\n",
                         dev->channels[j].hostname, dev->channels[j].port, dev->channels[j].mountpoint);
                     mp3_setup(dev->channels + j);
                 }
@@ -629,8 +644,10 @@ int main(int argc, char* argv[]) {
     try {
         Config config;
         config.readFile("config.txt");
+        Setting &root = config.getRoot();
+        if(root.exists("syslog")) do_syslog = root["syslog"];
         Setting &devs = config.lookup("devices");
-	device_count = devs.getLength();
+        device_count = devs.getLength();
         if (device_count < 1) {
             cerr<<"Configuration error: no devices defined\n";
             error();
@@ -662,6 +679,9 @@ int main(int argc, char* argv[]) {
         tempptr &= ~0x0F;
         devices = (device_t *)tempptr;
         shout_init();
+#ifndef _WIN32
+        if(do_syslog) openlog("rtl_airband", LOG_PID, LOG_DAEMON);
+#endif
         cout<<"Starting devices\n";
         for (int i = 0; i < devs.getLength(); i++) {
             device_t* dev = devices + i;

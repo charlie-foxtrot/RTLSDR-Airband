@@ -36,6 +36,13 @@
 # - C-style comments, /* like so */
 # - C++-style comments (beginning with // sequence)
 
+# global parameters
+
+# log messages via syslog? Default: 0 (no)
+# if disabled, log messages are written to stdout (but only when run in foreground)
+# This option has no effect on Windows
+do_syslog = 1
+
 # devices section contains all settings related to the RTLSDR receivers.
 #
 # It's a list of groups - each group contains settings for a single receiver,

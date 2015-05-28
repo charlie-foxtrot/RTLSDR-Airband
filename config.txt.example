@@ -41,7 +41,7 @@
 # log messages via syslog? Default: 0 (no)
 # if disabled, log messages are written to stdout (but only when run in foreground)
 # This option has no effect on Windows
-do_syslog = 1
+syslog = 1
 
 # devices section contains all settings related to the RTLSDR receivers.
 #

@@ -151,7 +151,7 @@ int device_opened = 0;
 #ifdef _WIN32
 int avx;
 #endif
-int quiet = 0, do_syslog = 0;
+int foreground = 0, do_syslog = 0;
 static volatile int do_exit = 0;
 
 void error() {
@@ -169,7 +169,7 @@ void log(int priority, const char *format, ...) {
         vsyslog(priority, format, args);
     } else 
 #endif
-        if(quiet) 
+        if(!foreground) 
             vprintf(format, args);
     va_end(args);
 }
@@ -509,7 +509,7 @@ void demodulate() {
         dev->waveend += FFT_BATCH;
         
         if (dev->waveend >= WAVE_BATCH + AGC_EXTRA) {
-            if (!quiet) {
+            if (foreground) {
                 GOTOXY(0, device_num * 17 + dev->row + 3);
             }
             for (int i = 0; i < dev->channel_count; i++) {
@@ -587,7 +587,7 @@ void demodulate() {
                 memcpy(channel->waveout, channel->waveout + WAVE_BATCH, AGC_EXTRA * 4);
 #endif
                 memcpy(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4);
-                if (!quiet) {
+                if (foreground) {
                     printf("%4.0f/%3.0f%c ", channel->agcavgslow, channel->agcmin, channel->shout == NULL ? 'X' : channel->agcindicate);
                     fflush(stdout);
                 }
@@ -637,7 +637,7 @@ int main(int argc, char* argv[]) {
 	}
 #endif /* !__arm__ */
 
-    quiet = (argc > 0) && (argv[1] != NULL) && (strncmp(argv[1], "--quiet", 10) == 0);
+    foreground = (argc > 0) && (argv[1] != NULL) && (strncmp(argv[1], "-f", 2) == 0);
 
     cout<<"Reading config.\n";
     // read config
@@ -754,7 +754,7 @@ int main(int argc, char* argv[]) {
     while (device_opened != device_count) {
         SLEEP(100);
     }
-    if (!quiet) {
+    if (foreground) {
 #ifdef _WIN32
         system("cls");
 #else

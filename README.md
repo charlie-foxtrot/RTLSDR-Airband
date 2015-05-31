@@ -101,6 +101,7 @@ Building
  * Simply build solution or click the "Start Local Windows Debugger" button
  
 ### Raspberry Pi (Raspbian)
+ * Install RTLSDR library (http://sdr.osmocom.org/trac/wiki/rtl-sdr)
  *Installing RTLSDR library: 
 
         sudo apt-get update
@@ -116,22 +117,20 @@ Building
         make
         sudo make install
         sudo ldconfig
-        sudo mv /home/pi/rtl-sdr/rtl-sdr.rules /etc/udev/rules.d/rtl-sdr.rules
+        sudo mv $HOME/rtl-sdr/rtl-sdr.rules /etc/udev/rules.d/rtl-sdr.rules
 
- * Blacklist DVB drivers to avoid conflict with SDR driver - before connecting
-   the USB dongle add following lines to /etc/modprobe.d/raspi-blacklist.conf:
+ * Blacklist DVB drivers to avoid conflict with SDR driver - before connecting the USB dongle:
+ * 
 
-        sudo nano /etc/modprobe.d/dvb-blacklist.conf
-
-        blacklist r820t
-        blacklist rtl2832
-        blacklist rtl2830
-        blacklist dvb_usb_rtl28xxu
+								echo "blacklist r820t" >> /etc/modprobe.d/dvb-blacklist.conf
+								echo "blacklist rtl2832" >> /etc/modprobe.d/dvb-blacklist.conf
+								echo "blacklist blacklist rtl2830" >> /etc/modprobe.d/dvb-blacklist.conf
+								echo "blacklist blacklist dvb_usb_rtl28xxu" >> /etc/modprobe.d/dvb-blacklist.conf
 
 
  *Installing RTLSDR-AIRBAND: 
  
-        sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev screen
+        sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev
         git clone https://github.com/szpajder/RTLSDR-Airband.git
         cd RTLSDR-Airband/
         
@@ -149,11 +148,10 @@ Building
 
  * You need to edit config.txt with your settings
  
-          mv config.txt.example config.txt
           nano config.txt
 
-  * You need to run the program with root privileges and recommending also using screen
-        screen sudo ./rtl_airband_neon
+ * You need to run the program with root privileges (eg. sudo ./rtl_airband)
+        sudo ./rtl_airband_neon
 
 ### Linux, x86
  * Install RTLSDR library (http://sdr.osmocom.org/trac/wiki/rtl-sdr)

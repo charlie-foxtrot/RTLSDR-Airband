@@ -37,7 +37,7 @@ $(SUBDIRS):
 	$(MAKE) -C $@
 
 clean: $(CLEANDIRS)
-	rm -f *.o rtl_airband_neon rtl_airband_vfp
+	rm -f *.o rtl_airband_neon rtl_airband_vfp rtl_airband
 
 $(CLEANDIRS):
 	$(MAKE) -C $(@:clean-%=%) clean

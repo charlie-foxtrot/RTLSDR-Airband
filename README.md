@@ -124,8 +124,8 @@ Building
 
 								echo "blacklist r820t" >> /etc/modprobe.d/dvb-blacklist.conf
 								echo "blacklist rtl2832" >> /etc/modprobe.d/dvb-blacklist.conf
-								echo "blacklist blacklist rtl2830" >> /etc/modprobe.d/dvb-blacklist.conf
-								echo "blacklist blacklist dvb_usb_rtl28xxu" >> /etc/modprobe.d/dvb-blacklist.conf
+								echo "blacklist rtl2830" >> /etc/modprobe.d/dvb-blacklist.conf
+								echo "blacklist dvb_usb_rtl28xxu" >> /etc/modprobe.d/dvb-blacklist.conf
 
 
  *Installing RTLSDR-AIRBAND: 

@@ -51,9 +51,15 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <syslog.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/wait.h>
 #include <algorithm>
 #include <csignal>
 #include <cstdarg>
+#include <cstring>
+#include <cerrno>
 #endif /* !_WIN32 */ 
 
 #include <iostream>
@@ -164,13 +170,13 @@ void error() {
 void log(int priority, const char *format, ...) {
     va_list args;
     va_start(args, format);
-#ifndef _WIN32
-    if(do_syslog) {
+#ifdef _WIN32
+    if(!foreground) 
+        vprintf(format, args);
+#else
+    if(do_syslog)
         vsyslog(priority, format, args);
-    } else 
 #endif
-        if(!foreground) 
-            vprintf(format, args);
     va_end(args);
 }
 
@@ -188,22 +194,16 @@ void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx) {
 #ifdef _WIN32
 BOOL WINAPI sighandler(int sig) {
     if (CTRL_C_EVENT == sig) {
-        printf("Got signal %d, exiting\n", sig);
+        log(LOG_NOTICE, "Got signal %d, exiting\n", sig);
         do_exit = 1;
-        for (int i = 0; i < device_count; i++) {
-            rtlsdr_cancel_async(devices[i].rtlsdr);
-        }
         return TRUE;
     }
     return FALSE;
 }
 #else
 void sighandler(int sig) {
-    printf("Got signal %d, exiting\n", sig);
+    log(LOG_NOTICE, "Got signal %d, exiting\n", sig);
     do_exit = 1;
-    for (int i = 0; i < device_count; i++) {
-        rtlsdr_cancel_async(devices[i].rtlsdr);
-    }
 }
 #endif
 
@@ -216,7 +216,7 @@ void* rtlsdr_exec(void* params) {
     int r;
     rtlsdr_open(&dev->rtlsdr, dev->device);
     if (NULL == dev) {
-        fprintf(stderr, "Failed to open rtlsdr device #%d.\n", dev->device);
+        log(LOG_ERR, "Failed to open rtlsdr device #%d.\n", dev->device);
         error();
         return NULL;
     }
@@ -226,7 +226,7 @@ void* rtlsdr_exec(void* params) {
     rtlsdr_set_tuner_gain(dev->rtlsdr, dev->gain);
     rtlsdr_set_agc_mode(dev->rtlsdr, 0);
     rtlsdr_reset_buffer(dev->rtlsdr);
-    printf("Device %d started.\n", dev->device);
+    log(LOG_INFO, "Device %d started.\n", dev->device);
     device_opened++;
     r = rtlsdr_read_async(dev->rtlsdr, rtlsdr_callback, params, 20, 320000);
     return 0;
@@ -400,9 +400,9 @@ void demodulate() {
     struct GPU_FFT *fft;
     int ret = gpu_fft_prepare(mb, FFT_SIZE_LOG, GPU_FFT_FWD, FFT_BATCH, &fft);
     switch (ret) {
-        case -1: printf("Unable to enable V3D. Please check your firmware is up to date.\n"); error();
-        case -2: printf("log2_N=%d not supported.  Try between 8 and 17.\n", FFT_SIZE_LOG); error();
-        case -3: printf("Out of memory.  Try a smaller batch or increase GPU memory.\n"); error();
+        case -1: log(LOG_CRIT, "Unable to enable V3D. Please check your firmware is up to date.\n"); error();
+        case -2: log(LOG_CRIT, "log2_N=%d not supported.  Try between 8 and 17.\n", FFT_SIZE_LOG); error();
+        case -3: log(LOG_CRIT, "Out of memory.  Try a smaller batch or increase GPU memory.\n"); error();
     }
     int sizes[2];
     sizes[0] = fft->step * sizeof(GPU_FFT_COMPLEX);
@@ -440,7 +440,7 @@ void demodulate() {
     while (true) {
         if(do_exit) {
 #ifdef __arm__
-            printf("Freeing GPU memory\n");
+            log(LOG_INFO, "Freeing GPU memory\n");
             gpu_fft_release(fft);
 #endif
             return;
@@ -618,10 +618,8 @@ int main(int argc, char* argv[]) {
 	__cpuid(cpuinfo, 1);
 	if (cpuinfo[2] & 1 << 28) {
 		avx = 1;
-		printf("AVX support detected.\n");
 	} else if (cpuinfo[2] & 1) {
 		avx = 0;
-		printf("SSE3 suport detected.\n");
 #else /* !_WIN32 */
 #define cpuid(func,ax,bx,cx,dx)\
 	__asm__ __volatile__ ("cpuid":\
@@ -629,7 +627,7 @@ int main(int argc, char* argv[]) {
 	int a,b,c,d;
 	cpuid(1,a,b,c,d);
 	if((int)((d >> 25) & 0x1)) {
-		printf("SSE suport detected.\n");
+		/* NOOP */
 #endif /* !_WIN32 */
 	} else {
 		printf("Unsupported CPU.\n");
@@ -639,7 +637,6 @@ int main(int argc, char* argv[]) {
 
     foreground = (argc > 0) && (argv[1] != NULL) && (strncmp(argv[1], "-f", 2) == 0);
 
-    cout<<"Reading config.\n";
     // read config
     try {
         Config config;
@@ -656,8 +653,6 @@ int main(int argc, char* argv[]) {
         if (device_count2 < device_count) {
             cerr<<"Not enough devices ("<<device_count<<" configured, "<<device_count2<<" detected)\n";
             error();
-        } else {
-            cerr<<device_count2<<" device(s) found\n";
         }
 #ifndef _WIN32
         struct sigaction sigact, pipeact;
@@ -667,14 +662,12 @@ int main(int argc, char* argv[]) {
         sigaction(SIGPIPE, &pipeact, NULL);
         sigaction(SIGHUP, &sigact, NULL);
         sigaction(SIGINT, &sigact, NULL);
-        sigaction(SIGCHLD, &sigact, NULL);
         sigaction(SIGQUIT, &sigact, NULL);
         sigaction(SIGTERM, &sigact, NULL);
 #else
         SetConsoleCtrlHandler( (PHANDLER_ROUTINE) sighandler, TRUE );
 #endif
 
-        cout<<"Allocating memory\n";
         uintptr_t tempptr = (uintptr_t)malloc(device_count * sizeof(device_t)+31);
         tempptr &= ~0x0F;
         devices = (device_t *)tempptr;
@@ -682,7 +675,6 @@ int main(int argc, char* argv[]) {
 #ifndef _WIN32
         if(do_syslog) openlog("rtl_airband", LOG_PID, LOG_DAEMON);
 #endif
-        cout<<"Starting devices\n";
         for (int i = 0; i < devs.getLength(); i++) {
             device_t* dev = devices + i;
             if((int)devs[i]["index"] >= device_count2) {
@@ -721,18 +713,12 @@ int main(int argc, char* argv[]) {
                 channel->frequency = devs[i]["channels"][j]["freq"];
                 channel->username = strdup(devs[i]["channels"][j]["username"]);
                 channel->password = strdup(devs[i]["channels"][j]["password"]);
-		if(devs[i]["channels"][j].exists("name"))
-			channel->name = strdup(devs[i]["channels"][j]["name"]);
-		if(devs[i]["channels"][j].exists("genre"))
-			channel->genre = strdup(devs[i]["channels"][j]["genre"]);
+                if(devs[i]["channels"][j].exists("name"))
+                    channel->name = strdup(devs[i]["channels"][j]["name"]);
+                if(devs[i]["channels"][j].exists("genre"))
+                    channel->genre = strdup(devs[i]["channels"][j]["genre"]);
                 dev->bins[j] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq + dev->correction) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
-                mp3_setup(channel);
             }
-#ifdef _WIN32
-            dev->thread = (THREAD)_beginthread(rtlsdr_exec, 0, dev);
-#else
-            pthread_create(&dev->thread, NULL, &rtlsdr_exec, dev);
-#endif
         }
     } catch(FileIOException e) {
             cerr<<"Cannot read configuration file config.txt<<\n";
@@ -749,6 +735,52 @@ int main(int argc, char* argv[]) {
     } catch(ConfigException e) {
             cerr<<"Unhandled config exception\n";
             error();
+    }
+#ifndef _WIN32
+    if(!foreground) {
+        int pid1, pid2;
+        if((pid1 = fork()) == -1) {
+            cerr<<"Cannot fork child process: "<<strerror(errno)<<"\n";
+            error();
+        }
+        if(pid1) {
+            waitpid(-1, NULL, 0);
+            return(0);
+        } else {
+            if((pid2 = fork()) == -1) {
+                cerr<<"Cannot fork child process: "<<strerror(errno)<<"\n";
+                error();
+            }
+            if(pid2) {
+                return(0);
+            } else {
+                int nullfd, dupfd;
+                if((nullfd = open("/dev/null", O_RDWR)) == -1) {
+                    log(LOG_CRIT, "Cannot open /dev/null: %s\n", strerror(errno));
+                    error();
+                }
+                for(dupfd = 0; dupfd <= 2; dupfd++) {
+                    if(dup2(nullfd, dupfd) == -1) {
+                        log(LOG_CRIT, "dup2(): %s\n", strerror(errno));
+                        error();
+                    }
+                }
+                if(nullfd > 2) close(nullfd);
+            }
+        }
+    }
+#endif
+    for (int i = 0; i < device_count; i++) {
+        device_t* dev = devices + i;
+        for (int j = 0; j < dev->channel_count; j++)  {
+            channel_t* channel = dev->channels + j;
+            mp3_setup(channel);
+        }
+#ifdef _WIN32
+        dev->thread = (THREAD)_beginthread(rtlsdr_exec, 0, dev);
+#else
+        pthread_create(&dev->thread, NULL, &rtlsdr_exec, dev);
+#endif
     }
 
     while (device_opened != device_count) {
@@ -785,11 +817,11 @@ int main(int argc, char* argv[]) {
 
     demodulate();
 
-    printf("Cleaning up\n");
+    log(LOG_INFO, "cleaning up\n");
     for (int i = 0; i < device_count; i++) {
         rtlsdr_cancel_async(devices[i].rtlsdr);
         pthread_join(devices[i].thread, NULL);
     }
-    printf("rtlsdr threads closed\n");
+    log(LOG_INFO, "rtlsdr threads closed\n");
     return 0;
 }

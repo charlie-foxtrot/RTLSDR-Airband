@@ -113,10 +113,10 @@ Building
  * sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev libconfig++-dev
  * sudo rpi-update && sudo reboot
  * cd into the project folder (where makefile is located)
- * if you are building for RPi V1: make rtl_airband_vfp
- * if you are building for RPi V2: make rtl_airband_neon
+ * if you are building for RPi V1: PLATFORM=rpiv1 make
+ * if you are building for RPi V2: PLATFORM=rpiv2 make
  * sudo mknod char_dev c 100 0
- * You need to run the program with root privileges (eg. sudo ./rtl_airband_neon)
+ * You need to run the program with root privileges (eg. sudo ./rtl_airband)
 
 ### Linux, x86
  * Install RTLSDR library (http://sdr.osmocom.org/trac/wiki/rtl-sdr)

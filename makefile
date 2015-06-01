@@ -11,25 +11,37 @@ FFT = hello_fft/hello_fft.a
 
 .PHONY: all clean $(SUBDIRS) $(CLEANDIRS)
 
+ifeq ($(PLATFORM), rpiv1)
+  CFLAGS += -I/opt/vc/include  -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux
+  CFLAGS += -mcpu=arm1176jzf-s -mtune=arm1176jzf-s -march=armv6zk -mfpu=vfp
+  LDLIBS += -lbcm_host
+  export LDFLAGS = -L/opt/vc/lib
+  DEPS = $(OBJ) $(FFT) rtl_airband_vfp.o
+else ifeq ($(PLATFORM), rpiv2)
+  CFLAGS += -I/opt/vc/include  -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux
+  CFLAGS += -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard
+  LDLIBS += -lbcm_host
+  export LDFLAGS = -L/opt/vc/lib
+  DEPS = $(OBJ) $(FFT) rtl_airband_neon.o
+else ifeq ($(PLATFORM), x86)
+  CFLAGS += -march=native
+  LDLIBS += -lfftw3f
+  DEPS = $(OBJ)
+else
+  DEPS =
+endif
+
 all:
-	@printf "\nPlease choose one of available platforms:\n \
-	\tmake rtl_airband_vfp\t\tbuild binary for Raspberry Pi V1 (optimized for VFP coprocessor)\n \
-	\tmake rtl_airband_neon\t\tbuild binary for Raspberry Pi V2 (optimized for NEON coprocessor)\n \
-	\tmake rtl_airband\t\tbuild binary for x86\n"
+ifndef DEPS
+	@printf "\nPlease set PLATFORM variable to one of available platforms:\n \
+	\tPLATFORM=rpiv1 make\t\tbuild binary for Raspberry Pi V1 (optimized for VFP coprocessor)\n \
+	\tPLATFORM=rpiv2 make\t\tbuild binary for Raspberry Pi V2 (optimized for NEON coprocessor)\n \
+	\tPLATFORM=x86 make\t\tbuild binary for x86\n\n"
+	@false
+endif
+	$(MAKE) rtl_airband
 
-rtl_airband_vfp rtl_airband_neon: CFLAGS += -I/opt/vc/include  -I/opt/vc/include/interface/vcos/pthreads \
-	-I/opt/vc/include/interface/vmcs_host/linux
-rtl_airband_vfp rtl_airband_neon: LDLIBS += -lbcm_host
-rtl_airband_vfp rtl_airband_neon: export LDFLAGS = -L/opt/vc/lib
-
-rtl_airband_vfp: CFLAGS += -mcpu=arm1176jzf-s -mtune=arm1176jzf-s -march=armv6zk -mfpu=vfp
-rtl_airband_vfp: $(OBJ) $(FFT) rtl_airband_vfp.o
-
-rtl_airband_neon: CFLAGS += -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard
-rtl_airband_neon: $(OBJ) $(FFT) rtl_airband_neon.o
-
-rtl_airband: CFLAGS += -march=native
-rtl_airband: LDLIBS += -lfftw3f
+rtl_airband: $(DEPS)
 
 $(FFT):	hello_fft
 
@@ -37,7 +49,7 @@ $(SUBDIRS):
 	$(MAKE) -C $@
 
 clean: $(CLEANDIRS)
-	rm -f *.o rtl_airband_neon rtl_airband_vfp rtl_airband
+	rm -f *.o rtl_airband
 
 $(CLEANDIRS):
 	$(MAKE) -C $(@:clean-%=%) clean

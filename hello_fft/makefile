@@ -31,6 +31,8 @@ gpu_fft_shaders.o: $(S)
 
 gpu_fft_twiddles.o: gpu_fft.h
 
+mailbox.o: mailbox.h
+
 clean:
 	rm -f *.o *.a
 

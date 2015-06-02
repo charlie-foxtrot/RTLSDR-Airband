@@ -2,6 +2,7 @@
 PREFIX = /usr/local
 
 SYSCONFDIR = $(PREFIX)/etc
+CFG = rtl_airband.conf
 BINDIR = $(PREFIX)/bin
 export CC = g++
 export CFLAGS = -O3 -g -Wall -DSYSCONFDIR=\"$(SYSCONFDIR)\"
@@ -11,10 +12,11 @@ LDLIBS = -lrt -lm -lvorbisenc -lmp3lame -lshout -lpthread -lrtlsdr -lconfig++
 SUBDIRS = hello_fft
 CLEANDIRS = $(SUBDIRS:%=clean-%)
 
+BIN = rtl_airband
 OBJ = rtl_airband.o
 FFT = hello_fft/hello_fft.a
 
-.PHONY: all clean $(SUBDIRS) $(CLEANDIRS)
+.PHONY: all clean install $(SUBDIRS) $(CLEANDIRS)
 
 ifeq ($(PLATFORM), rpiv1)
   CFLAGS += -I/opt/vc/include  -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux
@@ -36,7 +38,7 @@ else
   DEPS =
 endif
 
-all:
+$(BIN): $(DEPS)
 ifndef DEPS
 	@printf "\nPlease set PLATFORM variable to one of available platforms:\n \
 	\tPLATFORM=rpiv1 make\t\tbuild binary for Raspberry Pi V1 (optimized for VFP coprocessor)\n \
@@ -44,9 +46,6 @@ ifndef DEPS
 	\tPLATFORM=x86 make\t\tbuild binary for x86\n\n"
 	@false
 endif
-	$(MAKE) rtl_airband
-
-rtl_airband: $(DEPS)
 
 $(FFT):	hello_fft
 
@@ -55,6 +54,13 @@ $(SUBDIRS):
 
 clean: $(CLEANDIRS)
 	rm -f *.o rtl_airband
+
+install: $(BIN)
+	install -d -o root -g root $(BINDIR)
+	install -o root -g root -m 755 $(BIN) $(BINDIR)
+	install -d -o root -g root $(SYSCONFDIR)
+	test -f $(SYSCONFDIR)/$(CFG) || install -o root -g root -m 600 rtl_airband.conf.example $(SYSCONFDIR)/$(CFG)
+	@printf "\n *** Done. If this is a new install, edit $(SYSCONFDIR)/$(CFG) to suit your needs.\n\n"
 
 $(CLEANDIRS):
 	$(MAKE) -C $(@:clean-%=%) clean

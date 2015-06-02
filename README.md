@@ -115,12 +115,14 @@ Building
  * cd into the project folder (where makefile is located)
  * if you are building for RPi V1: PLATFORM=rpiv1 make
  * if you are building for RPi V2: PLATFORM=rpiv2 make
+ * install the program and configuration file: make install
  * check if device node /dev/vcio with major=100, minor=0 exists: ls -l /dev/vcio
 
     crw-rw---T 1 root video 100, 0 Jan  1  1970 /dev/vcio
 
  * If you get "No such file or directory", then create it: sudo mknod /dev/vcio c 100 0
- * You need to run the program with root privileges (eg. sudo ./rtl_airband)
+ * Edit configuration file - see chapter "Configuring".
+ * You need to run the program with root privileges (eg. sudo /usr/local/bin/rtl_airband)
 
 ### Linux, x86
  * Install RTLSDR library (http://sdr.osmocom.org/trac/wiki/rtl-sdr)
@@ -132,10 +134,12 @@ Building
         blacklist rtl2830
         blacklist dvb_usb_rtl28xxu
 
- * sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev libfftw3-dev
+ * sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev libfftw3-dev libconfig++-dev
  * cd into the project folder (where makefile is located)
  * PLATFORM=x86 make rtl_airband
- * You need to run the program with root privileges (eg. sudo ./rtl_airband)
+ * make install
+ * Edit configuration file - see chapter "Configuring".
+ * You need to run the program with root privileges (eg. sudo /usr/local/bin/rtl_airband)
 
 Configuring
 --------------------

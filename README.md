@@ -115,7 +115,11 @@ Building
  * cd into the project folder (where makefile is located)
  * if you are building for RPi V1: PLATFORM=rpiv1 make
  * if you are building for RPi V2: PLATFORM=rpiv2 make
- * sudo mknod char_dev c 100 0
+ * check if device node /dev/vcio with major=100, minor=0 exists: ls -l /dev/vcio
+
+    crw-rw---T 1 root video 100, 0 Jan  1  1970 /dev/vcio
+
+ * If you get "No such file or directory", then create it: sudo mknod /dev/vcio c 100 0
  * You need to run the program with root privileges (eg. sudo ./rtl_airband)
 
 ### Linux, x86

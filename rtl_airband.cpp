@@ -35,6 +35,7 @@
 #define scanf scanf_s
 #define sscanf sscanf_s
 #define fscanf fscanf_s
+#define CFGFILE "config.txt"
 #else /* !_WIN32 */
 #if defined __arm__
 #include "hello_fft/mailbox.h"
@@ -48,6 +49,10 @@
 #define SLEEP(x) usleep(x * 1000)
 #define THREAD pthread_t
 #define GOTOXY(x, y) printf("%c[%d;%df",0x1B,y,x)
+#ifndef SYSCONFDIR
+#define SYSCONFDIR "/usr/local/etc"
+#endif
+#define CFGFILE SYSCONFDIR "/rtl_airband.conf"
 #include <unistd.h>
 #include <pthread.h>
 #include <syslog.h>
@@ -635,12 +640,13 @@ int main(int argc, char* argv[]) {
 	}
 #endif /* !__arm__ */
 
+    char *cfgfile = CFGFILE;
     foreground = (argc > 0) && (argv[1] != NULL) && (strncmp(argv[1], "-f", 2) == 0);
 
     // read config
     try {
         Config config;
-        config.readFile("config.txt");
+        config.readFile(cfgfile);
         Setting &root = config.getRoot();
         if(root.exists("syslog")) do_syslog = root["syslog"];
         Setting &devs = config.lookup("devices");
@@ -721,10 +727,10 @@ int main(int argc, char* argv[]) {
             }
         }
     } catch(FileIOException e) {
-            cerr<<"Cannot read configuration file config.txt<<\n";
+            cerr<<"Cannot read configuration file "<<cfgfile<<"\n";
             error();
     } catch(ParseException e) {
-            cerr<<"Error while parsing configuration file config.txt line "<<e.getLine()<<": "<<e.getError()<<"\n";
+            cerr<<"Error while parsing configuration file "<<cfgfile<<" line "<<e.getLine()<<": "<<e.getError()<<"\n";
             error();
     } catch(SettingNotFoundException e) {
             cerr<<"Configuration error: mandatory parameter missing: "<<e.getPath()<<"\n";

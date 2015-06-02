@@ -1,5 +1,10 @@
+# Install prefix
+PREFIX = /usr/local
+
+SYSCONFDIR = $(PREFIX)/etc
+BINDIR = $(PREFIX)/bin
 export CC = g++
-export CFLAGS = -O3 -g
+export CFLAGS = -O3 -g -Wall -DSYSCONFDIR=\"$(SYSCONFDIR)\"
 export CXXFLAGS = $(CFLAGS)
 LDLIBS = -lrt -lm -lvorbisenc -lmp3lame -lshout -lpthread -lrtlsdr -lconfig++
 

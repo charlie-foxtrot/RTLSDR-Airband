@@ -614,7 +614,32 @@ void demodulate() {
     }
 }
 
+void usage() {
+    cout<<"Usage: rtl_airband [-f] [-c <config_file_path>]\n\
+\t-h\t\t\tDisplay this help text\n\
+\t-f\t\t\tRun in foreground, display textual waterfalls\n\
+\t-c <config_file_path>\tUse non-default configuration file\n\t\t\t\t(default: "<<CFGFILE<<")\n";
+    exit(EXIT_SUCCESS);
+} 
+
 int main(int argc, char* argv[]) {
+    char *cfgfile = CFGFILE;
+    int opt;
+
+    while((opt = getopt(argc, argv, "fhc:")) != -1) {
+        switch(opt) {
+            case 'f':
+                foreground = 1;
+                break;
+            case 'c':
+                cfgfile = optarg;
+                break;
+            case 'h':
+            default:
+                usage();
+                break;
+       }
+    }
 
 #ifndef __arm__
 #ifdef _WIN32
@@ -639,9 +664,6 @@ int main(int argc, char* argv[]) {
 		error();
 	}
 #endif /* !__arm__ */
-
-    char *cfgfile = CFGFILE;
-    foreground = (argc > 0) && (argv[1] != NULL) && (strncmp(argv[1], "-f", 2) == 0);
 
     // read config
     try {
@@ -831,3 +853,4 @@ int main(int argc, char* argv[]) {
     log(LOG_INFO, "rtlsdr threads closed\n");
     return 0;
 }
+// vim: ts=4:expandtab

@@ -150,6 +150,14 @@ rtl_airband:
 
 sudo mv rtl_airband.conf /usr/local/etc
 
+Command line options
+--------------------
+rtl_airband accepts the following command line options:
+
+    -h                      Display this help text
+    -f                      Run in foreground, display textual waterfalls
+    -c <config_file_path>   Use non-default configuration file
+
 License
 --------------------
 Copyright (C) 2014 Wong Man Hang <microtony@gmail.com>

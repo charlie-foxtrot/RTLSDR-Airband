@@ -218,7 +218,6 @@ void rtlsdr_exec(void* params) {
 void* rtlsdr_exec(void* params) {
 #endif
     device_t *dev = (device_t*)params;
-    int r;
     rtlsdr_open(&dev->rtlsdr, dev->device);
     if (NULL == dev) {
         log(LOG_ERR, "Failed to open rtlsdr device #%d.\n", dev->device);
@@ -233,7 +232,7 @@ void* rtlsdr_exec(void* params) {
     rtlsdr_reset_buffer(dev->rtlsdr);
     log(LOG_INFO, "Device %d started.\n", dev->device);
     device_opened++;
-    r = rtlsdr_read_async(dev->rtlsdr, rtlsdr_callback, params, 20, 320000);
+    rtlsdr_read_async(dev->rtlsdr, rtlsdr_callback, params, 20, 320000);
     return 0;
 }
 
@@ -366,6 +365,7 @@ void* mp3_thread(void* params) {
             }
         }
     }
+    return 0;
 }
 #endif
 
@@ -388,6 +388,9 @@ void* mp3_check(void* params) {
             }
         }
     }
+#ifndef _WIN32
+    return 0;
+#endif
 }
 
 void demodulate() {
@@ -572,7 +575,7 @@ void demodulate() {
                             channel->agclow++;
                         }
                         channel->agcsq = min(channel->agcsq + 1, -1);
-                        if (channel->agcsq == -1 && channel->agcavgslow < 2.4f * channel->agcmin || channel->agclow == AGC_EXTRA - 12) {
+                        if ((channel->agcsq == -1 && channel->agcavgslow < 2.4f * channel->agcmin) || channel->agclow == AGC_EXTRA - 12) {
                             channel->agcsq = AGC_EXTRA * 2;
                             channel->agcindicate = ' ';
                             // fade out
@@ -623,7 +626,9 @@ void usage() {
 } 
 
 int main(int argc, char* argv[]) {
+#pragma GCC diagnostic ignored "-Wwrite-strings"
     char *cfgfile = CFGFILE;
+#pragma GCC diagnostic warning "-Wwrite-strings"
     int opt;
 
     while((opt = getopt(argc, argv, "fhc:")) != -1) {

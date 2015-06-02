@@ -35,7 +35,7 @@
 #define scanf scanf_s
 #define sscanf sscanf_s
 #define fscanf fscanf_s
-#define CFGFILE "config.txt"
+#define CFGFILE "rtl_airband.conf"
 #else /* !_WIN32 */
 #if defined __arm__
 #include "hello_fft/mailbox.h"

@@ -130,23 +130,25 @@ Building
 
  * sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev libfftw3-dev
  * cd into the project folder (where makefile is located)
- * make rtl_airband
+ * PLATFORM=x86 make rtl_airband
  * You need to run the program with root privileges (eg. sudo ./rtl_airband)
 
 Configuring
 --------------------
-Configuration should be placed in config.txt file. Refer to config.txt.example 
-for the description of the format. You can copy this file to config.txt and 
-edit it to suit your needs.
+By default, the configuration is read from /usr/local/etc/rtl_airband.conf file. 
+Refer to rtl_airband.conf.example for the description of the format. You can 
+copy this file to /usr/local/etc/rtl_airband.conf and edit it to suit your needs.
 
 A small utility convert_cfg is included and can be used to convert old-style 
 config.txt to the new format. To use it:
 
 make -C util
-util/convert_cfg config.txt config.txt.new
+util/convert_cfg config.txt rtl_airband.conf
 
-Review the config.txt.new file and rename it to config.txt before launching 
-rtl_airband.
+Review the rtl_airband.conf file and move it to /usr/local/etc before launching 
+rtl_airband:
+
+sudo mv rtl_airband.conf /usr/local/etc
 
 License
 --------------------

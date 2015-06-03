@@ -53,6 +53,7 @@
 #define SYSCONFDIR "/usr/local/etc"
 #endif
 #define CFGFILE SYSCONFDIR "/rtl_airband.conf"
+#define PIDFILE "/run/rtl_airband.pid"
 #include <unistd.h>
 #include <pthread.h>
 #include <syslog.h>
@@ -628,6 +629,9 @@ void usage() {
 int main(int argc, char* argv[]) {
 #pragma GCC diagnostic ignored "-Wwrite-strings"
     char *cfgfile = CFGFILE;
+#ifndef _WIN32
+    char *pidfile = PIDFILE;
+#endif
 #pragma GCC diagnostic warning "-Wwrite-strings"
     int opt;
 
@@ -676,6 +680,9 @@ int main(int argc, char* argv[]) {
         config.readFile(cfgfile);
         Setting &root = config.getRoot();
         if(root.exists("syslog")) do_syslog = root["syslog"];
+#ifndef _WIN32
+        if(root.exists("pidfile")) pidfile = strdup(root["pidfile"]);
+#endif
         Setting &devs = config.lookup("devices");
         device_count = devs.getLength();
         if (device_count < 1) {
@@ -799,6 +806,14 @@ int main(int argc, char* argv[]) {
                     }
                 }
                 if(nullfd > 2) close(nullfd);
+                FILE *f = fopen(pidfile, "w");
+                if(f == NULL) {
+                    log(LOG_CRIT, "Cannot write pidfile: %s\n", strerror(errno));
+                    error();
+                } else {
+                    fprintf(f, "%ld\n", (long)getpid());
+                    fclose(f);
+                }
             }
         }
     }
@@ -856,6 +871,9 @@ int main(int argc, char* argv[]) {
         pthread_join(devices[i].thread, NULL);
     }
     log(LOG_INFO, "rtlsdr threads closed\n");
+#ifndef _WIN32
+    if(!foreground) unlink(pidfile);
+#endif
     return 0;
 }
 // vim: ts=4:expandtab

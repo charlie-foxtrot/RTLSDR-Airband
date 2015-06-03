@@ -118,11 +118,17 @@ Building
  * install the program and configuration file: make install
  * check if device node /dev/vcio with major=100, minor=0 exists: ls -l /dev/vcio
 
-    crw-rw---T 1 root video 100, 0 Jan  1  1970 /dev/vcio
+	crw-rw---T 1 root video 100, 0 Jan  1  1970 /dev/vcio
 
  * If you get "No such file or directory", then create it: sudo mknod /dev/vcio c 100 0
  * Edit configuration file - see chapter "Configuring".
  * You need to run the program with root privileges (eg. sudo /usr/local/bin/rtl_airband)
+ * If you wish to start the program automatically at boot, you can use example startup 
+   scripts from init.d/ subdirectory. For example:
+
+	sudo cp init.d/rtl_airband-debian.sh /etc/init.d/rtl_airband
+	sudo chmod 755 /etc/init.d/rtl_airband
+	sudo update-rc.d rtl_airband defaults
 
 ### Linux, x86
  * Install RTLSDR library (http://sdr.osmocom.org/trac/wiki/rtl-sdr)
@@ -140,6 +146,12 @@ Building
  * make install
  * Edit configuration file - see chapter "Configuring".
  * You need to run the program with root privileges (eg. sudo /usr/local/bin/rtl_airband)
+ * If you wish to start the program automatically at boot, you can use example startup 
+   scripts from init.d/ subdirectory. Example for Debian:
+
+	sudo cp init.d/rtl_airband-debian.sh /etc/init.d/rtl_airband
+	sudo chmod 755 /etc/init.d/rtl_airband
+	sudo update-rc.d rtl_airband default
 
 Configuring
 --------------------

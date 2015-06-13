@@ -60,10 +60,8 @@ devices = (
     gain = 280;
 # Center frequency (in hertz)
     centerfreq = 120100000;
-# Tuning error (in parts per billion, ie. ppm * 1000).
-# Negative values indicate that the dongle should be tuned down.
-# Positive values indicate that the dongle should be tuned up.
-    correction = -8000;
+# Tuning error (in parts per million). Default is 0.
+    correction = 80;
 # List of channels which should be received and streamed from this dongle.
 # It's a list of groups - each group contains settings for a single channel.
 # Maximum number of channels per dongle is 8.

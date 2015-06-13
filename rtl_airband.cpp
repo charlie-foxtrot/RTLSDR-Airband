@@ -227,6 +227,7 @@ void* rtlsdr_exec(void* params) {
     }
     rtlsdr_set_sample_rate(dev->rtlsdr, SOURCE_RATE);
     rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);
+    rtlsdr_set_freq_correction(dev->rtlsdr, dev->correction);
     rtlsdr_set_tuner_gain_mode(dev->rtlsdr, 1);
     rtlsdr_set_tuner_gain(dev->rtlsdr, dev->gain);
     rtlsdr_set_agc_mode(dev->rtlsdr, 0);
@@ -757,7 +758,7 @@ int main(int argc, char* argv[]) {
                     channel->name = strdup(devs[i]["channels"][j]["name"]);
                 if(devs[i]["channels"][j].exists("genre"))
                     channel->genre = strdup(devs[i]["channels"][j]["genre"]);
-                dev->bins[j] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq + dev->correction) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
+                dev->bins[j] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
             }
         }
     } catch(FileIOException e) {

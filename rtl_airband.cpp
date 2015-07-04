@@ -155,6 +155,7 @@ struct device_t {
     int waveavail;
     THREAD thread;
     int row;
+    int failed;
 };
 
 device_t* devices;
@@ -234,7 +235,12 @@ void* rtlsdr_exec(void* params) {
     rtlsdr_reset_buffer(dev->rtlsdr);
     log(LOG_INFO, "Device %d started.\n", dev->device);
     device_opened++;
-    rtlsdr_read_async(dev->rtlsdr, rtlsdr_callback, params, 20, 320000);
+    dev->failed = 0;
+    if(rtlsdr_read_async(dev->rtlsdr, rtlsdr_callback, params, 20, 320000) < 0) {
+        log(LOG_WARNING, "Device #%d: async read failed, disabling", dev->device);
+        dev->failed = 1;
+        device_opened--;
+    }
     return 0;
 }
 
@@ -357,7 +363,7 @@ void* mp3_thread(void* params) {
     while (!do_exit) {
         pthread_cond_wait(&mp3_cond, &mp3_mutex);
         for (int i = 0; i < device_count; i++) {
-            if (devices[i].waveavail) {
+            if (!devices[i].failed && devices[i].waveavail) {
                 devices[i].waveavail = 0;
                 for (int j = 0; j < devices[i].channel_count; j++) {
                     channel_t* channel = devices[i].channels + j;
@@ -382,10 +388,24 @@ void* mp3_check(void* params) {
         for (int i = 0; i < device_count; i++) {
             device_t* dev = devices + i;
             for (int j = 0; j < dev->channel_count; j++) {
-                if (dev->channels[j].shout == NULL){
-                    log(LOG_NOTICE, "Trying to reconnect to %s:%d/%s...\n",
-                        dev->channels[j].hostname, dev->channels[j].port, dev->channels[j].mountpoint);
-                    mp3_setup(dev->channels + j);
+                if(dev->failed) {
+                    if(dev->channels[j].shout) {
+                        log(LOG_WARNING, "Device #%d failed, disconnecting stream %s:%d/%s\n",
+                            i, dev->channels[j].hostname, dev->channels[j].port, dev->channels[j].mountpoint);
+                        shout_close(dev->channels[j].shout);
+                        shout_free(dev->channels[j].shout);
+                        dev->channels[j].shout = NULL;
+                    }
+                    if(dev->channels[j].lame) {
+                        lame_close(dev->channels[j].lame);
+                        dev->channels[j].lame = NULL;
+                    }
+                } else {
+                    if (dev->channels[j].shout == NULL){
+                        log(LOG_NOTICE, "Trying to reconnect to %s:%d/%s...\n",
+                            dev->channels[j].hostname, dev->channels[j].port, dev->channels[j].mountpoint);
+                        mp3_setup(dev->channels + j);
+                    }
                 }
             }
         }
@@ -461,7 +481,16 @@ void demodulate() {
             available = (BUF_SIZE - dev->bufe) + dev->bufs;
         }
 
-        if (available < speed2 * FFT_BATCH + FFT_SIZE * 2) {
+        if(!device_opened) {
+            log(LOG_ERR, "All receivers failed, exiting");
+            do_exit = 1;
+            continue;
+        }
+        if (dev->failed) {
+            // move to next device
+            device_num = (device_num + 1) % device_count;
+            continue;
+        } else if (available < speed2 * FFT_BATCH + FFT_SIZE * 2) {
             // move to next device
             device_num = (device_num + 1) % device_count;
             SLEEP(10);

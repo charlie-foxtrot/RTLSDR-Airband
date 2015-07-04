@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
 			r["devices"][i]["index"] = index;
 			r["devices"][i]["gain"] = gain;
 			r["devices"][i]["centerfreq"] = centerfreq;
-			r["devices"][i]["correction"] = correction;
+			r["devices"][i]["correction"] = -correction / 100;
 			r["devices"][i].add("channels", Setting::TypeList);
 			for (int j = 0; j < channel_count; j++)  {
 				int port, frequency;

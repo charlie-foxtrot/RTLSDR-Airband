@@ -54,6 +54,7 @@
 #endif
 #define CFGFILE SYSCONFDIR "/rtl_airband.conf"
 #define PIDFILE "/run/rtl_airband.pid"
+#define AUTO_GAIN -100
 #include <unistd.h>
 #include <pthread.h>
 #include <syslog.h>
@@ -229,8 +230,14 @@ void* rtlsdr_exec(void* params) {
     rtlsdr_set_sample_rate(dev->rtlsdr, SOURCE_RATE);
     rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);
     rtlsdr_set_freq_correction(dev->rtlsdr, dev->correction);
-    rtlsdr_set_tuner_gain_mode(dev->rtlsdr, 1);
-    rtlsdr_set_tuner_gain(dev->rtlsdr, dev->gain);
+    if(dev->gain == AUTO_GAIN) {
+        rtlsdr_set_tuner_gain_mode(dev->rtlsdr, 0);
+        log(LOG_INFO, "Device #%d: gain set to automatic", dev->device);
+    } else {
+        rtlsdr_set_tuner_gain_mode(dev->rtlsdr, 1);
+        rtlsdr_set_tuner_gain(dev->rtlsdr, dev->gain);
+        log(LOG_INFO, "Device #%d: gain set to %0.2f dB", dev->device, (float)rtlsdr_get_tuner_gain(dev->rtlsdr) / 10.0);
+    }
     rtlsdr_set_agc_mode(dev->rtlsdr, 0);
     rtlsdr_reset_buffer(dev->rtlsdr);
     log(LOG_INFO, "Device %d started.\n", dev->device);
@@ -752,14 +759,16 @@ int main(int argc, char* argv[]) {
                 error();
             }
             if(!devs[i].exists("correction")) devs[i].add("correction", Setting::TypeInt);
-//FIXME: default gain
             dev->device = (int)devs[i]["index"];
             dev->channel_count = devs[i]["channels"].getLength();
             if(dev->channel_count < 1 || dev->channel_count > 8) {
                 cerr<<"Configuration error: devices.["<<i<<"]: invalid channel count (min 1, max 8)\n";
                 error();
             }
-            dev->gain = (int)devs[i]["gain"];
+            if(devs[i].exists("gain"))
+                dev->gain = (int)devs[i]["gain"] * 10;
+            else
+                dev->gain = AUTO_GAIN;
             dev->centerfreq = (int)devs[i]["centerfreq"];
             dev->correction = (int)devs[i]["correction"];
             dev->bins[0] = dev->bins[1] = dev->bins[2] = dev->bins[3] = dev->bins[4] = dev->bins[5] = dev->bins[6] = dev->bins[7] = 0;

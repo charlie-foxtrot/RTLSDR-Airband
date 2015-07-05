@@ -56,8 +56,8 @@ devices = (
   {
 # Device index (as identified by librtlsdr library)
     index = 0;
-# Gain (in tenths of decibels)
-    gain = 280;
+# Gain (integer, in decibels, optional). Default is auto-gain.
+#    gain = 28;
 # Center frequency (in hertz)
     centerfreq = 120100000;
 # Tuning error (in parts per million). Default is 0.

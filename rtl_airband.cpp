@@ -128,7 +128,8 @@ struct channel_t {
     float agcmin;      // noise level
     int agclow;             // low level sample count
     int frequency;
-
+    int freq_count;
+    int *freqlist;
     const char *hostname;
     int port;
     const char *username;
@@ -140,6 +141,7 @@ struct channel_t {
     lame_t lame;
 };
 
+enum rec_modes { R_MULTICHANNEL, R_SCAN };
 struct device_t {
     unsigned char buffer[BUF_SIZE + FFT_SIZE * 2 + 48];
     int bufs;
@@ -154,9 +156,11 @@ struct device_t {
     channel_t channels[8];
     int waveend;
     int waveavail;
-    THREAD thread;
+    THREAD rtl_thread;
+    THREAD controller_thread;
     int row;
     int failed;
+    enum rec_modes mode;
 };
 
 device_t* devices;
@@ -383,6 +387,29 @@ void* mp3_thread(void* params) {
     return 0;
 }
 #endif
+
+void* controller_thread(void* params) {
+    device_t *dev = (device_t*)params;
+    int i = 1;
+    int consecutive_squelch_off = 0;
+    if(dev->channels[0].freq_count < 2) return 0;
+    while(!do_exit) {
+        SLEEP(200);
+        if(dev->channels[0].agcindicate == ' ') {
+            if(consecutive_squelch_off < 10) {
+                consecutive_squelch_off++;
+            } else {
+		dev->channels[0].frequency = dev->channels[0].freqlist[i];
+                dev->centerfreq = dev->channels[0].freqlist[i] + 2 * (double)(SOURCE_RATE / FFT_SIZE);
+                rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);
+                i++; i %= dev->channels[0].freq_count;
+            }
+        } else {
+            consecutive_squelch_off = 0;
+        }
+    }
+    return 0;
+}
 
 // reconnect as required
 #ifdef _WIN32
@@ -634,7 +661,10 @@ void demodulate() {
 #endif
                 memcpy(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4);
                 if (foreground) {
-                    printf("%4.0f/%3.0f%c ", channel->agcavgslow, channel->agcmin, channel->shout == NULL ? 'X' : channel->agcindicate);
+                    if(dev->mode == R_SCAN)
+                        printf("%4.0f/%3.0f%c %7.3f", channel->agcavgslow, channel->agcmin, channel->shout == NULL ? 'X' : channel->agcindicate, (dev->channels[0].frequency / 1000000.0));
+                    else
+                        printf("%4.0f/%3.0f%c", channel->agcavgslow, channel->agcmin, channel->shout == NULL ? 'X' : channel->agcindicate);
                     fflush(stdout);
                 }
             }
@@ -769,7 +799,23 @@ int main(int argc, char* argv[]) {
                 dev->gain = (int)devs[i]["gain"] * 10;
             else
                 dev->gain = AUTO_GAIN;
-            dev->centerfreq = (int)devs[i]["centerfreq"];
+            if(devs[i].exists("mode")) {
+                if(!strncmp(devs[i]["mode"], "multichannel", 12)) {
+                    dev->mode = R_MULTICHANNEL;
+                } else if(!strncmp(devs[i]["mode"], "scan", 4)) {
+                    dev->mode = R_SCAN;
+                } else {
+                    cerr<<"Configuration error: devices.["<<i<<"]: invalid mode (must be one of: \"scan\", \"multichannel\")\n";
+                    error();
+                }
+            } else {
+                dev->mode = R_MULTICHANNEL;
+            }
+            if(dev->mode == R_MULTICHANNEL) dev->centerfreq = (int)devs[i]["centerfreq"];
+            if(dev->mode == R_SCAN && dev->channel_count > 1) {
+                cerr<<"Configuration error: devices.["<<i<<"]: only one channel section is allowed in scan mode\n";
+                error();
+            }
             dev->correction = (int)devs[i]["correction"];
             dev->bins[0] = dev->bins[1] = dev->bins[2] = dev->bins[3] = dev->bins[4] = dev->bins[5] = dev->bins[6] = dev->bins[7] = 0;
             dev->bufs = dev->bufe = dev->waveend = dev->waveavail = dev->row = 0;
@@ -789,7 +835,27 @@ int main(int argc, char* argv[]) {
 // FIXME: default port number
                 channel->port = devs[i]["channels"][j]["port"];
                 channel->mountpoint = strdup(devs[i]["channels"][j]["mountpoint"]);
-                channel->frequency = devs[i]["channels"][j]["freq"];
+                if(dev->mode == R_MULTICHANNEL) {
+                    channel->frequency = devs[i]["channels"][j]["freq"];
+                } else { /* R_SCAN */
+                    channel->freq_count = devs[i]["channels"][j]["freqs"].getLength();
+                    if(channel->freq_count < 1) {
+                        cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: freqs should be a list with at least one element\n";
+                        error();
+                    }
+                    channel->freqlist = (int *)malloc(channel->freq_count * sizeof(int));
+                    if(channel->freqlist == NULL) {
+                        cerr<<"Cannot allocate memory for freqlist\n";
+                        error();
+                    }
+                    for(int f = 0; f<channel->freq_count; f++) {
+                        channel->freqlist[f] = (int)(devs[i]["channels"][j]["freqs"][f]);
+                    }
+// Set initial frequency for scanning
+// We tune 2 FFT bins higher to avoid DC spike
+                    channel->frequency = channel->freqlist[0];
+                    dev->centerfreq = channel->freqlist[0] + 2 * (double)(SOURCE_RATE / FFT_SIZE);
+                }
                 channel->username = strdup(devs[i]["channels"][j]["username"]);
                 channel->password = strdup(devs[i]["channels"][j]["password"]);
                 if(devs[i]["channels"][j].exists("name"))
@@ -864,9 +930,14 @@ int main(int argc, char* argv[]) {
             mp3_setup(channel);
         }
 #ifdef _WIN32
-        dev->thread = (THREAD)_beginthread(rtlsdr_exec, 0, dev);
+        dev->rtl_thread = (THREAD)_beginthread(rtlsdr_exec, 0, dev);
+        if(dev->mode == R_SCAN)
+            dev->controller_thread = (THREAD)_beginthread(controller_thread, 0, dev);
 #else
-        pthread_create(&dev->thread, NULL, &rtlsdr_exec, dev);
+        pthread_create(&dev->rtl_thread, NULL, &rtlsdr_exec, dev);
+        if(dev->mode == R_SCAN)
+// FIXME: not needed when freq_count == 1?
+            pthread_create(&dev->controller_thread, NULL, &controller_thread, dev);
 #endif
     }
 
@@ -907,7 +978,9 @@ int main(int argc, char* argv[]) {
     log(LOG_INFO, "cleaning up\n");
     for (int i = 0; i < device_count; i++) {
         rtlsdr_cancel_async(devices[i].rtlsdr);
-        pthread_join(devices[i].thread, NULL);
+        pthread_join(devices[i].rtl_thread, NULL);
+        if(devices[i].mode == R_SCAN)
+            pthread_join(devices[i].controller_thread, NULL);
     }
     log(LOG_INFO, "rtlsdr threads closed\n");
 #ifndef _WIN32

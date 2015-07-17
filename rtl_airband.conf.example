@@ -58,18 +58,27 @@ devices = (
     index = 0;
 # Gain (integer, in decibels, optional). Default is auto-gain.
 #    gain = 28;
-# Center frequency (in hertz)
+# Dongle mode. Can be one of the following:
+# - "multichannel" - this is the default. Dongle is set to the configured
+#   center frequency. Multiple channels are received simultaneously. Every 
+#   channel is a separate Icecast stream. 
+# - "scan" - turns the dongle into a frequency scanner. All scanned frequencies
+#   are sent to a common Icecast stream.
+    mode = "multichannel";
+# Center frequency (in hertz). Valid only in multichannel mode.
     centerfreq = 120100000;
 # Tuning error (in parts per million). Default is 0.
     correction = 80;
 # List of channels which should be received and streamed from this dongle.
 # It's a list of groups - each group contains settings for a single channel.
-# Maximum number of channels per dongle is 8.
+# Maximum number of channels per dongle is 8 in multichannel mode or 1 in scan
+# mode.
     channels = ( 
       {
 # Channel frequency (in hertz)
 # The channel must fit in the dongle bandwidth, which is approximately 2.5 MHz
 # (ie. +- 1.25 MHz around center frequency)
+# This setting is valid in multichannel mode only.
         freq = 118925000;
 # Host name or IP address of Shoutcast/Icecast server
         server = "www.example.com";
@@ -127,12 +136,13 @@ devices = (
         password = "password";
       } );
   }, 
-# Receiver 1
+# Receiver 1 - multichannel mode
   {
     index = 1;
-    gain = 280;
+    gain = 28;
+    mode = "multichannel";
     centerfreq = 123000000;
-    correction = -8000;
+    correction = 80;
     channels = ( 
       {
         freq = 122000000;
@@ -167,67 +177,22 @@ devices = (
         password = "password";
       } );
   }, 
-# Receiver 2
+# Receiver 2 - scan mode
   {
     index = 2;
-    gain = 280;
-    centerfreq = 127650000;
-    correction = -8000;
+    gain = 28;
+    mode = "scan";
+    correction = 80;
     channels = ( 
       {
-        freq = 126300000;
+        freqs = ( 126300000, 121500000, 128225000, 131375000 );
         server = "www.example.com";
         port = 8000;
-        mountpoint = "126300.mp3";
+        mountpoint = "variouschannels.mp3";
         username = "source";
         password = "password";
+        name = "Example scan mode feed";
+        genre = "ATC";
       }, 
-      {
-        freq = 126500000;
-        server = "www.example.com";
-        port = 8000;
-        mountpoint = "126500.mp3";
-        username = "source";
-        password = "password";
-      }, 
-      {
-        freq = 127050000;
-        server = "www.example.com";
-        port = 8000;
-        mountpoint = "127050.mp3";
-        username = "source";
-        password = "password";
-      }, 
-      {
-        freq = 127100000;
-        server = "www.example.com";
-        port = 8000;
-        mountpoint = "127100.mp3";
-        username = "source";
-        password = "password";
-      }, 
-      {
-        freq = 127550000;
-        server = "www.example.com";
-        port = 8000;
-        mountpoint = "127550.mp3";
-        username = "source";
-        password = "password";
-      }, 
-      {
-        freq = 128200000;
-        server = "www.example.com";
-        port = 8000;
-        mountpoint = "128200.mp3";
-        username = "source";
-        password = "password";
-      }, 
-      {
-        freq = 128875000;
-        server = "www.example.com";
-        port = 8000;
-        mountpoint = "128875.mp3";
-        username = "source";
-        password = "password";
-      } );
+    );
   } );

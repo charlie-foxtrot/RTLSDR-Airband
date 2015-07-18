@@ -117,6 +117,23 @@ extern "C" void fftwave(float* dest, GPU_FFT_COMPLEX* src, int* sizes, int* bins
 using namespace std;
 using namespace libconfig;
 
+enum output_type { O_ICECAST };
+struct output_t {
+    enum output_type type;
+    void *data;
+};
+
+struct icecast_data {
+    const char *hostname;
+    int port;
+    const char *username;
+    const char *password;
+    const char *mountpoint;
+    const char *name;
+    const char *genre;
+    shout_t *shout;
+};
+
 struct channel_t {
     float wavein[WAVE_LEN];  // FFT output waveform
     float waveref[WAVE_LEN]; // for power level calculation
@@ -130,14 +147,8 @@ struct channel_t {
     int frequency;
     int freq_count;
     int *freqlist;
-    const char *hostname;
-    int port;
-    const char *username;
-    const char *password;
-    const char *mountpoint;
-    const char *name;
-    const char *genre;
-    shout_t * shout;
+    int output_count;
+    output_t *outputs;
     lame_t lame;
 };
 
@@ -255,43 +266,43 @@ void* rtlsdr_exec(void* params) {
     return 0;
 }
 
-void mp3_setup(channel_t* channel) {
+void shout_setup(icecast_data *icecast) {
     int ret;
     shout_t * shouttemp = shout_new();
     if (shouttemp == NULL) {
         printf("cannot allocate\n");
     }
-    if (shout_set_host(shouttemp, channel->hostname) != SHOUTERR_SUCCESS) {
+    if (shout_set_host(shouttemp, icecast->hostname) != SHOUTERR_SUCCESS) {
         shout_free(shouttemp); return;
     }
     if (shout_set_protocol(shouttemp, SHOUT_PROTOCOL_HTTP) != SHOUTERR_SUCCESS) {
         shout_free(shouttemp); return;
     }
-    if (shout_set_port(shouttemp, channel->port) != SHOUTERR_SUCCESS) {
+    if (shout_set_port(shouttemp, icecast->port) != SHOUTERR_SUCCESS) {
         shout_free(shouttemp); return;
     }
     char mp[100];
 #ifdef _WIN32
-    sprintf_s(mp, 80, "/%s", channel->mountpoint);
+    sprintf_s(mp, 80, "/%s", icecast->mountpoint);
 #else
-    sprintf(mp, "/%s", channel->mountpoint);
+    sprintf(mp, "/%s", icecast->mountpoint);
 #endif
     if (shout_set_mount(shouttemp, mp) != SHOUTERR_SUCCESS) {
         shout_free(shouttemp); return;
     }
-    if (shout_set_user(shouttemp, channel->username) != SHOUTERR_SUCCESS) {
+    if (shout_set_user(shouttemp, icecast->username) != SHOUTERR_SUCCESS) {
         shout_free(shouttemp); return;
     }
-    if (shout_set_password(shouttemp, channel->password) != SHOUTERR_SUCCESS) {
+    if (shout_set_password(shouttemp, icecast->password) != SHOUTERR_SUCCESS) {
         shout_free(shouttemp); return;
     }
     if (shout_set_format(shouttemp, SHOUT_FORMAT_MP3) != SHOUTERR_SUCCESS){
         shout_free(shouttemp); return;
     }
-    if(channel->name && shout_set_name(shouttemp, channel->name) != SHOUTERR_SUCCESS) {
+    if(icecast->name && shout_set_name(shouttemp, icecast->name) != SHOUTERR_SUCCESS) {
         shout_free(shouttemp); return;
     }
-    if(channel->genre && shout_set_genre(shouttemp, channel->genre) != SHOUTERR_SUCCESS) {
+    if(icecast->genre && shout_set_genre(shouttemp, icecast->genre) != SHOUTERR_SUCCESS) {
         shout_free(shouttemp); return;
     }
     char samplerates[20];
@@ -313,7 +324,7 @@ void mp3_setup(channel_t* channel) {
 
     if (ret == SHOUTERR_BUSY)
         log(LOG_NOTICE, "Connecting to %s:%d/%s...\n", 
-            channel->hostname, channel->port, channel->mountpoint);
+            icecast->hostname, icecast->port, icecast->mountpoint);
 
     while (ret == SHOUTERR_BUSY) {
         usleep(10000);
@@ -322,47 +333,51 @@ void mp3_setup(channel_t* channel) {
  
     if (ret == SHOUTERR_CONNECTED) {
         log(LOG_NOTICE, "Connected to %s:%d/%s\n", 
-            channel->hostname, channel->port, channel->mountpoint);
-        channel->lame = lame_init();
-        lame_set_in_samplerate(channel->lame, WAVE_RATE);
-        lame_set_VBR(channel->lame, vbr_off);
-        lame_set_brate(channel->lame, 16);
-        lame_set_quality(channel->lame, 7);
-        lame_set_out_samplerate(channel->lame, MP3_RATE);
-        lame_set_num_channels(channel->lame, 1);
-        lame_set_mode(channel->lame, MONO);
-        lame_init_params(channel->lame);
+            icecast->hostname, icecast->port, icecast->mountpoint);
         SLEEP(100);
-        channel->shout = shouttemp;
+        icecast->shout = shouttemp;
     } else {
         log(LOG_WARNING, "Could not connect to %s:%d/%s\n",
-            channel->hostname, channel->port, channel->mountpoint);
+            icecast->hostname, icecast->port, icecast->mountpoint);
         shout_free(shouttemp);
         return;
     }
 }
+void lame_setup(channel_t *channel) {
+    if(channel == NULL) return;
+    channel->lame = lame_init();
+    lame_set_in_samplerate(channel->lame, WAVE_RATE);
+    lame_set_VBR(channel->lame, vbr_off);
+    lame_set_brate(channel->lame, 16);
+    lame_set_quality(channel->lame, 7);
+    lame_set_out_samplerate(channel->lame, MP3_RATE);
+    lame_set_num_channels(channel->lame, 1);
+    lame_set_mode(channel->lame, MONO);
+    lame_init_params(channel->lame);
+}
 
 unsigned char lamebuf[22000];
-void mp3_process(channel_t* channel) {
-    if (channel->shout == NULL) {
-        return;
-    }
+void process_outputs(channel_t* channel) {
     int bytes = lame_encode_buffer_ieee_float(channel->lame, channel->waveout, NULL, WAVE_BATCH, lamebuf, 22000);
     if (bytes > 0) {
-        int ret = shout_send(channel->shout, lamebuf, bytes);
-        if (ret != SHOUTERR_SUCCESS || shout_queuelen(channel->shout) > MAX_SHOUT_QUEUELEN) {
-            if (shout_queuelen(channel->shout) > MAX_SHOUT_QUEUELEN)
-                log(LOG_WARNING, "Exceeded max backlog for %s:%d/%s, disconnecting\n",
-                    channel->hostname, channel->port, channel->mountpoint);
-            // reset connection
-            log(LOG_WARNING, "Lost connection to %s:%d/%s\n",
-                channel->hostname, channel->port, channel->mountpoint);
-            shout_close(channel->shout);
-            shout_free(channel->shout);
-            channel->shout = NULL;
-            lame_close(channel->lame);
-            channel->lame = NULL;
-            return;
+        for (int k = 0; k < channel->output_count; k++) {
+            if(channel->outputs[k].type == O_ICECAST) {
+                icecast_data *icecast = (icecast_data *)(channel->outputs[k].data);
+                if(icecast->shout == NULL)
+                    continue;
+                int ret = shout_send(icecast->shout, lamebuf, bytes);
+                if (ret != SHOUTERR_SUCCESS || shout_queuelen(icecast->shout) > MAX_SHOUT_QUEUELEN) {
+                    if (shout_queuelen(icecast->shout) > MAX_SHOUT_QUEUELEN)
+                        log(LOG_WARNING, "Exceeded max backlog for %s:%d/%s, disconnecting\n",
+                            icecast->hostname, icecast->port, icecast->mountpoint);
+                    // reset connection
+                    log(LOG_WARNING, "Lost connection to %s:%d/%s\n",
+                        icecast->hostname, icecast->port, icecast->mountpoint);
+                    shout_close(icecast->shout);
+                    shout_free(icecast->shout);
+                    icecast->shout = NULL;
+                }
+            }
         }
     }
 }
@@ -370,7 +385,7 @@ void mp3_process(channel_t* channel) {
 #ifndef _WIN32
 pthread_cond_t      mp3_cond = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t     mp3_mutex = PTHREAD_MUTEX_INITIALIZER;
-void* mp3_thread(void* params) {
+void* output_thread(void* params) {
     while (!do_exit) {
         pthread_cond_wait(&mp3_cond, &mp3_mutex);
         for (int i = 0; i < device_count; i++) {
@@ -378,7 +393,7 @@ void* mp3_thread(void* params) {
                 devices[i].waveavail = 0;
                 for (int j = 0; j < devices[i].channel_count; j++) {
                     channel_t* channel = devices[i].channels + j;
-                    mp3_process(channel);
+                    process_outputs(channel);
                     memcpy(channel->waveout, channel->waveout + WAVE_BATCH, AGC_EXTRA * 4);
                 }
             }
@@ -413,32 +428,33 @@ void* controller_thread(void* params) {
 
 // reconnect as required
 #ifdef _WIN32
-void mp3_check(void* params) {
+void icecast_check(void* params) {
 #else
-void* mp3_check(void* params) {
+void* icecast_check(void* params) {
 #endif
-    while (true) {
+    while (!do_exit) {
         SLEEP(10000);
         for (int i = 0; i < device_count; i++) {
             device_t* dev = devices + i;
             for (int j = 0; j < dev->channel_count; j++) {
-                if(dev->failed) {
-                    if(dev->channels[j].shout) {
-                        log(LOG_WARNING, "Device #%d failed, disconnecting stream %s:%d/%s\n",
-                            i, dev->channels[j].hostname, dev->channels[j].port, dev->channels[j].mountpoint);
-                        shout_close(dev->channels[j].shout);
-                        shout_free(dev->channels[j].shout);
-                        dev->channels[j].shout = NULL;
-                    }
-                    if(dev->channels[j].lame) {
-                        lame_close(dev->channels[j].lame);
-                        dev->channels[j].lame = NULL;
-                    }
-                } else {
-                    if (dev->channels[j].shout == NULL){
-                        log(LOG_NOTICE, "Trying to reconnect to %s:%d/%s...\n",
-                            dev->channels[j].hostname, dev->channels[j].port, dev->channels[j].mountpoint);
-                        mp3_setup(dev->channels + j);
+                for (int k = 0; k < dev->channels[j].output_count; k++) {
+                    if(dev->channels[j].outputs[k].type != O_ICECAST)
+                        continue;
+                    icecast_data *icecast = (icecast_data *)(dev->channels[j].outputs[k].data);
+                    if(dev->failed) {
+                        if(icecast->shout) {
+                            log(LOG_WARNING, "Device #%d failed, disconnecting stream %s:%d/%s\n",
+                                i, icecast->hostname, icecast->port, icecast->mountpoint);
+                            shout_close(icecast->shout);
+                            shout_free(icecast->shout);
+                            icecast->shout = NULL;
+                        }
+                    } else {
+                        if (icecast->shout == NULL){
+                            log(LOG_NOTICE, "Trying to reconnect to %s:%d/%s...\n",
+                                icecast->hostname, icecast->port, icecast->mountpoint);
+                            shout_setup(icecast);
+                        }
                     }
                 }
             }
@@ -656,15 +672,15 @@ void demodulate() {
                     }
                 }
 #ifdef _WIN32
-                mp3_process(channel);
+                process_outputs(channel);
                 memcpy(channel->waveout, channel->waveout + WAVE_BATCH, AGC_EXTRA * 4);
 #endif
                 memcpy(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4);
                 if (foreground) {
                     if(dev->mode == R_SCAN)
-                        printf("%4.0f/%3.0f%c %7.3f", channel->agcavgslow, channel->agcmin, channel->shout == NULL ? 'X' : channel->agcindicate, (dev->channels[0].frequency / 1000000.0));
+                        printf("%4.0f/%3.0f%c %7.3f", channel->agcavgslow, channel->agcmin, channel->agcindicate, (dev->channels[0].frequency / 1000000.0));
                     else
-                        printf("%4.0f/%3.0f%c", channel->agcavgslow, channel->agcmin, channel->shout == NULL ? 'X' : channel->agcindicate);
+                        printf("%4.0f/%3.0f%c", channel->agcavgslow, channel->agcmin, channel->agcindicate);
                     fflush(stdout);
                 }
             }
@@ -831,10 +847,6 @@ int main(int argc, char* argv[]) {
                 channel->agcavgslow = 0.5f;
                 channel->agcmin = 100.0f;
                 channel->agclow = 0;
-                channel->hostname = strdup(devs[i]["channels"][j]["server"]);
-// FIXME: default port number
-                channel->port = devs[i]["channels"][j]["port"];
-                channel->mountpoint = strdup(devs[i]["channels"][j]["mountpoint"]);
                 if(dev->mode == R_MULTICHANNEL) {
                     channel->frequency = devs[i]["channels"][j]["freq"];
                 } else { /* R_SCAN */
@@ -856,12 +868,39 @@ int main(int argc, char* argv[]) {
                     channel->frequency = channel->freqlist[0];
                     dev->centerfreq = channel->freqlist[0] + 2 * (double)(SOURCE_RATE / FFT_SIZE);
                 }
-                channel->username = strdup(devs[i]["channels"][j]["username"]);
-                channel->password = strdup(devs[i]["channels"][j]["password"]);
-                if(devs[i]["channels"][j].exists("name"))
-                    channel->name = strdup(devs[i]["channels"][j]["name"]);
-                if(devs[i]["channels"][j].exists("genre"))
-                    channel->genre = strdup(devs[i]["channels"][j]["genre"]);
+                channel->output_count = devs[i]["channels"][j]["outputs"].getLength();
+                if(channel->output_count < 1) {
+                    cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: no outputs defined\n";
+                    error();
+                }
+                channel->outputs = (output_t *)malloc(channel->output_count * sizeof(struct output_t));
+                if(channel->outputs == NULL) {
+                    cerr<<"Cannot allocate memory for outputs\n";
+                    error();
+                }
+                for(int o = 0; o < channel->output_count; o++) {
+                    channel->outputs[o].data = malloc(sizeof(struct icecast_data));
+                    if(channel->outputs[o].data == NULL) {
+                        cerr<<"Cannot allocate memory for outputs\n";
+                        error();
+                    }
+                    if(!strncmp(devs[i]["channels"][j]["outputs"][o]["type"], "icecast", 7)) {
+                        channel->outputs[o].type = O_ICECAST;
+                        icecast_data *idata = (icecast_data *)(channel->outputs[o].data);
+                        idata->hostname = strdup(devs[i]["channels"][j]["outputs"][o]["server"]);
+                        idata->port = devs[i]["channels"][j]["outputs"][o]["port"];
+                        idata->mountpoint = strdup(devs[i]["channels"][j]["outputs"][o]["mountpoint"]);
+                        idata->username = strdup(devs[i]["channels"][j]["outputs"][o]["username"]);
+                        idata->password = strdup(devs[i]["channels"][j]["outputs"][o]["password"]);
+                        if(devs[i]["channels"][j]["outputs"][o].exists("name"))
+                            idata->name = strdup(devs[i]["channels"][j]["outputs"][o]["name"]);
+                        if(devs[i]["channels"][j]["outputs"][o].exists("genre"))
+                            idata->genre = strdup(devs[i]["channels"][j]["outputs"][o]["genre"]);
+                    } else {
+                        cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown output type\n";
+                        error();
+                    }
+                }
                 dev->bins[j] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
             }
         }
@@ -927,7 +966,12 @@ int main(int argc, char* argv[]) {
         device_t* dev = devices + i;
         for (int j = 0; j < dev->channel_count; j++)  {
             channel_t* channel = dev->channels + j;
-            mp3_setup(channel);
+            lame_setup(channel);
+            for (int k = 0; k < channel->output_count; k++) {
+                output_t *output = channel->outputs + k;
+                if(output->type == O_ICECAST)
+                    shout_setup((icecast_data *)(output->data));
+            }
         }
 #ifdef _WIN32
         dev->rtl_thread = (THREAD)_beginthread(rtlsdr_exec, 0, dev);
@@ -966,11 +1010,11 @@ int main(int argc, char* argv[]) {
     }
     THREAD thread2;
 #ifdef _WIN32
-    thread2 = (THREAD)_beginthread(mp3_check, 0, NULL);
+    thread2 = (THREAD)_beginthread(icecast_check, 0, NULL);
 #else
-    pthread_create(&thread2, NULL, &mp3_check, NULL);
+    pthread_create(&thread2, NULL, &icecast_check, NULL);
     THREAD thread3;
-    pthread_create(&thread3, NULL, &mp3_thread, NULL);
+    pthread_create(&thread3, NULL, &output_thread, NULL);
 #endif
 
     demodulate();

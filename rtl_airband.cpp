@@ -117,9 +117,11 @@ extern "C" void fftwave(float* dest, GPU_FFT_COMPLEX* src, int* sizes, int* bins
 using namespace std;
 using namespace libconfig;
 
-enum output_type { O_ICECAST };
+enum output_type { O_ICECAST, O_FILE };
 struct output_t {
     enum output_type type;
+    bool enabled;
+    bool active;
     void *data;
 };
 
@@ -132,6 +134,14 @@ struct icecast_data {
     const char *name;
     const char *genre;
     shout_t *shout;
+};
+
+struct file_data {
+    const char *dir;
+    const char *prefix;
+    char *suffix;
+    bool continuous;
+    FILE *f;
 };
 
 struct channel_t {
@@ -359,25 +369,77 @@ void lame_setup(channel_t *channel) {
 unsigned char lamebuf[22000];
 void process_outputs(channel_t* channel) {
     int bytes = lame_encode_buffer_ieee_float(channel->lame, channel->waveout, NULL, WAVE_BATCH, lamebuf, 22000);
-    if (bytes > 0) {
-        for (int k = 0; k < channel->output_count; k++) {
-            if(channel->outputs[k].type == O_ICECAST) {
-                icecast_data *icecast = (icecast_data *)(channel->outputs[k].data);
-                if(icecast->shout == NULL)
-                    continue;
-                int ret = shout_send(icecast->shout, lamebuf, bytes);
-                if (ret != SHOUTERR_SUCCESS || shout_queuelen(icecast->shout) > MAX_SHOUT_QUEUELEN) {
-                    if (shout_queuelen(icecast->shout) > MAX_SHOUT_QUEUELEN)
-                        log(LOG_WARNING, "Exceeded max backlog for %s:%d/%s, disconnecting\n",
-                            icecast->hostname, icecast->port, icecast->mountpoint);
-                    // reset connection
-                    log(LOG_WARNING, "Lost connection to %s:%d/%s\n",
+    if (bytes < 0) {
+        log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d");
+        return;
+    } else if (bytes == 0)
+        return;
+    for (int k = 0; k < channel->output_count; k++) {
+        if(channel->outputs[k].enabled == false) continue;
+        if(channel->outputs[k].type == O_ICECAST) {
+            icecast_data *icecast = (icecast_data *)(channel->outputs[k].data);
+            if(icecast->shout == NULL) continue;
+            int ret = shout_send(icecast->shout, lamebuf, bytes);
+            if (ret != SHOUTERR_SUCCESS || shout_queuelen(icecast->shout) > MAX_SHOUT_QUEUELEN) {
+                if (shout_queuelen(icecast->shout) > MAX_SHOUT_QUEUELEN)
+                    log(LOG_WARNING, "Exceeded max backlog for %s:%d/%s, disconnecting\n",
                         icecast->hostname, icecast->port, icecast->mountpoint);
-                    shout_close(icecast->shout);
-                    shout_free(icecast->shout);
-                    icecast->shout = NULL;
-                }
+                // reset connection
+                log(LOG_WARNING, "Lost connection to %s:%d/%s\n",
+                    icecast->hostname, icecast->port, icecast->mountpoint);
+                shout_close(icecast->shout);
+                shout_free(icecast->shout);
+                icecast->shout = NULL;
             }
+        } else if(channel->outputs[k].type == O_FILE) {
+            file_data *fdata = (file_data *)(channel->outputs[k].data);
+            if(fdata->continuous == false && channel->agcindicate != '*' && channel->outputs[k].active == false) continue;
+            time_t t = time(NULL);
+            struct tm *tmp = gmtime(&t);
+            char suffix[32];
+            if(strftime(suffix, sizeof(suffix), "_%Y%m%d_%H.mp3", tmp) == 0) {
+                log(LOG_NOTICE, "strftime returned 0");
+                continue;
+            }
+            if(fdata->suffix == NULL || strcmp(suffix, fdata->suffix)) {    // need to open new file
+                fdata->suffix = strdup(suffix);
+                char *filename = (char *)malloc(strlen(fdata->dir) + strlen(fdata->prefix) + strlen(fdata->suffix) + 2);
+                if(filename == NULL) {
+                    log(LOG_WARNING, "process_outputs: cannot allocate memory, output disabled");
+                    channel->outputs[k].enabled = false;
+                    continue;
+                }
+                sprintf(filename, "%s/%s%s", fdata->dir, fdata->prefix, fdata->suffix);
+                if(fdata->f != NULL) {
+                    fclose(fdata->f);
+                    fdata->f = NULL;
+                }
+                fdata->f = fopen(filename, "w");
+                if(fdata->f == NULL) {
+                    log(LOG_WARNING, "Cannot open output file %s (%s), output disabled", filename, strerror(errno));
+                    channel->outputs[k].enabled = false;
+                    free(filename);
+                    continue;
+                }
+                log(LOG_INFO, "Writing to %s", filename);
+                free(filename);
+            }
+// bytes is signed, but we've checked for negative values earlier
+// so it's save to ignore the warning here
+#pragma GCC diagnostic ignored "-Wsign-compare"
+            if(fwrite(lamebuf, 1, bytes, fdata->f) < bytes) {
+#pragma GCC diagnostic warning "-Wsign-compare"
+                if(ferror(fdata->f))
+                    log(LOG_WARNING, "Cannot write to %s/%s%s (%s), output disabled", 
+                        fdata->dir, fdata->prefix, fdata->suffix, strerror(errno));
+                else
+                    log(LOG_WARNING, "Short write on %s/%s%s, output disabled", 
+                        fdata->dir, fdata->prefix, fdata->suffix);
+                fclose(fdata->f);
+                fdata->f = NULL;
+                channel->outputs[k].enabled = false;
+            }
+            channel->outputs[k].active = channel->agcindicate == '*' ? true : false;
         }
     }
 }
@@ -879,12 +941,12 @@ int main(int argc, char* argv[]) {
                     error();
                 }
                 for(int o = 0; o < channel->output_count; o++) {
-                    channel->outputs[o].data = malloc(sizeof(struct icecast_data));
-                    if(channel->outputs[o].data == NULL) {
-                        cerr<<"Cannot allocate memory for outputs\n";
-                        error();
-                    }
                     if(!strncmp(devs[i]["channels"][j]["outputs"][o]["type"], "icecast", 7)) {
+                        channel->outputs[o].data = malloc(sizeof(struct icecast_data));
+                        if(channel->outputs[o].data == NULL) {
+                            cerr<<"Cannot allocate memory for outputs\n";
+                            error();
+                        }
                         channel->outputs[o].type = O_ICECAST;
                         icecast_data *idata = (icecast_data *)(channel->outputs[o].data);
                         idata->hostname = strdup(devs[i]["channels"][j]["outputs"][o]["server"]);
@@ -896,10 +958,24 @@ int main(int argc, char* argv[]) {
                             idata->name = strdup(devs[i]["channels"][j]["outputs"][o]["name"]);
                         if(devs[i]["channels"][j]["outputs"][o].exists("genre"))
                             idata->genre = strdup(devs[i]["channels"][j]["outputs"][o]["genre"]);
+                    } else if(!strncmp(devs[i]["channels"][j]["outputs"][o]["type"], "file", 4)) {
+                        channel->outputs[o].data = malloc(sizeof(struct file_data));
+                        if(channel->outputs[o].data == NULL) {
+                            cerr<<"Cannot allocate memory for outputs\n";
+                            error();
+                        }
+                        channel->outputs[o].type = O_FILE;
+                        file_data *fdata = (file_data *)(channel->outputs[o].data);
+                        fdata->dir = strdup(devs[i]["channels"][j]["outputs"][o]["directory"]);
+                        fdata->prefix = strdup(devs[i]["channels"][j]["outputs"][o]["filename_template"]);
+                        fdata->continuous = devs[i]["channels"][j]["outputs"][o].exists("continuous") ?
+                            (bool)(devs[i]["channels"][j]["outputs"][o]["continuous"]) : false;
                     } else {
                         cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown output type\n";
                         error();
                     }
+                    channel->outputs[o].enabled = true;
+                    channel->outputs[o].active = false;
                 }
                 dev->bins[j] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
             }

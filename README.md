@@ -5,11 +5,15 @@ RTLSDR Airband is intended for Airband reception and online streaming to service
 
 Features
 ---------------------
- * Decode up to eight AM channels per dongle (within bandwidth frequency range)
+ * Multichannel mode - decode up to eight AM channels per dongle (within bandwidth frequency range)
+ * Scanner mode - decode unlimited number of AM channels with frequency hopping in a round-robin
+   fashion (no frequency range limitations)
  * Decode multiple dongles simutaneously
  * Auto squelch and Automatic Gain Control
  * MP3 encoding
  * Stream to Icecast or SHOUTcast server
+ * Record to local MP3 files (continuously or skipping silence periods)
+ * Multiple streaming/recording destinations per channel
  
 Performance
 ---------------------

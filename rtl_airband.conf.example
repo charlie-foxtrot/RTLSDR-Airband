@@ -84,7 +84,7 @@ devices = (
 # can be sent to multiple Shoutcast servers.
         outputs = (
 	  {
-# Output type. Currently only icecast is supported.
+# Output type. Supported types are: icecast and file.
             type = "icecast";
 # Host name or IP address of Shoutcast/Icecast server
             server = "www.example.com";
@@ -127,6 +127,7 @@ devices = (
       }, 
       {
         freq = 119500000;
+# This channel is streamed to Icecast and saved to local files
         outputs = (
 	  {
             type = "icecast";
@@ -135,20 +136,39 @@ devices = (
             mountpoint = "119500.mp3";
             username = "source";
             password = "password";
-	  }
+	  },
+          { 
+            type = "file";
+# Directory where output MP3 files are written. Must be created before running rtl_airband.
+            directory = "/home/pi";
+# File name prefix. rtl_airband automatically appends the date and UTC hour in YYYYmmdd_HH format
+# and creates new file every hour.
+            filename_template = "119500";
+# Set this to true if you want to record continuously.
+# Set this to false if you want to skip silence (record only when squelch is open).
+# Default is false.
+            continuous = true;
+          }
 	);
       }, 
       {
         freq = 120600000;
+# This channel is not streamed to Icecast.
+# It is saved to local files into two destinations - one of them records continuously, the other one
+# skips silence periods.
         outputs = (
-	  {
-            type = "icecast";
-            server = "www.example.com";
-            port = 8000;
-            mountpoint = "120600.mp3";
-            username = "source";
-            password = "password";
-	  }
+          { 
+            type = "file";
+            directory = "/home/pi/streams";
+            filename_template = "TWR";
+            continuous = false;
+          },
+          { 
+            type = "file";
+            directory = "/home/pi/streams_full";
+            filename_template = "TWR";
+            continuous = true;
+          }
 	);
       }, 
       {

@@ -842,6 +842,8 @@ int main(int argc, char* argv[]) {
 #ifndef _WIN32
         struct sigaction sigact, pipeact;
 
+        memset(&sigact, 0, sizeof(sigact));
+        memset(&pipeact, 0, sizeof(pipeact));
         pipeact.sa_handler = SIG_IGN;
         sigact.sa_handler = &sighandler;
         sigaction(SIGPIPE, &pipeact, NULL);

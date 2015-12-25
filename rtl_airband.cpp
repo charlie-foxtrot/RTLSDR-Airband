@@ -1063,8 +1063,14 @@ int main(int argc, char* argv[]) {
 #endif
     }
 
-    while (device_opened != device_count) {
+    int timeout = 50;   // 5 seconds
+    while (device_opened != device_count && timeout > 0) {
         SLEEP(100);
+        timeout--;
+    }
+    if(device_opened != device_count) {
+        cerr<<"Some devices failed to initialize - aborting\n";
+        error();
     }
     if (foreground) {
 #ifdef _WIN32

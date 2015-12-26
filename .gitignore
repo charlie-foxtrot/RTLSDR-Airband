@@ -10,6 +10,3 @@
 *.o
 *.a
 rtl_airband
-
-# Config files
-config.txt

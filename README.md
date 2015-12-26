@@ -5,11 +5,15 @@ RTLSDR Airband is intended for Airband reception and online streaming to service
 
 Features
 ---------------------
- * Decode up to eight AM channels per dongle (within bandwidth frequency range)
+ * Multichannel mode - decode up to eight AM channels per dongle (within bandwidth frequency range)
+ * Scanner mode - decode unlimited number of AM channels with frequency hopping in a round-robin
+   fashion (no frequency range limitations)
  * Decode multiple dongles simutaneously
  * Auto squelch and Automatic Gain Control
  * MP3 encoding
  * Stream to Icecast or SHOUTcast server
+ * Record to local MP3 files (continuously or skipping silence periods)
+ * Multiple streaming/recording destinations per channel
  
 Performance
 ---------------------
@@ -22,19 +26,18 @@ Performance
  * Turbo overclock setting recommended on RPi V1 when using 2 dongles
    (no overclocking is necessary on RPi V2)
 
+### Other ARMv7-based platforms
+ * FFT using main CPU
+ * Tested on Cubieboard1 - ~50% CPU when using 1 dongle
+
 Demo
 ---------------------
 ![Demo (Windows version)](demo.png?raw=true)
 
-Windows Binary
----------------------
-* Requires CPU with SSE3 support.
-* Requires [Visual C++ 2013 vcredist_x86.exe](http://www.microsoft.com/en-us/download/details.aspx?id=40784)
-* [Download (build 2014-08-11)](http://www.microtony.com/rtl_airband_20140811.zip)
-
 Building
 ---------------------
 ### Windows using VS Express 2013 for Desktop
+#### WARNING: Windows build is currently unmaintained and might not work
 #### Getting/Building prerequisites
 ##### FFTW3
  * Download fftw-3.3.4-dll32.zip from http://www.fftw.org/install/windows.html
@@ -100,97 +103,158 @@ Building
  * Browse into win32 and open the solution
  * Simply build solution or click the "Start Local Windows Debugger" button
  
-### Raspberry Pi (Raspbian)
- * Install RTLSDR library (http://sdr.osmocom.org/trac/wiki/rtl-sdr)
- *Installing RTLSDR library: 
+### Linux (Raspbian)
+ * Install RTLSDR library (http://sdr.osmocom.org/trac/wiki/rtl-sdr):
 
         sudo apt-get update
-        sudo apt-get upgrade
-        sudo apt-get install git cmake libusb-1.0-0.dev build-essential
-        sudo rpi-update && sudo reboot
-
+        sudo apt-get install git gcc autoconf make libusb-1.0-0-dev
+        cd
         git clone git://git.osmocom.org/rtl-sdr.git
         cd rtl-sdr/
-        mkdir build
-        cd build
-        cmake ../
+        autoreconf -i
+        ./configure
         make
         sudo make install
         sudo ldconfig
         sudo mv $HOME/rtl-sdr/rtl-sdr.rules /etc/udev/rules.d/rtl-sdr.rules
 
- * Blacklist DVB drivers to avoid conflict with SDR driver - before connecting the USB dongle:
- * 
-
-								echo "blacklist r820t" >> /etc/modprobe.d/dvb-blacklist.conf
-								echo "blacklist rtl2832" >> /etc/modprobe.d/dvb-blacklist.conf
-								echo "blacklist rtl2830" >> /etc/modprobe.d/dvb-blacklist.conf
-								echo "blacklist dvb_usb_rtl28xxu" >> /etc/modprobe.d/dvb-blacklist.conf
-
-
- *Installing RTLSDR-AIRBAND: 
- 
-        sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev
-        git clone https://github.com/szpajder/RTLSDR-Airband.git
-        cd RTLSDR-Airband/
-        
- * if you are building for RPi V1: 
- * 
-        make rtl_airband_vfp
-
- * if you are building for RPi V2: 
- * 
-        make rtl_airband_neon
-
- * Then
- 
-        sudo mknod char_dev c 100 0
-
- * You need to edit config.txt with your settings
- 
-          nano config.txt
-
- * You need to run the program with root privileges (eg. sudo ./rtl_airband)
-        sudo ./rtl_airband_neon
-
-### Linux, x86
- * Install RTLSDR library (http://sdr.osmocom.org/trac/wiki/rtl-sdr)
  * Blacklist DVB drivers to avoid conflict with SDR driver - before connecting
-   the USB dongle add following lines to /etc/modprobe.d/dvb-blacklist.conf:
+   the USB dongle create file /etc/modprobe.d/dvb-blacklist.conf with text
+   editor (eg. nano) and add the following lines:
 
         blacklist r820t
         blacklist rtl2832
         blacklist rtl2830
         blacklist dvb_usb_rtl28xxu
 
- * sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev libfftw3-dev
- * cd into the project folder (where makefile is located)
- * make rtl_airband
- * You need to run the program with root privileges (eg. sudo ./rtl_airband)
+ * Download a release tarball from from https://github.com/szpajder/RTLSDR-Airband/releases
+   and unpack it. Example:
+
+        tar xvfz RTLSDR-Airband-1.0.0.tar.gz
+        cd RTLSDR-Airband-1.0.0
+
+   Alternatively you can pull the latest code from git (but please be aware that it might
+   be experimental, buggy, or at least, untested):
+ 
+        git clone https://github.com/szpajder/RTLSDR-Airband.git
+        cd RTLSDR-Airband/
+
+ * Install necessary dependencies:
+
+        sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev libconfig++-dev
+        
+ * Set the PLATFORM environment variable (to indicate your hardware platform) and run `make`.
+   For example, to build a binary for RPi version 1 (ARMv6 CPU, Broadcom VideoCore GPU) type
+   the following:
+
+        PLATFORM=rpiv1 make
+
+   Building for RPi V2 (ARMv7 CPU, Broadcom VideoCore GPU):
+
+        PLATFORM=rpiv2 make
+
+   Building for other ARMv7-based platforms without VideoCore GPU, eg. Cubieboard (FFTW3
+   library is needed in this case):
+
+	sudo apt-get install libfftw3-dev
+        PLATFORM=armv7-generic make
+
+   Building for generic x86 CPU (FFTW3 library is needed in this case):
+
+	sudo apt-get install libfftw3-dev
+        PLATFORM=x86 make
+
+ * Install the software:
+
+        make install
+
+   By default, the binary is installed to /usr/local/bin/rtl_airband.
+
+ * Edit the configuration file to suit your needs. See chapter "Configuring" below.
+
+ * You need to run the program with root privileges - for example:
+
+        sudo /usr/local/bin/rtl_airband
+
+   The program runs as a daemon (background process) by default, so it may look like
+   it has exited right after startup. Diagnostic messages are printed to syslog
+   (on Raspbian they are directed to /var/log/messages by default).
+
+ * If you wish to start the program automatically at boot, you can use example startup
+   scripts from init.d/ subdirectory. Example for Debian / Raspbian:
+
+	sudo cp init.d/rtl_airband-debian.sh /etc/init.d/rtl_airband
+	sudo chmod 755 /etc/init.d/rtl_airband
+	sudo update-rc.d rtl_airband defaults
 
 Configuring
 --------------------
-All configurations are saved in config.txt file. Fields should be separated by space(s) or tab(s).
+By default, the configuration is read from /usr/local/etc/rtl_airband.conf file.
+Refer to rtl_airband.conf.example for the description of the format. You can
+copy this file to /usr/local/etc/rtl_airband.conf and edit it to suit your needs
+(make install does this, unless you already have your own config file installed).
 
-You may edit config.txt.example using a spreadsheet program.
+Old versions of RTLSDR-Airband used a simple flat config.txt file. This is no longer
+supported. You have to rewrite your config file to the new syntax - or just use a
+small utility `convert_cfg` which is included in the `util` subdirectory:
 
-Format:
+    cd util
+    make
+    ./convert_cfg /path/to/old/config.txt /path/to/new/rtl_airband.conf
 
-    NumDongles
-    DongleNo NumChannels Gain CenterFreq FreqCorrection
-    Hostname Port MountPoint Frequency Username Password
-    Hostname Port MountPoint Frequency Username Password
-    ....
-    DongleNo NumChannels Gain CenterFreq FreqCorrection
-    Hostname Port MountPoint Frequency Username Password
-    .....
+Review the rtl_airband.conf file and move it to /usr/local/etc before launching
+rtl_airband:
+
+    sudo mv /path/to/new/rtl_airband.conf /usr/local/etc
+
+Command line options
+--------------------
+rtl_airband accepts the following command line options:
+
+    -h                      Display this help text
+    -f                      Run in foreground, display textual waterfalls
+    -c <config_file_path>   Use non-default configuration file
+
+Troubleshooting
+--------------------
+
+ * If the program fails to start on RPi: check if device node /dev/vcio exists:
+
+     pi@mypi ~ $ ls -l /dev/vcio
+     crw-rw---T 1 root video 249, 0 Jan  1  1970 /dev/vcio
+
+   If you get "No such file or directory", then create it:
+
+     sudo mknod /dev/vcio c 249 0
+
+   Older Raspbian kernels (before 4.0) used 100 as a major number instead of 249,
+   so be sure you are creating the node correctly. You can check the correct major
+   number with this command:
+
+     pi@mypi:~# grep vcio /proc/devices
+     100 vcio
+
+  In this case, /dev/vcio must be created this way:
+
+     sudo mknod /dev/vcio c 100 0
+
+ * When the program is running in scan mode and is interrupted by a signal
+   (eg. ctrl+C is pressed when run in foreground mode) it crashes with segmentation
+   fault or spits out error messages similar to these:
+
+    r82xx_write: i2c wr failed=-1 reg=1a len=1
+    r82xx_set_freq: failed=-1
+    rtlsdr_demod_write_reg failed with -1
+    rtlsdr_demod_read_reg failed with -7
+
+   This is due to a bug in libusb versions earlier than 1.0.17. Upgrade to a newer
+   version.
 
 License
 --------------------
-Copyright (C) 2014 Wong Man Hang <microtony@gmail.com>
-
-Changes and updates published on http://github.com/szpajder/RTLSDR-Airband :
 Copyright (C) 2015 Tomasz Lemiech <szpajder@gmail.com>
+
+Based on original work by Wong Man Hang <microtony@gmail.com>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -214,19 +278,20 @@ Open Source Licenses
  * GNU General Public License Version 2
 
 ###gpu_fft
-Copyright (c) 2013, Andrew Holme.
+BCM2835 "GPU_FFT" release 2.0
+Copyright (c) 2014, Andrew Holme.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
-* Redistributions of source code must retain the above copyright
-notice, this list of conditions and the following disclaimer.
-* Redistributions in binary form must reproduce the above copyright
-notice, this list of conditions and the following disclaimer in the
-documentation and/or other materials provided with the distribution.
-* Neither the name of the copyright holder nor the
-names of its contributors may be used to endorse or promote products
-derived from this software without specific prior written permission.
+ * Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+ * Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+ * Neither the name of the copyright holder nor the
+   names of its contributors may be used to endorse or promote products
+   derived from this software without specific prior written permission.
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
 ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -238,7 +303,7 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
 ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-    
+
 ###libmp3lame
  *      Copyright (c) 1999 Mark Taylor
  *      Copyright (c) 2000-2002 Takehiro Tominaga
@@ -314,3 +379,16 @@ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
 THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+###libconfig
+Copyright (C) 2005-2014  Mark A Lindner
+
+This library is free software; you can redistribute it and/or
+modify it under the terms of the GNU Lesser General Public License
+published by the Free Software Foundation; either version 2.1 of
+the License, or (at your option) any later version.
+
+This library is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+Lesser General Public License for more details.

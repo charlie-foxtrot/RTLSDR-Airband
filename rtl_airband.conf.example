@@ -1,0 +1,285 @@
+# Sample RTLSDR_Airband configuration file with a brief syntax explanation
+#
+# General libconfig format description can be found in libconfig manual
+# (http://www.hyperrealm.com/libconfig/libconfig_manual.html)
+
+# Each parameter is specified as:
+#
+#   key = value;
+#
+# Remember about the semicolon at the end.
+#
+# Keys can be scalars:
+#
+#   myinteger = 5;
+#   myfloat = -3.5;
+#   mystring = "This is a string";
+#
+# or lists (ordered):
+#
+#   mylist = (5, 8, 3, "string");
+#
+# Parameters can be grouped, like so:
+#
+#   mygroup = {
+#     param1 = 3;
+#     param2 = -5;
+#     param3 = "some text";
+#   };
+#
+# Parameter names inside the group must be unique.
+# Lists and groups can contain scalars as well as groups or lists.
+#
+# Three types of comments are allowed within a configuration:
+#
+# - Script-style comments (beginning with a '#' character)
+# - C-style comments, /* like so */
+# - C++-style comments (beginning with // sequence)
+
+# global parameters
+
+# log messages via syslog? Default: 0 (no)
+# if disabled, log messages are written to stdout (but only when run in foreground)
+# This option has no effect on Windows
+syslog = 1
+
+# PID file path (default: /run/rtl_airband.pid)
+# This setting has no effect on Windows.
+# pidfile = /run/rtl_airband.pid
+
+# devices section contains all settings related to the RTLSDR receivers.
+#
+# It's a list of groups - each group contains settings for a single receiver,
+# ie.: devices = ( {dongle1 params}, {dongle2 params}, {dongle3 params} );
+
+devices = (
+  {
+# Device index (as identified by librtlsdr library)
+    index = 0;
+# Gain (integer, in decibels, optional). Default is auto-gain.
+#    gain = 28;
+# Dongle mode. Can be one of the following:
+# - "multichannel" - this is the default. Dongle is set to the configured
+#   center frequency. Multiple channels are received simultaneously. Every
+#   channel is a separate Icecast stream.
+# - "scan" - turns the dongle into a frequency scanner. All scanned frequencies
+#   are sent to a common Icecast stream.
+    mode = "multichannel";
+# Center frequency (in hertz). Valid only in multichannel mode.
+    centerfreq = 120100000;
+# Tuning error (in parts per million). Default is 0.
+    correction = 80;
+# List of channels which should be received and streamed from this dongle.
+# It's a list of groups - each group contains settings for a single channel.
+# Maximum number of channels per dongle is 8 in multichannel mode or 1 in scan
+# mode.
+    channels = (
+      {
+# Channel frequency (in hertz)
+# The channel must fit in the dongle bandwidth, which is approximately 2.5 MHz
+# (ie. +- 1.25 MHz around center frequency)
+# This setting is valid in multichannel mode only.
+        freq = 118925000;
+# Multiple outputs per channel are supported. For example, a single channel
+# can be sent to multiple Shoutcast servers.
+        outputs = (
+	  {
+# Output type. Supported types are: icecast and file.
+            type = "icecast";
+# Host name or IP address of Shoutcast/Icecast server
+            server = "www.example.com";
+# Shoutcast port number
+            port = 8000;
+# Shoutcast mountpoint path (without leading slash)
+            mountpoint = "118925.mp3";
+# Username and password for the mountpoint
+            username = "source";
+            password = "password";
+# optional: name of the stream (default: none)
+            name = "Example ATC feed";
+# optional: genre (default: none)
+            genre = "ATC";
+	  }
+	);
+      },
+# Subsequent channels
+      {
+        freq = 119100000;
+# This channel is streamed to two destinations
+        outputs = (
+	  {
+            type = "icecast";
+            server = "www.example.com";
+            port = 8000;
+            mountpoint = "119100.mp3";
+            username = "source";
+            password = "password";
+	  },
+	  {
+            type = "icecast";
+            server = "www.otherserver.com";
+            port = 8010;
+            mountpoint = "119100.mp3";
+            username = "someuser";
+            password = "somepassword";
+	  }
+	);
+      },
+      {
+        freq = 119500000;
+# This channel is streamed to Icecast and saved to local files
+        outputs = (
+	  {
+            type = "icecast";
+            server = "www.example.com";
+            port = 8000;
+            mountpoint = "119500.mp3";
+            username = "source";
+            password = "password";
+	  },
+          {
+            type = "file";
+# Directory where output MP3 files are written. Must be created before running rtl_airband.
+            directory = "/home/pi";
+# File name prefix. rtl_airband automatically appends the date and UTC hour in YYYYmmdd_HH format
+# and creates new file every hour.
+            filename_template = "119500";
+# Set this to true if you want to record continuously.
+# Set this to false if you want to skip silence (record only when squelch is open).
+# Default is false.
+            continuous = true;
+          }
+	);
+      },
+      {
+        freq = 120600000;
+# This channel is not streamed to Icecast.
+# It is saved to local files into two destinations - one of them records continuously, the other one
+# skips silence periods.
+        outputs = (
+          {
+            type = "file";
+            directory = "/home/pi/streams";
+            filename_template = "TWR";
+            continuous = false;
+          },
+          {
+            type = "file";
+            directory = "/home/pi/streams_full";
+            filename_template = "TWR";
+            continuous = true;
+          }
+	);
+      },
+      {
+        freq = 121300000;
+        outputs = (
+	  {
+            type = "icecast";
+            server = "www.example.com";
+            port = 8000;
+            mountpoint = "121300.mp3";
+            username = "source";
+            password = "password";
+	  }
+	);
+      },
+      {
+        freq = 121600000;
+        outputs = (
+	  {
+            type = "icecast";
+            server = "www.example.com";
+            port = 8000;
+            mountpoint = "121600.mp3";
+            username = "source";
+            password = "password";
+	  }
+	);
+      } );
+  },
+# Receiver 1 - multichannel mode
+  {
+    index = 1;
+    gain = 28;
+    mode = "multichannel";
+    centerfreq = 123000000;
+    correction = 80;
+    channels = (
+      {
+        freq = 122000000;
+        outputs = (
+	  {
+            type = "icecast";
+            server = "www.example.com";
+            port = 8000;
+            mountpoint = "122000.mp3";
+            username = "source";
+            password = "password";
+	  }
+	);
+      },
+      {
+        freq = 122950000;
+        outputs = (
+	  {
+            type = "icecast";
+            server = "www.example.com";
+            port = 8000;
+            mountpoint = "122950.mp3";
+            username = "source";
+            password = "password";
+	  }
+	);
+      },
+      {
+        freq = 123800000;
+        outputs = (
+	  {
+            type = "icecast";
+            server = "www.example.com";
+            port = 8000;
+            mountpoint = "123800.mp3";
+            username = "source";
+            password = "password";
+	  }
+	);
+      },
+      {
+        freq = 123950000;
+        outputs = (
+	  {
+            type = "icecast";
+            server = "www.example.com";
+            port = 8000;
+            mountpoint = "123950.mp3";
+            username = "source";
+            password = "password";
+	  }
+	);
+      } );
+  },
+# Receiver 2 - scan mode
+  {
+    index = 2;
+    gain = 28;
+    mode = "scan";
+    correction = 80;
+    channels = (
+      {
+        freqs = ( 126300000, 121500000, 128225000, 131375000 );
+        outputs = (
+	  {
+            type = "icecast";
+            server = "www.example.com";
+            port = 8000;
+            mountpoint = "variouschannels.mp3";
+            username = "source";
+            password = "password";
+            name = "Example scan mode feed";
+            genre = "ATC";
+	  }
+	);
+      },
+    );
+  } );

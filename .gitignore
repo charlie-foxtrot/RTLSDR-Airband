@@ -9,9 +9,4 @@
 *.sdf
 *.o
 *.a
-rtl_airband_vfp
-rtl_airband_neon
 rtl_airband
-
-# Config files
-config.txt

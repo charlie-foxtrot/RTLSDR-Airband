@@ -156,12 +156,12 @@ Building
    Building for other ARMv7-based platforms without VideoCore GPU, eg. Cubieboard (FFTW3
    library is needed in this case):
 
-	sudo apt-get install libfftw3-dev
+        sudo apt-get install libfftw3-dev
         PLATFORM=armv7-generic make
 
    Building for generic x86 CPU (FFTW3 library is needed in this case):
 
-	sudo apt-get install libfftw3-dev
+        sudo apt-get install libfftw3-dev
         PLATFORM=x86 make
 
  * Install the software:
@@ -183,9 +183,9 @@ Building
  * If you wish to start the program automatically at boot, you can use example startup
    scripts from init.d/ subdirectory. Example for Debian / Raspbian:
 
-	sudo cp init.d/rtl_airband-debian.sh /etc/init.d/rtl_airband
-	sudo chmod 755 /etc/init.d/rtl_airband
-	sudo update-rc.d rtl_airband defaults
+        sudo cp init.d/rtl_airband-debian.sh /etc/init.d/rtl_airband
+        sudo chmod 755 /etc/init.d/rtl_airband
+        sudo update-rc.d rtl_airband defaults
 
 Configuring
 --------------------

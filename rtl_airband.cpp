@@ -17,7 +17,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifdef _WIN32
+#if defined USE_BCM_VC && !defined __arm__
+#error Broadcom VideoCore support can only be enabled on ARM builds
+#endif
+
+// From this point we may safely assume that USE_BCM_VC implies __arm__
+
+#if defined _WIN32
 
 #define WIN32_LEAN_AND_MEAN
 #define _USE_MATH_DEFINES
@@ -36,14 +42,23 @@
 #define sscanf sscanf_s
 #define fscanf fscanf_s
 #define CFGFILE "rtl_airband.conf"
-#else /* !_WIN32 */
-#if defined __arm__
+
+#elif defined __arm__
+
+#ifdef USE_BCM_VC
 #include "hello_fft/mailbox.h"
 #include "hello_fft/gpu_fft.h"
 #else
+#include <fftw3.h>
+#endif
+
+#else   /* x86 */
 #include <xmmintrin.h>
 #include <fftw3.h>
-#endif /* !__arm__ */
+
+#endif /* x86 */
+
+#ifndef _WIN32
 #define ALIGN
 #define ALIGN2 __attribute__((aligned(32)))
 #define SLEEP(x) usleep(x * 1000)
@@ -65,7 +80,6 @@
 #include <algorithm>
 #include <csignal>
 #include <cstdarg>
-#include <cstring>
 #include <cerrno>
 #endif /* !_WIN32 */ 
 
@@ -100,7 +114,7 @@
 #define FFT_SIZE 512
 #define CHANNELS 8
 
-#if defined __arm__
+#if defined USE_BCM_VC
 extern "C" void samplefft(GPU_FFT_COMPLEX* dest, unsigned char* buffer, float* window, float* levels);
 extern "C" void fftwave(float* dest, GPU_FFT_COMPLEX* src, int* sizes, int* bins);
 #define FFT_SIZE_LOG 9
@@ -530,7 +544,7 @@ void* icecast_check(void* params) {
 void demodulate() {
 
     // initialize fft engine
-#ifndef __arm__
+#ifndef USE_BCM_VC
     fftwf_plan fft;
     fftwf_complex* fftin;
     fftwf_complex* fftout;
@@ -581,7 +595,7 @@ void demodulate() {
     int device_num = 0;
     while (true) {
         if(do_exit) {
-#ifdef __arm__
+#ifdef USE_BCM_VC
             log(LOG_INFO, "Freeing GPU memory\n");
             gpu_fft_release(fft);
 #endif
@@ -609,20 +623,18 @@ void demodulate() {
             continue;
         }
 
-#ifdef __arm__
+#if defined USE_BCM_VC
         for (int i = 0; i < FFT_BATCH; i++) {
             samplefft(fft->in + i * fft->step, dev->buffer + dev->bufs + i * speed2, window, levels);
         }
-
-        // allow mp3 encoding thread to run while waiting for GPU to finish
-        pthread_cond_signal(&mp3_cond);
-
-        gpu_fft_execute(fft);
-
-        fftwave(dev->channels[0].wavein + dev->waveend, fft->out, sizes, dev->bins);
-#else
+#elif defined __arm__
+        for (int i = 0; i < FFT_SIZE; i++) {
+            unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
+            fftin[i][0] = levels[*(buf2)] * window[i*2];
+            fftin[i][1] = levels[*(buf2+1)] * window[i*2];
+        }
+#elif defined _WIN32
         // process 4 rtl samples (16 bytes)
-#ifdef _WIN32
         if (avx) {
             for (int i = 0; i < FFT_SIZE; i += 4) {
                 unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
@@ -634,7 +646,6 @@ void demodulate() {
                 _mm256_store_ps(&fftin[i][0], a);
             }
         } else {
-#endif /* _WIN32 */
             for (int i = 0; i < FFT_SIZE; i += 2) {
                 unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
                 __m128 a = _mm_set_ps(levels[*(buf2 + 3)], levels[*(buf2 + 2)], levels[*(buf2 + 1)], levels[*(buf2)]);
@@ -642,20 +653,34 @@ void demodulate() {
                 a = _mm_mul_ps(a, b);
                 _mm_store_ps(&fftin[i][0], a);
             }
-#ifdef _WIN32
         }
-#else
+#else /* x86 */
+        for (int i = 0; i < FFT_SIZE; i += 2) {
+            unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
+            __m128 a = _mm_set_ps(levels[*(buf2 + 3)], levels[*(buf2 + 2)], levels[*(buf2 + 1)], levels[*(buf2)]);
+            __m128 b = _mm_load_ps(&window[i * 2]);
+            a = _mm_mul_ps(a, b);
+            _mm_store_ps(&fftin[i][0], a);
+        }
+#endif
+#ifndef _WIN32
         // allow mp3 encoding thread to run while waiting for FFT to finish
         pthread_cond_signal(&mp3_cond);
 #endif
-
+#ifdef USE_BCM_VC
+        gpu_fft_execute(fft);
+#else
         fftwf_execute(fft);
+#endif
 
-	for (int j = 0; j < dev->channel_count; j++) {
-		dev->channels[j].wavein[dev->waveend] = 
-		  sqrtf(fftout[dev->bins[j]][0] * fftout[dev->bins[j]][0] + fftout[dev->bins[j]][1] * fftout[dev->bins[j]][1]);
-	}
-#endif /* !__arm__ */
+#ifdef USE_BCM_VC
+        fftwave(dev->channels[0].wavein + dev->waveend, fft->out, sizes, dev->bins);
+#else
+        for (int j = 0; j < dev->channel_count; j++) {
+            dev->channels[j].wavein[dev->waveend] =
+              sqrtf(fftout[dev->bins[j]][0] * fftout[dev->bins[j]][0] + fftout[dev->bins[j]][1] * fftout[dev->bins[j]][1]);
+        }
+#endif
 
         dev->waveend += FFT_BATCH;
         
@@ -665,13 +690,12 @@ void demodulate() {
             }
             for (int i = 0; i < dev->channel_count; i++) {
                 channel_t* channel = dev->channels + i;
-#ifdef __arm__
+#if defined __arm__
                 float agcmin2 = channel->agcmin * 4.5f;
                 for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j++) {
                     channel->waveref[j] = min(channel->wavein[j], agcmin2);
                 }
-#else /* !__arm__ */
-#ifdef _WIN32
+#elif defined _WIN32
                 if (avx) {
                     __m256 agccap = _mm256_set1_ps(channel->agcmin * 4.5f);
                     for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j += 8) {
@@ -679,16 +703,19 @@ void demodulate() {
                         _mm256_storeu_ps(channel->waveref + j, _mm256_min_ps(t, agccap));
                     }
                 } else {
-#endif /* _WIN32 */
                     __m128 agccap = _mm_set1_ps(channel->agcmin * 4.5f);
                     for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j += 4) {
                         __m128 t = _mm_loadu_ps(channel->wavein + j);
                         _mm_storeu_ps(channel->waveref + j, _mm_min_ps(t, agccap));
                     }
-#ifdef _WIN32
                 }
-#endif /* _WIN32 */
-#endif /* !__arm__ */
+#else
+                __m128 agccap = _mm_set1_ps(channel->agcmin * 4.5f);
+                for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j += 4) {
+                    __m128 t = _mm_loadu_ps(channel->wavein + j);
+                    _mm_storeu_ps(channel->waveref + j, _mm_min_ps(t, agccap));
+                }
+#endif
                 for (int j = AGC_EXTRA; j < WAVE_BATCH + AGC_EXTRA; j++) {
                     // auto noise floor
                     if (j % 16 == 0) {

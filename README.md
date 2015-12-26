@@ -26,6 +26,10 @@ Performance
  * Turbo overclock setting recommended on RPi V1 when using 2 dongles
    (no overclocking is necessary on RPi V2)
 
+### Other ARMv7-based platforms
+ * FFT using main CPU
+ * Tested on Cubieboard1 - ~50% CPU when using 1 dongle
+
 Demo
 ---------------------
 ![Demo (Windows version)](demo.png?raw=true)
@@ -104,7 +108,7 @@ Building
  * Browse into win32 and open the solution
  * Simply build solution or click the "Start Local Windows Debugger" button
  
-### Raspberry Pi (Raspbian)
+### Raspberry Pi (Raspbian) and other ARMv7-based platforms
  * I assume you already have RTLSDR library installed: http://www.hamradioscience.com/raspberry-pi-as-remote-server-for-rtl2832u-sdr/
  * Blacklist DVB drivers to avoid conflict with SDR driver - before connecting
    the USB dongle add following lines to /etc/modprobe.d/raspi-blacklist.conf:
@@ -117,14 +121,16 @@ Building
  * sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev libconfig++-dev
  * sudo rpi-update && sudo reboot
  * cd into the project folder (where makefile is located)
- * if you are building for RPi V1: PLATFORM=rpiv1 make
- * if you are building for RPi V2: PLATFORM=rpiv2 make
+ * building for RPi V1: PLATFORM=rpiv1 make
+ * building for RPi V2: PLATFORM=rpiv2 make
+ * building for other ARMv7-based platforms (eg. Cubieboard): PLATFORM=armv7-generic make
  * install the program and configuration file: make install
- * check if device node /dev/vcio with major=100, minor=0 exists: ls -l /dev/vcio
+ * on RPi: check if device node /dev/vcio with major=100, minor=0 exists: ls -l /dev/vcio
 
 	crw-rw---T 1 root video 100, 0 Jan  1  1970 /dev/vcio
 
  * If you get "No such file or directory", then create it: sudo mknod /dev/vcio c 100 0
+   Skip this step on other ARMv7-based platforms.
  * Edit configuration file - see chapter "Configuring".
  * You need to run the program with root privileges (eg. sudo /usr/local/bin/rtl_airband)
  * If you wish to start the program automatically at boot, you can use example startup 

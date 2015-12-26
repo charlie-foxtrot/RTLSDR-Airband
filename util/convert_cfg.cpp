@@ -56,11 +56,13 @@ int main(int argc, char **argv) {
 			}
 			r["devices"].add(Setting::TypeGroup);
 			r["devices"][i].add("index", Setting::TypeInt);
+			r["devices"][i].add("mode", Setting::TypeString);
 			r["devices"][i].add("gain", Setting::TypeInt);
 			r["devices"][i].add("centerfreq", Setting::TypeInt);
 			r["devices"][i].add("correction", Setting::TypeInt);
 			r["devices"][i]["index"] = index;
-			r["devices"][i]["gain"] = gain;
+			r["devices"][i]["mode"] = "multichannel";
+			r["devices"][i]["gain"] = gain / 10;
 			r["devices"][i]["centerfreq"] = centerfreq;
 			r["devices"][i]["correction"] = -correction / 100;
 			r["devices"][i].add("channels", Setting::TypeList);
@@ -75,17 +77,21 @@ int main(int argc, char **argv) {
 				}
 				r["devices"][i]["channels"].add(Setting::TypeGroup);
 				r["devices"][i]["channels"][j].add("freq", Setting::TypeInt);
-				r["devices"][i]["channels"][j].add("server", Setting::TypeString);
-				r["devices"][i]["channels"][j].add("port", Setting::TypeInt);
-				r["devices"][i]["channels"][j].add("mountpoint", Setting::TypeString);
-				r["devices"][i]["channels"][j].add("username", Setting::TypeString);
-				r["devices"][i]["channels"][j].add("password", Setting::TypeString);
 				r["devices"][i]["channels"][j]["freq"] = frequency;
-				r["devices"][i]["channels"][j]["server"] = hostname;
-				r["devices"][i]["channels"][j]["port"] = port;
-				r["devices"][i]["channels"][j]["mountpoint"] = mountpoint;
-				r["devices"][i]["channels"][j]["username"] = username;
-				r["devices"][i]["channels"][j]["password"] = password;
+				r["devices"][i]["channels"][j].add("outputs", Setting::TypeList);
+				r["devices"][i]["channels"][j]["outputs"].add(Setting::TypeGroup);
+				r["devices"][i]["channels"][j]["outputs"][0].add("type", Setting::TypeString);
+				r["devices"][i]["channels"][j]["outputs"][0].add("server", Setting::TypeString);
+				r["devices"][i]["channels"][j]["outputs"][0].add("port", Setting::TypeInt);
+				r["devices"][i]["channels"][j]["outputs"][0].add("mountpoint", Setting::TypeString);
+				r["devices"][i]["channels"][j]["outputs"][0].add("username", Setting::TypeString);
+				r["devices"][i]["channels"][j]["outputs"][0].add("password", Setting::TypeString);
+				r["devices"][i]["channels"][j]["outputs"][0]["type"] = "icecast";
+				r["devices"][i]["channels"][j]["outputs"][0]["server"] = hostname;
+				r["devices"][i]["channels"][j]["outputs"][0]["port"] = port;
+				r["devices"][i]["channels"][j]["outputs"][0]["mountpoint"] = mountpoint;
+				r["devices"][i]["channels"][j]["outputs"][0]["username"] = username;
+				r["devices"][i]["channels"][j]["outputs"][0]["password"] = password;
 			}
 		}
 		cfg.writeFile(argv[2]);

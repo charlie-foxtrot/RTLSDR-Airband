@@ -17,6 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define RTL_AIRBAND_VERSION "2.0.0"
 #if defined USE_BCM_VC && !defined __arm__
 #error Broadcom VideoCore support can only be enabled on ARM builds
 #endif
@@ -796,7 +797,8 @@ void usage() {
     cout<<"Usage: rtl_airband [-f] [-c <config_file_path>]\n\
 \t-h\t\t\tDisplay this help text\n\
 \t-f\t\t\tRun in foreground, display textual waterfalls\n\
-\t-c <config_file_path>\tUse non-default configuration file\n\t\t\t\t(default: "<<CFGFILE<<")\n";
+\t-c <config_file_path>\tUse non-default configuration file\n\t\t\t\t(default: "<<CFGFILE<<")\n\
+\t-v\t\t\tDisplay version and exit\n";
     exit(EXIT_SUCCESS);
 } 
 
@@ -809,7 +811,7 @@ int main(int argc, char* argv[]) {
 #pragma GCC diagnostic warning "-Wwrite-strings"
     int opt;
 
-    while((opt = getopt(argc, argv, "fhc:")) != -1) {
+    while((opt = getopt(argc, argv, "fhvc:")) != -1) {
         switch(opt) {
             case 'f':
                 foreground = 1;
@@ -817,6 +819,9 @@ int main(int argc, char* argv[]) {
             case 'c':
                 cfgfile = optarg;
                 break;
+            case 'v':
+                cout<<"RTLSDR-Airband version "<<RTL_AIRBAND_VERSION<<"\n";
+                exit(EXIT_SUCCESS);
             case 'h':
             default:
                 usage();
@@ -1069,6 +1074,7 @@ int main(int argc, char* argv[]) {
         }
     }
 #endif
+    log(LOG_INFO, "RTLSDR-Airband version %s starting\n", RTL_AIRBAND_VERSION);
     for (int i = 0; i < device_count; i++) {
         device_t* dev = devices + i;
         for (int j = 0; j < dev->channel_count; j++)  {

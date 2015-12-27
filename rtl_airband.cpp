@@ -204,7 +204,7 @@ int device_opened = 0;
 #ifdef _WIN32
 int avx;
 #endif
-int foreground = 0, do_syslog = 0;
+int foreground = 0, do_syslog = 1;
 static volatile int do_exit = 0;
 
 void error() {
@@ -223,6 +223,8 @@ void log(int priority, const char *format, ...) {
 #else
     if(do_syslog)
         vsyslog(priority, format, args);
+    else if(foreground)
+        vprintf(format, args);
 #endif
     va_end(args);
 }

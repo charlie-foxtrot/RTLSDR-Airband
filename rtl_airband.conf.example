@@ -38,10 +38,10 @@
 
 # global parameters
 
-# log messages via syslog? Default: 0 (no)
+# log messages via syslog? Default: 1 (yes)
 # if disabled, log messages are written to stdout (but only when run in foreground)
 # This option has no effect on Windows
-syslog = 1
+# syslog = 1
 
 # PID file path (default: /run/rtl_airband.pid)
 # This setting has no effect on Windows.

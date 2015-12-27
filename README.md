@@ -28,7 +28,7 @@ Performance
 
 ### Other ARMv7-based platforms
  * FFT using main CPU
- * Tested on Cubieboard1 - ~50% CPU when using 1 dongle
+ * Tested on Cubieboard2 - ~50% CPU when using 1 dongle
 
 Demo
 ---------------------
@@ -119,7 +119,7 @@ Building
         sudo mv $HOME/rtl-sdr/rtl-sdr.rules /etc/udev/rules.d/rtl-sdr.rules
 
  * Blacklist DVB drivers to avoid conflict with SDR driver - before connecting
-   the USB dongle create file /etc/modprobe.d/dvb-blacklist.conf with text
+   the USB dongle create file `/etc/modprobe.d/dvb-blacklist.conf` with text
    editor (eg. nano) and add the following lines:
 
         blacklist r820t
@@ -168,7 +168,7 @@ Building
 
         make install
 
-   By default, the binary is installed to /usr/local/bin/rtl_airband.
+   By default, the binary is installed to `/usr/local/bin/rtl_airband`.
 
  * Edit the configuration file to suit your needs. See chapter "Configuring" below.
 
@@ -178,10 +178,10 @@ Building
 
    The program runs as a daemon (background process) by default, so it may look like
    it has exited right after startup. Diagnostic messages are printed to syslog
-   (on Raspbian they are directed to /var/log/messages by default).
+   (on Raspbian they are directed to `/var/log/messages` by default).
 
  * If you wish to start the program automatically at boot, you can use example startup
-   scripts from init.d/ subdirectory. Example for Debian / Raspbian:
+   scripts from `init.d` subdirectory. Example for Debian / Raspbian:
 
         sudo cp init.d/rtl_airband-debian.sh /etc/init.d/rtl_airband
         sudo chmod 755 /etc/init.d/rtl_airband
@@ -189,12 +189,12 @@ Building
 
 Configuring
 --------------------
-By default, the configuration is read from /usr/local/etc/rtl_airband.conf file.
-Refer to rtl_airband.conf.example for the description of the format. You can
-copy this file to /usr/local/etc/rtl_airband.conf and edit it to suit your needs
-(make install does this, unless you already have your own config file installed).
+By default, the configuration is read from `/usr/local/etc/rtl_airband.conf`.
+Refer to `rtl_airband.conf.example` for the description of the format. You can
+copy this file to `/usr/local/etc/rtl_airband.conf` and edit it to suit your needs
+(`make install` does this, unless you already have your own config file installed).
 
-Old versions of RTLSDR-Airband used a simple flat config.txt file. This is no longer
+Old versions of RTLSDR-Airband used a simple flat `config.txt` file. This is no longer
 supported. You have to rewrite your config file to the new syntax - or just use a
 small utility `convert_cfg` which is included in the `util` subdirectory:
 
@@ -202,7 +202,7 @@ small utility `convert_cfg` which is included in the `util` subdirectory:
     make
     ./convert_cfg /path/to/old/config.txt /path/to/new/rtl_airband.conf
 
-Review the rtl_airband.conf file and move it to /usr/local/etc before launching
+Review the `rtl_airband.conf` file and move it to `/usr/local/etc` before launching
 rtl_airband:
 
     sudo mv /path/to/new/rtl_airband.conf /usr/local/etc
@@ -218,25 +218,25 @@ rtl_airband accepts the following command line options:
 Troubleshooting
 --------------------
 
- * If the program fails to start on RPi: check if device node /dev/vcio exists:
+ * If the program fails to start on RPi: check if device node `/dev/vcio` exists:
 
-     pi@mypi ~ $ ls -l /dev/vcio
-     crw-rw---T 1 root video 249, 0 Jan  1  1970 /dev/vcio
+    pi@mypi ~ $ ls -l /dev/vcio
+    crw-rw---T 1 root video 249, 0 Jan  1  1970 /dev/vcio
 
-   If you get "No such file or directory", then create it:
+   If you get `No such file or directory`, then create it:
 
-     sudo mknod /dev/vcio c 249 0
+    sudo mknod /dev/vcio c 249 0
 
    Older Raspbian kernels (before 4.0) used 100 as a major number instead of 249,
    so be sure you are creating the node correctly. You can check the correct major
    number with this command:
 
-     pi@mypi:~# grep vcio /proc/devices
-     100 vcio
+    pi@mypi:~# grep vcio /proc/devices
+    100 vcio
 
-  In this case, /dev/vcio must be created this way:
+  In this case, `/dev/vcio` must be created this way:
 
-     sudo mknod /dev/vcio c 100 0
+    sudo mknod /dev/vcio c 100 0
 
  * When the program is running in scan mode and is interrupted by a signal
    (eg. ctrl+C is pressed when run in foreground mode) it crashes with segmentation

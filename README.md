@@ -14,13 +14,13 @@ Features
  * Stream to Icecast or SHOUTcast server
  * Record to local MP3 files (continuously or skipping silence periods)
  * Multiple streaming/recording destinations per channel
- 
+
 Performance
 ---------------------
 ### x86
  * ~4% per dongle on i5-2430m at 2.1 GHz
- 
-### Raspberry Pi 
+
+### Raspberry Pi
  * FFT using Broadcom Videocore IV GPU
  * No overclock required when using 1 dongle plus another dongle running dump1090
  * Turbo overclock setting recommended on RPi V1 when using 2 dongles
@@ -46,7 +46,7 @@ Building
  * Place the lib into win32/lib
  * Place fftw3.h into win32/include
  * Place libfftw3f-3.dll into the root folder
- 
+
 ##### libogg and libvorbis
  * Download libogg-1.3.1.zip and libvorbis-1.3.4.zip from http://www.xiph.org/downloads/
  * Extract both zip files in the same folder
@@ -58,7 +58,7 @@ Building
  * Copy both the generated .libs to win32/lib
  * Copy libogg/includes/ogg (the folder) to win32/include
  * Copy libvorbis-1.x.x/includes/vorbis (the folder) to win32/include
- 
+
 ##### libmp3lame
  * Download from http://sourceforge.net/projects/lame/files/lame/3.99/
  * Open vc_solution/vc9_lame.sln
@@ -67,13 +67,13 @@ Building
  * Build libmp3lame-static
  * Copy output/ReleaseSSE2/libmp3lame-static.lib and libmpghip-static.lib to win32/lib
  * Copy include/lame.h to win32/include
- 
+
 ##### librtlsdr
  * Download from http://sdr.osmocom.org/trac/wiki/rtl-sdr (search word: "pre-built")
  * Copy rtl-sdr-release/rtl-sdr.h and rtl-sdr_export.h to win32/includes
  * Copy rtl-sdr-release/x32/rtlsdr.lib to win32/lib
  * Copy rtl-sdr-release/x32/rtlsdr.dll and libusb-1.0.dll to root folder
- 
+
 ##### pthreads
  * Download from ftp://sourceware.org/pub/pthreads-win32/
  * Extract Pre-built.2 to the same folder where libogg and libvorbis are located
@@ -98,11 +98,11 @@ Building
  * Build again
  * Copy win32/Release/libshout.lib to win32/lib
  * Copy include/shout (the folder) to win32/include
- 
+
 #### Building this project
  * Browse into win32 and open the solution
  * Simply build solution or click the "Start Local Windows Debugger" button
- 
+
 ### Linux (Raspbian)
  * Install RTLSDR library (http://sdr.osmocom.org/trac/wiki/rtl-sdr):
 
@@ -135,14 +135,14 @@ Building
 
    Alternatively you can pull the latest code from git (but please be aware that it might
    be experimental, buggy, or at least, untested):
- 
+
         git clone https://github.com/szpajder/RTLSDR-Airband.git
         cd RTLSDR-Airband/
 
  * Install necessary dependencies:
 
         sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev libconfig++-dev
-        
+
  * Set the PLATFORM environment variable (to indicate your hardware platform) and run `make`.
    For example, to build a binary for RPi version 1 (ARMv6 CPU, Broadcom VideoCore GPU) type
    the following:
@@ -218,25 +218,51 @@ rtl_airband accepts the following command line options:
 Troubleshooting
 --------------------
 
- * If the program fails to start on RPi: check if device node `/dev/vcio` exists:
+Syslog logging is enabled by default, so first of all, check the logs for
+any error messages, for example: `tail /var/log/messages`. Common problems:
 
-    pi@mypi ~ $ ls -l /dev/vcio
-    crw-rw---T 1 root video 249, 0 Jan  1  1970 /dev/vcio
+*  Problem 1: the program fails to start on RPi. It dumps the error message:
 
-   If you get `No such file or directory`, then create it:
+    Dec 27 08:58:00 mypi rtl_airband[28876]: Can't open device file /dev/vcio: No such file or directory
+
+   Solution: you need to create `/dev/vcio` device node. To do that, you need to
+   know the correct major number. Older Raspbian kernels (before 4.0) used 100,
+   newer ones use 249, so first check that:
+
+    pi@mypi:~$ grep vcio /proc/devices
+    249 vcio
+
+   This means `/dev/vcio` must be created with a major number of 249:
 
     sudo mknod /dev/vcio c 249 0
 
-   Older Raspbian kernels (before 4.0) used 100 as a major number instead of 249,
-   so be sure you are creating the node correctly. You can check the correct major
-   number with this command:
+   In other case, substitute 249 with the number taken from `grep` output above.
 
-    pi@mypi:~# grep vcio /proc/devices
-    100 vcio
+*  Problem 2: the program fails to start on RPi. It dumps the error message:
 
-  In this case, `/dev/vcio` must be created this way:
+    Dec 27 08:58:00 mypi rtl_airband[28876]: Can't open device file /dev/vcio: No such device or address
 
-    sudo mknod /dev/vcio c 100 0
+   or:
+
+    Dec 27 08:58:00 mypi rtl_airband[28876]: mbox_property(): ioctl_set_msg failed: Inappropriate ioctl for device
+
+   This means you have `/dev/vcio`, but its major number is probably wrong:
+
+    pi@mypi:~$ ls -l /dev/vcio
+    crw-rw---T 1 root video 100, 0 Jan  1  1970 /dev/vcio
+
+   This one was created with a major number of 100. `grep vcio /proc/devices`
+   shows the correct number - if it's different, then delete it (`sudo rm /dev/vcio`)
+   and create it again (see above).
+
+*  Problem 3: the program fails to start on RPi. It dumps the error message:
+
+    Unable to enable V3D. Please check your firmware is up to date.
+
+   Most often this is a problem of people who changed the default CPU:GPU memory split
+   by setting `gpu_mem` to something lower than 64 MB. Check your `/boot/config.txt`
+   and remove the `gpu_mem` setting altogether, if it's there. Then save the file
+   and reboot the Pi.
 
  * When the program is running in scan mode and is interrupted by a signal
    (eg. ctrl+C is pressed when run in foreground mode) it crashes with segmentation
@@ -268,7 +294,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
-    
+
 Open Source Licenses
 ---------------------
 

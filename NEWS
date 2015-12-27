@@ -1,5 +1,20 @@
 NEWS:
 
+Version 2.0.0:
+ * New libconfig-style config file format
+ * util/convert_cfg: can be used to convert old-style config.txt to the new format
+ * Syslog logging (enabled by default)
+ * Daemon mode
+ * Reworked makefiles, added install rule
+ * /dev/vcio is now used to access GPU on RPi; creating char_dev no longer necessary
+ * Startup scripts for Debian and Gentoo
+ * Support for auto gain setting
+ * Support for multiple outputs per channel
+ * Support for recording streams to local MP3 files
+ * Support for ARMv7-based platforms other than RPi (eg. Cubieboard)
+ * Updated documentation
+ * Numerous bugfixes and stability improvements
+
 Version 1.0.0:
  * Linux x86/x86_64 support (Windows build is currently unmaintained and might not work)
  * Raspberry Pi V2 support

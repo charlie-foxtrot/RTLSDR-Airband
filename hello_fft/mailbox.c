@@ -25,15 +25,19 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#include <rtl_airband.h>
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <cerrno>
 #include <assert.h>
 #include <stdint.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
+#include <syslog.h>
 
 #include "mailbox.h"
 
@@ -46,7 +50,7 @@ void *mapmem(unsigned base, unsigned size)
    base = base - offset;
    /* open /dev/mem */
    if ((mem_fd = open("/dev/mem", O_RDWR|O_SYNC) ) < 0) {
-      printf("can't open /dev/mem\nThis program should be run as root. Try prefixing command with: sudo\n");
+      log(LOG_CRIT, "mapmem(): can't open /dev/mem: %s", strerror(errno));
       exit (-1);
    }
    void *mem = mmap(
@@ -60,7 +64,7 @@ void *mapmem(unsigned base, unsigned size)
    printf("base=0x%x, mem=%p\n", base, mem);
 #endif
    if (mem == MAP_FAILED) {
-      printf("mmap error %d\n", (int)mem);
+      log(LOG_CRIT, "mapmem(): mmap error: %s", strerror(errno));
       exit (-1);
    }
    close(mem_fd);
@@ -71,7 +75,7 @@ void unmapmem(void *addr, unsigned size)
 {
    int s = munmap(addr, size);
    if (s != 0) {
-      printf("munmap error %d\n", s);
+      log(LOG_CRIT, "unmapmem(): munmap error: %s", strerror(errno));
       exit (-1);
    }
 }
@@ -85,7 +89,7 @@ static int mbox_property(int file_desc, void *buf)
    int ret_val = ioctl(file_desc, IOCTL_MBOX_PROPERTY, buf);
 
    if (ret_val < 0) {
-      printf("ioctl_set_msg failed:%d\n", ret_val);
+      log(LOG_ERR, "mbox_property(): ioctl_set_msg failed: %s\n", strerror(errno));
    }
 
 #ifdef DEBUG
@@ -246,8 +250,7 @@ int mbox_open() {
    // open a char device file used for communicating with kernel mbox driver
    file_desc = open(DEVICE_FILE_NAME, 0);
    if (file_desc < 0) {
-      printf("Can't open device file: %s\n", DEVICE_FILE_NAME);
-      printf("Try creating a device file with: sudo mknod %s c %d 0\n", DEVICE_FILE_NAME, MAJOR_NUM);
+      log(LOG_CRIT, "Can't open device file %s: %s\n", DEVICE_FILE_NAME, strerror(errno));
       exit(-1);
    }
    return file_desc;

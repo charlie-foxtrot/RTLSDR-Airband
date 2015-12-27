@@ -1,3 +1,5 @@
+CFLAGS += -I..
+
 S = hex/shader_256.hex \
     hex/shader_512.hex \
     hex/shader_1k.hex \
@@ -31,7 +33,7 @@ gpu_fft_shaders.o: $(S)
 
 gpu_fft_twiddles.o: gpu_fft.h
 
-mailbox.o: mailbox.h
+mailbox.o: mailbox.h ../rtl_airband.h
 
 clean:
 	rm -f *.o *.a

@@ -1,0 +1,8 @@
+NEWS:
+
+Version 1.0.0:
+ * Linux x86/x86_64 support (Windows build is currently unmaintained and might not work)
+ * Raspberry Pi V2 support
+ * Bundled hello_fft code (v2.0)
+ * More robust interaction with Icecast servers
+ * Important stability fixes

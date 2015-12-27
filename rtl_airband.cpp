@@ -274,11 +274,11 @@ void* rtlsdr_exec(void* params) {
     rtlsdr_set_freq_correction(dev->rtlsdr, dev->correction);
     if(dev->gain == AUTO_GAIN) {
         rtlsdr_set_tuner_gain_mode(dev->rtlsdr, 0);
-        log(LOG_INFO, "Device #%d: gain set to automatic", dev->device);
+        log(LOG_INFO, "Device #%d: gain set to automatic\n", dev->device);
     } else {
         rtlsdr_set_tuner_gain_mode(dev->rtlsdr, 1);
         rtlsdr_set_tuner_gain(dev->rtlsdr, dev->gain);
-        log(LOG_INFO, "Device #%d: gain set to %0.2f dB", dev->device, (float)rtlsdr_get_tuner_gain(dev->rtlsdr) / 10.0);
+        log(LOG_INFO, "Device #%d: gain set to %0.2f dB\n", dev->device, (float)rtlsdr_get_tuner_gain(dev->rtlsdr) / 10.0);
     }
     rtlsdr_set_agc_mode(dev->rtlsdr, 0);
     rtlsdr_reset_buffer(dev->rtlsdr);
@@ -286,7 +286,7 @@ void* rtlsdr_exec(void* params) {
     device_opened++;
     dev->failed = 0;
     if(rtlsdr_read_async(dev->rtlsdr, rtlsdr_callback, params, 20, 320000) < 0) {
-        log(LOG_WARNING, "Device #%d: async read failed, disabling", dev->device);
+        log(LOG_WARNING, "Device #%d: async read failed, disabling\n", dev->device);
         dev->failed = 1;
         device_opened--;
     }
@@ -387,7 +387,7 @@ unsigned char lamebuf[22000];
 void process_outputs(channel_t* channel) {
     int bytes = lame_encode_buffer_ieee_float(channel->lame, channel->waveout, NULL, WAVE_BATCH, lamebuf, 22000);
     if (bytes < 0) {
-        log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d");
+        log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n");
         return;
     } else if (bytes == 0)
         return;
@@ -415,14 +415,14 @@ void process_outputs(channel_t* channel) {
             struct tm *tmp = gmtime(&t);
             char suffix[32];
             if(strftime(suffix, sizeof(suffix), "_%Y%m%d_%H.mp3", tmp) == 0) {
-                log(LOG_NOTICE, "strftime returned 0");
+                log(LOG_NOTICE, "strftime returned 0\n");
                 continue;
             }
             if(fdata->suffix == NULL || strcmp(suffix, fdata->suffix)) {    // need to open new file
                 fdata->suffix = strdup(suffix);
                 char *filename = (char *)malloc(strlen(fdata->dir) + strlen(fdata->prefix) + strlen(fdata->suffix) + 2);
                 if(filename == NULL) {
-                    log(LOG_WARNING, "process_outputs: cannot allocate memory, output disabled");
+                    log(LOG_WARNING, "process_outputs: cannot allocate memory, output disabled\n");
                     channel->outputs[k].enabled = false;
                     continue;
                 }
@@ -433,12 +433,12 @@ void process_outputs(channel_t* channel) {
                 }
                 fdata->f = fopen(filename, "w");
                 if(fdata->f == NULL) {
-                    log(LOG_WARNING, "Cannot open output file %s (%s), output disabled", filename, strerror(errno));
+                    log(LOG_WARNING, "Cannot open output file %s (%s), output disabled\n", filename, strerror(errno));
                     channel->outputs[k].enabled = false;
                     free(filename);
                     continue;
                 }
-                log(LOG_INFO, "Writing to %s", filename);
+                log(LOG_INFO, "Writing to %s\n", filename);
                 free(filename);
             }
 // bytes is signed, but we've checked for negative values earlier
@@ -447,10 +447,10 @@ void process_outputs(channel_t* channel) {
             if(fwrite(lamebuf, 1, bytes, fdata->f) < bytes) {
 #pragma GCC diagnostic warning "-Wsign-compare"
                 if(ferror(fdata->f))
-                    log(LOG_WARNING, "Cannot write to %s/%s%s (%s), output disabled", 
+                    log(LOG_WARNING, "Cannot write to %s/%s%s (%s), output disabled\n", 
                         fdata->dir, fdata->prefix, fdata->suffix, strerror(errno));
                 else
-                    log(LOG_WARNING, "Short write on %s/%s%s, output disabled", 
+                    log(LOG_WARNING, "Short write on %s/%s%s, output disabled\n", 
                         fdata->dir, fdata->prefix, fdata->suffix);
                 fclose(fdata->f);
                 fdata->f = NULL;
@@ -611,7 +611,7 @@ void demodulate() {
         }
 
         if(!device_opened) {
-            log(LOG_ERR, "All receivers failed, exiting");
+            log(LOG_ERR, "All receivers failed, exiting\n");
             do_exit = 1;
             continue;
         }

@@ -50,7 +50,7 @@ void *mapmem(unsigned base, unsigned size)
    base = base - offset;
    /* open /dev/mem */
    if ((mem_fd = open("/dev/mem", O_RDWR|O_SYNC) ) < 0) {
-      log(LOG_CRIT, "mapmem(): can't open /dev/mem: %s", strerror(errno));
+      log(LOG_CRIT, "mapmem(): can't open /dev/mem: %s\n", strerror(errno));
       exit (-1);
    }
    void *mem = mmap(
@@ -64,7 +64,7 @@ void *mapmem(unsigned base, unsigned size)
    printf("base=0x%x, mem=%p\n", base, mem);
 #endif
    if (mem == MAP_FAILED) {
-      log(LOG_CRIT, "mapmem(): mmap error: %s", strerror(errno));
+      log(LOG_CRIT, "mapmem(): mmap error: %s\n", strerror(errno));
       exit (-1);
    }
    close(mem_fd);
@@ -75,7 +75,7 @@ void unmapmem(void *addr, unsigned size)
 {
    int s = munmap(addr, size);
    if (s != 0) {
-      log(LOG_CRIT, "unmapmem(): munmap error: %s", strerror(errno));
+      log(LOG_CRIT, "unmapmem(): munmap error: %s\n", strerror(errno));
       exit (-1);
    }
 }

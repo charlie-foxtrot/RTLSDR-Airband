@@ -54,7 +54,7 @@ ifndef DEPS
 	@false
 endif
 
-$(FFT):	hello_fft
+$(FFT):	hello_fft ;
 
 $(SUBDIRS):
 	$(MAKE) -C $@

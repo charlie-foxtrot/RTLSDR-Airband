@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define RTL_AIRBAND_VERSION "2.0.0"
+#define RTL_AIRBAND_VERSION "2.0.1"
 #if defined USE_BCM_VC && !defined __arm__
 #error Broadcom VideoCore support can only be enabled on ARM builds
 #endif
@@ -983,6 +983,7 @@ int main(int argc, char* argv[]) {
                             cerr<<"Cannot allocate memory for outputs\n";
                             error();
                         }
+                        memset(channel->outputs[o].data, 0, sizeof(struct icecast_data));
                         channel->outputs[o].type = O_ICECAST;
                         icecast_data *idata = (icecast_data *)(channel->outputs[o].data);
                         idata->hostname = strdup(devs[i]["channels"][j]["outputs"][o]["server"]);
@@ -1000,6 +1001,7 @@ int main(int argc, char* argv[]) {
                             cerr<<"Cannot allocate memory for outputs\n";
                             error();
                         }
+                        memset(channel->outputs[o].data, 0, sizeof(struct file_data));
                         channel->outputs[o].type = O_FILE;
                         file_data *fdata = (file_data *)(channel->outputs[o].data);
                         fdata->dir = strdup(devs[i]["channels"][j]["outputs"][o]["directory"]);

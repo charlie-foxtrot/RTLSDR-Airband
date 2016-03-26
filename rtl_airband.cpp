@@ -285,7 +285,7 @@ void* rtlsdr_exec(void* params) {
     log(LOG_INFO, "Device %d started.\n", dev->device);
     device_opened++;
     dev->failed = 0;
-    if(rtlsdr_read_async(dev->rtlsdr, rtlsdr_callback, params, 20, 320000) < 0) {
+    if(rtlsdr_read_async(dev->rtlsdr, rtlsdr_callback, params, 15, 320000) < 0) {
         log(LOG_WARNING, "Device #%d: async read failed, disabling\n", dev->device);
         dev->failed = 1;
         device_opened--;

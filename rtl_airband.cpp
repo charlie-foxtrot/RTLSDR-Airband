@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define RTL_AIRBAND_VERSION "2.0.1"
+#define RTL_AIRBAND_VERSION "2.0.2"
 #if defined USE_BCM_VC && !defined __arm__
 #error Broadcom VideoCore support can only be enabled on ARM builds
 #endif

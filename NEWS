@@ -1,5 +1,8 @@
 NEWS:
 
+Version 2.0.2:
+ * Fixed a problem with running three dongles or more, simultaneously
+
 Version 2.0.1:
  * Fixed crash on output initialization
 

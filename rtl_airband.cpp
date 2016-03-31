@@ -106,10 +106,10 @@
 
 #define BUF_SIZE 2560000
 #define SOURCE_RATE 2560000
-#define WAVE_RATE 8000
+#define WAVE_RATE 16000
 #define WAVE_BATCH 1000
 #define WAVE_LEN 2048
-#define MP3_RATE 8000
+#define MP3_RATE 16000
 #define MAX_SHOUT_QUEUELEN 32768
 #define AGC_EXTRA 48
 #define FFT_SIZE 512
@@ -159,10 +159,17 @@ struct file_data {
     FILE *f;
 };
 
+enum modulations { MOD_AM, MOD_NFM };
 struct channel_t {
     float wavein[WAVE_LEN];  // FFT output waveform
     float waveref[WAVE_LEN]; // for power level calculation
     float waveout[WAVE_LEN]; // waveform after squelch + AGC
+    float complex_samples[2*WAVE_LEN];  // raw samples for NFM demod
+    int wavecnt;             // sample counter for timeref shift
+// FIXME: get this from complex_samples?
+    float pr;                // previous sample - real part
+    float pj;                // previous sample - imaginary part
+    enum modulations modulation;
     int agcsq;             // squelch status, 0 = signal, 1 = suppressed
     char agcindicate;  // squelch status indicator
     float agcavgfast;  // average power, for AGC
@@ -190,6 +197,7 @@ struct device_t {
     int channel_count;
     int bins[8];
     channel_t channels[8];
+    float timeref_freq[8];
     int waveend;
     int waveavail;
     THREAD rtl_thread;
@@ -197,6 +205,7 @@ struct device_t {
     int row;
     int failed;
     enum rec_modes mode;
+
 };
 
 device_t* devices;
@@ -544,6 +553,21 @@ void* icecast_check(void* params) {
 #endif
 }
 
+void multiply(float ar, float aj, float br, float bj, float *cr, float *cj)
+{
+    *cr = ar*br - aj*bj;
+    *cj = aj*br + ar*bj;
+}
+
+float polar_discriminant(float ar, float aj, float br, float bj)
+{
+    float cr, cj;
+    double angle;
+    multiply(ar, aj, br, -bj, &cr, &cj);
+    angle = atan2((double)cj, (double)cr);
+    return (float)(angle * M_1_PI);
+}
+
 void demodulate() {
 
     // initialize fft engine
@@ -568,6 +592,7 @@ void demodulate() {
     sizes[1] = sizeof(channel_t);
 #endif
 
+    float rotated_r, rotated_j;
     ALIGN float ALIGN2 levels[256];
     for (int i=0; i<256; i++) {
         levels[i] = i-127.5f;
@@ -678,10 +703,24 @@ void demodulate() {
 
 #ifdef USE_BCM_VC
         fftwave(dev->channels[0].wavein + dev->waveend, fft->out, sizes, dev->bins);
+        for (int j = 0; j < dev->channel_count; j++) {
+            if(dev->channels[j].modulation == MOD_NFM) {
+                struct GPU_FFT_COMPLEX *ptr = fft->out;
+                for (int job = 0; job < FFT_BATCH; job++) {
+                    dev->channels[j].complex_samples[2*(dev->waveend+job)] = ptr[dev->bins[j]].re;
+                    dev->channels[j].complex_samples[2*(dev->waveend+job)+1] = ptr[dev->bins[j]].im;
+                    ptr += fft->step;
+                }
+            }
+        }
 #else
         for (int j = 0; j < dev->channel_count; j++) {
             dev->channels[j].wavein[dev->waveend] =
               sqrtf(fftout[dev->bins[j]][0] * fftout[dev->bins[j]][0] + fftout[dev->bins[j]][1] * fftout[dev->bins[j]][1]);
+            if(channel->modulation == MOD_NFM) {
+                dev->channels[j].complex_samples[2*dev->waveend] = fftout[dev->bins[j]][0];
+                dev->channels[j].complex_samples[2*dev->waveend+1] = fftout[dev->bins[j]][1];
+            }
         }
 #endif
 
@@ -733,16 +772,19 @@ void demodulate() {
                         if (channel->agcsq == 1 && channel->agcavgslow > 3.0f * channel->agcmin) {
                             channel->agcsq = -AGC_EXTRA * 2;
                             channel->agcindicate = '*';
+                            if(channel->modulation == MOD_AM) {
                             // fade in
-                            for (int k = j - AGC_EXTRA; k < j; k++) {
-                                if (channel->wavein[k] > channel->agcmin * 3.0f) {
-                                    channel->agcavgfast = channel->agcavgfast * 0.98f + channel->wavein[k] * 0.02f;
+                                for (int k = j - AGC_EXTRA; k < j; k++) {
+                                    if (channel->wavein[k] > channel->agcmin * 3.0f) {
+                                        channel->agcavgfast = channel->agcavgfast * 0.98f + channel->wavein[k] * 0.02f;
+                                    }
                                 }
                             }
                         }
                     } else {
                         if (channel->wavein[j] > channel->agcmin * 3.0f) {
-                            channel->agcavgfast = channel->agcavgfast * 0.995f + channel->wavein[j] * 0.005f;
+                            if(channel->modulation == MOD_AM)
+                                channel->agcavgfast = channel->agcavgfast * 0.995f + channel->wavein[j] * 0.005f;
                             channel->agclow = 0;
                         } else {
                             channel->agclow++;
@@ -751,23 +793,46 @@ void demodulate() {
                         if ((channel->agcsq == -1 && channel->agcavgslow < 2.4f * channel->agcmin) || channel->agclow == AGC_EXTRA - 12) {
                             channel->agcsq = AGC_EXTRA * 2;
                             channel->agcindicate = ' ';
-                            // fade out
-                            for (int k = j - AGC_EXTRA + 1; k < j; k++) {
-                                channel->waveout[k] = channel->waveout[k - 1] * 0.94f;
+                            if(channel->modulation == MOD_AM) {
+                                // fade out
+                                for (int k = j - AGC_EXTRA + 1; k < j; k++) {
+                                    channel->waveout[k] = channel->waveout[k - 1] * 0.94f;
+                                }
                             }
                         }
                     }
-                    channel->waveout[j] = (channel->agcsq != -1) ? 0 : (channel->wavein[j - AGC_EXTRA] - channel->agcavgfast) / (channel->agcavgfast * 2.5f);
-                    if (abs(channel->waveout[j]) > 0.8f) {
-                        channel->waveout[j] *= 0.85f;
-                        channel->agcavgfast *= 1.15f;
+                    if(channel->agcsq != -1) {
+                        channel->waveout[j] = 0;
+                    } else {
+                        if(channel->modulation == MOD_AM) {
+                            channel->waveout[j] = (channel->wavein[j - AGC_EXTRA] - channel->agcavgfast) / (channel->agcavgfast * 2.5f);
+                            if (abs(channel->waveout[j]) > 0.8f) {
+                                channel->waveout[j] *= 0.85f;
+                                channel->agcavgfast *= 1.15f;
+                            }
+                        } else {    // NFM
+                            multiply(channel->complex_samples[2*(j - AGC_EXTRA)], channel->complex_samples[2*(j - AGC_EXTRA)+1],
+// FIXME: use j instead of wavecnt?
+                              cosf(dev->timeref_freq[i] * (float)channel->wavecnt),
+                              -sinf(dev->timeref_freq[i] * (float)channel->wavecnt),
+                              &rotated_r,
+                              &rotated_j);
+// FIXME: auto gain coefficient?
+                            channel->waveout[j] = polar_discriminant(rotated_r, rotated_j, channel->pr, channel->pj) * 0.5f;
+                            channel->pr = rotated_r;
+                            channel->pj = rotated_j;
+                        }
                     }
+                    if(channel->modulation == MOD_NFM) 
+                        channel->wavecnt = (channel->wavecnt + 1) % WAVE_RATE;
                 }
 #ifdef _WIN32
                 process_outputs(channel);
                 memcpy(channel->waveout, channel->waveout + WAVE_BATCH, AGC_EXTRA * 4);
 #endif
                 memcpy(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4);
+                if(channel->modulation == MOD_NFM)
+                    memcpy(channel->complex_samples, channel->complex_samples + 2 * WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4 * 2);
                 if (foreground) {
                     if(dev->mode == R_SCAN)
                         printf("%4.0f/%3.0f%c %7.3f", channel->agcavgslow, channel->agcmin, channel->agcindicate, (dev->channels[0].frequency / 1000000.0));
@@ -945,6 +1010,17 @@ int main(int argc, char* argv[]) {
                 channel->agcavgslow = 0.5f;
                 channel->agcmin = 100.0f;
                 channel->agclow = 0;
+                channel->modulation = MOD_AM;
+                if(devs[i]["channels"][j].exists("modulation")) {
+                    if(!strncmp(devs[i]["channels"][j]["modulation"], "nfm", 3)) {
+                        channel->modulation = MOD_NFM;
+                    } else if(!strncmp(devs[i]["channels"][j]["modulation"], "am", 2)) {
+                        channel->modulation = MOD_AM;
+                    } else {
+                        cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: invalid modulation (must be one of: \"am\", \"nfm\")\n";
+                        error();
+                    }
+                }
                 if(dev->mode == R_MULTICHANNEL) {
                     channel->frequency = devs[i]["channels"][j]["freq"];
                 } else { /* R_SCAN */
@@ -1016,6 +1092,11 @@ int main(int argc, char* argv[]) {
                     channel->outputs[o].active = false;
                 }
                 dev->bins[j] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
+// Calculate mixing frequencies needed for NFM to remove linear phase shift caused by FFT sliding window
+// This equals bin_width_Hz * (distance_from_DC_bin)
+                dev->timeref_freq[j] = 2.0 * M_PI * (float)(SOURCE_RATE / FFT_SIZE) *
+                    (float)(dev->bins[j] < (FFT_SIZE >> 1) ? dev->bins[j] + 1 : dev->bins[j] - FFT_SIZE + 1) / (float)WAVE_RATE;
+
             }
         }
     } catch(FileIOException e) {

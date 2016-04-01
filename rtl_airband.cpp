@@ -717,7 +717,7 @@ void demodulate() {
         for (int j = 0; j < dev->channel_count; j++) {
             dev->channels[j].wavein[dev->waveend] =
               sqrtf(fftout[dev->bins[j]][0] * fftout[dev->bins[j]][0] + fftout[dev->bins[j]][1] * fftout[dev->bins[j]][1]);
-            if(channel->modulation == MOD_NFM) {
+            if(dev->channels[j].modulation == MOD_NFM) {
                 dev->channels[j].complex_samples[2*dev->waveend] = fftout[dev->bins[j]][0];
                 dev->channels[j].complex_samples[2*dev->waveend+1] = fftout[dev->bins[j]][1];
             }

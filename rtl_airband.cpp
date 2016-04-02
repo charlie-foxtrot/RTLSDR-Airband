@@ -216,6 +216,7 @@ int avx;
 #endif
 int foreground = 0, do_syslog = 1;
 static volatile int do_exit = 0;
+float alpha = exp(-1.0f/(WAVE_RATE * 2e-4));
 
 void error() {
 #ifdef _WIN32
@@ -817,10 +818,11 @@ void demodulate() {
                               -sinf(dev->timeref_freq[i] * (float)channel->wavecnt),
                               &rotated_r,
                               &rotated_j);
-// FIXME: auto gain coefficient?
-                            channel->waveout[j] = polar_discriminant(rotated_r, rotated_j, channel->pr, channel->pj) * 0.5f;
+                            channel->waveout[j] = polar_discriminant(rotated_r, rotated_j, channel->pr, channel->pj);
                             channel->pr = rotated_r;
                             channel->pj = rotated_j;
+// de-emphasis IIR
+                            channel->waveout[j] = channel->waveout[j] * (1.0f - alpha) + channel->waveout[j-1] * alpha;
                         }
                     }
                     if(channel->modulation == MOD_NFM) 
@@ -927,6 +929,8 @@ int main(int argc, char* argv[]) {
 #ifndef _WIN32
         if(root.exists("pidfile")) pidfile = strdup(root["pidfile"]);
 #endif
+        if(root.exists("tau"))
+            alpha = ((int)root["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)root["tau"])));
         Setting &devs = config.lookup("devices");
         device_count = devs.getLength();
         if (device_count < 1) {

@@ -47,6 +47,13 @@
 # This setting has no effect on Windows.
 # pidfile = /run/rtl_airband.pid
 
+# De-emphasis filter time constant
+# The filter suppresses high-frequency noise in NFM channels.
+# Larger values cause more noise suppression.
+# Set it to 0 if you don't want filtering.
+# Default value: 200 (microseconds).
+# tau = 200;
+
 # devices section contains all settings related to the RTLSDR receivers.
 #
 # It's a list of groups - each group contains settings for a single receiver,
@@ -80,6 +87,8 @@ devices = (
 # (ie. +- 1.25 MHz around center frequency)
 # This setting is valid in multichannel mode only.
         freq = 118925000;
+# Modulation - "am" or "nfm". Default is "am".
+	modulation = "am";
 # Multiple outputs per channel are supported. For example, a single channel
 # can be sent to multiple Shoutcast servers.
         outputs = (
@@ -105,6 +114,9 @@ devices = (
 # Subsequent channels
       {
         freq = 119100000;
+# You can use both AM and NFM modulations for different channels on the same dongle.
+# Probably not very useful in multichannel mode, but it's possible.
+	modulation = "nfm";
 # This channel is streamed to two destinations
         outputs = (
 	  {
@@ -127,6 +139,7 @@ devices = (
       },
       {
         freq = 119500000;
+	modulation = "am";
 # This channel is streamed to Icecast and saved to local files
         outputs = (
 	  {
@@ -153,6 +166,7 @@ devices = (
       },
       {
         freq = 120600000;
+	modulation = "am";
 # This channel is not streamed to Icecast.
 # It is saved to local files into two destinations - one of them records continuously, the other one
 # skips silence periods.
@@ -173,6 +187,7 @@ devices = (
       },
       {
         freq = 121300000;
+	modulation = "am";
         outputs = (
 	  {
             type = "icecast";
@@ -186,6 +201,7 @@ devices = (
       },
       {
         freq = 121600000;
+	modulation = "am";
         outputs = (
 	  {
             type = "icecast";
@@ -198,7 +214,7 @@ devices = (
 	);
       } );
   },
-# Receiver 1 - multichannel mode
+# Receiver 1 - multichannel mode, 4 NFM channels
   {
     index = 1;
     gain = 28;
@@ -207,59 +223,63 @@ devices = (
     correction = 80;
     channels = (
       {
-        freq = 122000000;
+        freq = 152000000;
+	modulation = "nfm";
         outputs = (
 	  {
             type = "icecast";
             server = "www.example.com";
             port = 8000;
-            mountpoint = "122000.mp3";
+            mountpoint = "152000.mp3";
             username = "source";
             password = "password";
 	  }
 	);
       },
       {
-        freq = 122950000;
+        freq = 152100000;
+	modulation = "nfm";
         outputs = (
 	  {
             type = "icecast";
             server = "www.example.com";
             port = 8000;
-            mountpoint = "122950.mp3";
+            mountpoint = "152100.mp3";
             username = "source";
             password = "password";
 	  }
 	);
       },
       {
-        freq = 123800000;
+        freq = 152200000;
+	modulation = "nfm";
         outputs = (
 	  {
             type = "icecast";
             server = "www.example.com";
             port = 8000;
-            mountpoint = "123800.mp3";
+            mountpoint = "152200.mp3";
             username = "source";
             password = "password";
 	  }
 	);
       },
       {
-        freq = 123950000;
+        freq = 152300000;
+	modulation = "nfm";
         outputs = (
 	  {
             type = "icecast";
             server = "www.example.com";
             port = 8000;
-            mountpoint = "123950.mp3";
+            mountpoint = "152300.mp3";
             username = "source";
             password = "password";
 	  }
 	);
       } );
   },
-# Receiver 2 - scan mode
+# Receiver 2 - scan mode, AM modulation (default)
   {
     index = 2;
     gain = 28;

@@ -1,12 +1,12 @@
 RTLSDR-Airband
 =====================
 
-RTLSDR Airband is intended for Airband reception and online streaming to services such as liveatc.net
+RTLSDR Airband is intended for AM/NFM voice channels reception and online streaming to services such as liveatc.net
 
 Features
 ---------------------
- * Multichannel mode - decode up to eight AM channels per dongle (within bandwidth frequency range)
- * Scanner mode - decode unlimited number of AM channels with frequency hopping in a round-robin
+ * Multichannel mode - decode up to eight AM or NFM channels per dongle (within bandwidth frequency range)
+ * Scanner mode - decode unlimited number of AM and/or NFM channels with frequency hopping in a round-robin
    fashion (no frequency range limitations)
  * Decode multiple dongles simutaneously
  * Auto squelch and Automatic Gain Control
@@ -278,7 +278,7 @@ any error messages, for example: `tail /var/log/messages`. Common problems:
 
 License
 --------------------
-Copyright (C) 2015 Tomasz Lemiech <szpajder@gmail.com>
+Copyright (C) 2015-2016 Tomasz Lemiech <szpajder@gmail.com>
 
 Based on original work by Wong Man Hang <microtony@gmail.com>
 

@@ -821,8 +821,9 @@ void demodulate() {
                             channel->waveout[j] = polar_discriminant(rotated_r, rotated_j, channel->pr, channel->pj);
                             channel->pr = rotated_r;
                             channel->pj = rotated_j;
-// de-emphasis IIR
-                            channel->waveout[j] = channel->waveout[j] * (1.0f - alpha) + channel->waveout[j-1] * alpha;
+// de-emphasis IIR + DC blocking
+                            channel->agcavgfast = channel->agcavgfast * 0.995f + channel->waveout[j] * 0.005f;
+                            channel->waveout[j] = channel->waveout[j] * (1.0f - alpha) + channel->waveout[j-1] * alpha - channel->agcavgfast;
                         }
                     }
                     if(channel->modulation == MOD_NFM) 

@@ -165,6 +165,8 @@ struct channel_t {
     float waveref[WAVE_LEN]; // for power level calculation
     float waveout[WAVE_LEN]; // waveform after squelch + AGC
     float complex_samples[2*WAVE_LEN];  // raw samples for NFM demod
+    float timeref_nsin[WAVE_RATE];
+    float timeref_cos[WAVE_RATE];
     int wavecnt;             // sample counter for timeref shift
 // FIXME: get this from complex_samples?
     float pr;                // previous sample - real part
@@ -197,7 +199,6 @@ struct device_t {
     int channel_count;
     int bins[8];
     channel_t channels[8];
-    float timeref_freq[8];
     int waveend;
     int waveavail;
     THREAD rtl_thread;
@@ -814,8 +815,8 @@ void demodulate() {
                         } else {    // NFM
                             multiply(channel->complex_samples[2*(j - AGC_EXTRA)], channel->complex_samples[2*(j - AGC_EXTRA)+1],
 // FIXME: use j instead of wavecnt?
-                              cosf(dev->timeref_freq[i] * (float)channel->wavecnt),
-                              -sinf(dev->timeref_freq[i] * (float)channel->wavecnt),
+                              channel->timeref_cos[channel->wavecnt],
+                              channel->timeref_nsin[channel->wavecnt],
                               &rotated_r,
                               &rotated_j);
                             channel->waveout[j] = polar_discriminant(rotated_r, rotated_j, channel->pr, channel->pj);
@@ -1097,11 +1098,17 @@ int main(int argc, char* argv[]) {
                     channel->outputs[o].active = false;
                 }
                 dev->bins[j] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
-// Calculate mixing frequencies needed for NFM to remove linear phase shift caused by FFT sliding window
+                if(channel->modulation == MOD_NFM) {
+// Calculate mixing frequency needed for NFM to remove linear phase shift caused by FFT sliding window
 // This equals bin_width_Hz * (distance_from_DC_bin)
-                dev->timeref_freq[j] = 2.0 * M_PI * (float)(SOURCE_RATE / FFT_SIZE) *
-                    (float)(dev->bins[j] < (FFT_SIZE >> 1) ? dev->bins[j] + 1 : dev->bins[j] - FFT_SIZE + 1) / (float)WAVE_RATE;
-
+                    float timeref_freq = 2.0f * M_PI * (float)(SOURCE_RATE / FFT_SIZE) *
+                      (float)(dev->bins[j] < (FFT_SIZE >> 1) ? dev->bins[j] + 1 : dev->bins[j] - FFT_SIZE + 1) / (float)WAVE_RATE;
+// Pre-generate the waveform for better performance
+                    for(int k = 0; k < WAVE_RATE; k++) {
+                        channel->timeref_cos[k] = cosf(timeref_freq * k);
+                        channel->timeref_nsin[k] = -sinf(timeref_freq * k);
+                    }
+                }
             }
         }
     } catch(FileIOException e) {

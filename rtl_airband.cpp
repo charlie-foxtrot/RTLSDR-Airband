@@ -172,6 +172,7 @@ struct channel_t {
     float pr;                // previous sample - real part
     float pj;                // previous sample - imaginary part
     enum modulations modulation;
+    float alpha;
     int agcsq;             // squelch status, 0 = signal, 1 = suppressed
     char agcindicate;  // squelch status indicator
     float agcavgfast;  // average power, for AGC
@@ -196,6 +197,7 @@ struct device_t {
     int centerfreq;
     int correction;
     int gain;
+    float alpha;
     int channel_count;
     int bins[8];
     channel_t channels[8];
@@ -825,7 +827,7 @@ void demodulate() {
 // de-emphasis IIR + DC blocking
                             channel->agcavgfast = channel->agcavgfast * 0.995f + channel->waveout[j] * 0.005f;
                             channel->waveout[j] -= channel->agcavgfast;
-                            channel->waveout[j] = channel->waveout[j] * (1.0f - alpha) + channel->waveout[j-1] * alpha;
+                            channel->waveout[j] = channel->waveout[j] * (1.0f - channel->alpha) + channel->waveout[j-1] * channel->alpha;
                         }
                     }
                     if(channel->modulation == MOD_NFM) 
@@ -1002,6 +1004,11 @@ int main(int argc, char* argv[]) {
                 cerr<<"Configuration error: devices.["<<i<<"]: only one channel section is allowed in scan mode\n";
                 error();
             }
+            if(devs[i].exists("tau")) {
+                dev->alpha = ((int)devs[i]["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)devs[i]["tau"])));
+            } else {
+                dev->alpha = alpha;
+            }
             dev->correction = (int)devs[i]["correction"];
             dev->bins[0] = dev->bins[1] = dev->bins[2] = dev->bins[3] = dev->bins[4] = dev->bins[5] = dev->bins[6] = dev->bins[7] = 0;
             dev->bufs = dev->bufe = dev->waveend = dev->waveavail = dev->row = 0;
@@ -1048,6 +1055,11 @@ int main(int argc, char* argv[]) {
 // We tune 2 FFT bins higher to avoid DC spike
                     channel->frequency = channel->freqlist[0];
                     dev->centerfreq = channel->freqlist[0] + 2 * (double)(SOURCE_RATE / FFT_SIZE);
+                }
+                if(devs[i]["channels"][j].exists("tau")) {
+                    channel->alpha = ((int)devs[i]["channels"][j]["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)devs[i]["channels"][j]["tau"])));
+                } else {
+                    channel->alpha = dev->alpha;
                 }
                 channel->output_count = devs[i]["channels"][j]["outputs"].getLength();
                 if(channel->output_count < 1) {

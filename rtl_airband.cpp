@@ -824,7 +824,8 @@ void demodulate() {
                             channel->pj = rotated_j;
 // de-emphasis IIR + DC blocking
                             channel->agcavgfast = channel->agcavgfast * 0.995f + channel->waveout[j] * 0.005f;
-                            channel->waveout[j] = channel->waveout[j] * (1.0f - alpha) + channel->waveout[j-1] * alpha - channel->agcavgfast;
+                            channel->waveout[j] -= channel->agcavgfast;
+                            channel->waveout[j] = channel->waveout[j] * (1.0f - alpha) + channel->waveout[j-1] * alpha;
                         }
                     }
                     if(channel->modulation == MOD_NFM) 

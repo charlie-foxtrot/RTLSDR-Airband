@@ -43,6 +43,9 @@ else ifeq ($(PLATFORM), x86)
 else
   DEPS =
 endif
+ifeq ($(NFM), 1)
+  CFLAGS += -DNFM
+endif
 
 $(BIN): $(DEPS)
 ifndef DEPS
@@ -50,7 +53,11 @@ ifndef DEPS
 	\tPLATFORM=rpiv1 make\t\tRaspberry Pi V1 (VFP FPU, use BCM VideoCore for FFT)\n \
 	\tPLATFORM=rpiv2 make\t\tRaspberry Pi V2 (NEON FPU, use BCM VideoCore for FFT)\n \
 	\tPLATFORM=armv7-generic make\tOther ARMv7 platforms, like Cubieboard (NEON FPU, use main CPU for FFT)\n \
-	\tPLATFORM=x86 make\t\tbuild binary for x86\n\n"
+	\tPLATFORM=x86 make\t\tbuild binary for x86\n\n \
+	Additional options:\n \
+	\tNFM=1\t\t\t\tInclude support for Narrow FM demodulation\n \
+	\t\t\t\t\tWarning: this incurs noticeable performance penalty both for AM and FM\n \
+	\t\t\t\t\tDo not enable NFM, if you only use AM (especially on low-power platforms, like RPi)\n\n"
 	@false
 endif
 

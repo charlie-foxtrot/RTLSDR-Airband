@@ -107,7 +107,7 @@ Building
  * Install RTLSDR library (http://sdr.osmocom.org/trac/wiki/rtl-sdr):
 
         sudo apt-get update
-        sudo apt-get install git gcc autoconf make libusb-1.0-0-dev
+        sudo apt-get install git gcc autoconf make libusb-1.0-0-dev libtool
         cd
         git clone git://git.osmocom.org/rtl-sdr.git
         cd rtl-sdr/
@@ -143,26 +143,39 @@ Building
 
         sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev libconfig++-dev
 
- * Set the PLATFORM environment variable (to indicate your hardware platform) and run `make`.
-   For example, to build a binary for RPi version 1 (ARMv6 CPU, Broadcom VideoCore GPU) type
-   the following:
+ * Set the build options and run `make`. Available build options:
+
+   `PLATFORM=platform_name` - selects the hardware platform. This option is mandatory. See below.
+
+   `NFM=1` - enables NFM support. By default, NFM is disabled.
+
+   **Warning:** Do not enable NFM, if you only use AM (especially on low-power platforms, like RPi).
+   This incurs performance penalty, both for AM and NFM.
+
+   Examples:
+
+   Build a binary for RPi version 1 (ARMv6 CPU, Broadcom VideoCore GPU):
 
         PLATFORM=rpiv1 make
 
-   Building for RPi V2 (ARMv7 CPU, Broadcom VideoCore GPU):
+   Same platform, but with NFM support enabled:
 
-        PLATFORM=rpiv2 make
+        PLATFORM=rpiv1 NFM=1 make
+
+   Building for RPi V2 (ARMv7 CPU, Broadcom VideoCore GPU), with NFM support:
+
+        PLATFORM=rpiv2 NFM=1 make
 
    Building for other ARMv7-based platforms without VideoCore GPU, eg. Cubieboard (FFTW3
-   library is needed in this case):
+   library is needed in this case), NFM disabled:
 
         sudo apt-get install libfftw3-dev
         PLATFORM=armv7-generic make
 
-   Building for generic x86 CPU (FFTW3 library is needed in this case):
+   Building for generic x86 CPU (FFTW3 library is needed in this case), NFM enabled:
 
         sudo apt-get install libfftw3-dev
-        PLATFORM=x86 make
+        PLATFORM=x86 NFM=1 make
 
  * Install the software:
 

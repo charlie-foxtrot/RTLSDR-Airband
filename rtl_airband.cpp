@@ -106,12 +106,16 @@
 
 #define BUF_SIZE 2560000
 #define SOURCE_RATE 2560000
+#ifdef NFM
 #define WAVE_RATE 16000
-#define WAVE_BATCH 1000
-#define WAVE_LEN 2048
-#define MP3_RATE 16000
+#else
+#define WAVE_RATE 8000
+#endif
+#define WAVE_BATCH WAVE_RATE / 8
+#define AGC_EXTRA WAVE_RATE / 160
+#define WAVE_LEN 2 * WAVE_BATCH + AGC_EXTRA
+#define MP3_RATE WAVE_RATE
 #define MAX_SHOUT_QUEUELEN 32768
-#define AGC_EXTRA 48
 #define FFT_SIZE 512
 #define CHANNELS 8
 
@@ -159,16 +163,26 @@ struct file_data {
     FILE *f;
 };
 
-enum modulations { MOD_AM, MOD_NFM };
+enum modulations { 
+    MOD_AM
+#ifdef NFM
+    , MOD_NFM
+#endif
+};
 struct channel_t {
     float wavein[WAVE_LEN];  // FFT output waveform
     float waveref[WAVE_LEN]; // for power level calculation
     float waveout[WAVE_LEN]; // waveform after squelch + AGC
+#ifdef NFM
     float complex_samples[2*WAVE_LEN];  // raw samples for NFM demod
+    float timeref_nsin[WAVE_RATE];
+    float timeref_cos[WAVE_RATE];
     int wavecnt;             // sample counter for timeref shift
 // FIXME: get this from complex_samples?
     float pr;                // previous sample - real part
     float pj;                // previous sample - imaginary part
+    float alpha;
+#endif
     enum modulations modulation;
     int agcsq;             // squelch status, 0 = signal, 1 = suppressed
     char agcindicate;  // squelch status indicator
@@ -194,10 +208,12 @@ struct device_t {
     int centerfreq;
     int correction;
     int gain;
+#ifdef NFM
+    float alpha;
+#endif
     int channel_count;
     int bins[8];
     channel_t channels[8];
-    float timeref_freq[8];
     int waveend;
     int waveavail;
     THREAD rtl_thread;
@@ -216,7 +232,9 @@ int avx;
 #endif
 int foreground = 0, do_syslog = 1;
 static volatile int do_exit = 0;
+#ifdef NFM
 float alpha = exp(-1.0f/(WAVE_RATE * 2e-4));
+#endif
 
 void error() {
 #ifdef _WIN32
@@ -554,6 +572,7 @@ void* icecast_check(void* params) {
 #endif
 }
 
+#ifdef NFM
 void multiply(float ar, float aj, float br, float bj, float *cr, float *cj)
 {
     *cr = ar*br - aj*bj;
@@ -568,6 +587,7 @@ float polar_discriminant(float ar, float aj, float br, float bj)
     angle = atan2((double)cj, (double)cr);
     return (float)(angle * M_1_PI);
 }
+#endif
 
 void demodulate() {
 
@@ -593,7 +613,9 @@ void demodulate() {
     sizes[1] = sizeof(channel_t);
 #endif
 
+#ifdef NFM
     float rotated_r, rotated_j;
+#endif
     ALIGN float ALIGN2 levels[256];
     for (int i=0; i<256; i++) {
         levels[i] = i-127.5f;
@@ -704,6 +726,7 @@ void demodulate() {
 
 #ifdef USE_BCM_VC
         fftwave(dev->channels[0].wavein + dev->waveend, fft->out, sizes, dev->bins);
+#ifdef NFM
         for (int j = 0; j < dev->channel_count; j++) {
             if(dev->channels[j].modulation == MOD_NFM) {
                 struct GPU_FFT_COMPLEX *ptr = fft->out;
@@ -714,16 +737,19 @@ void demodulate() {
                 }
             }
         }
+#endif // NFM
 #else
         for (int j = 0; j < dev->channel_count; j++) {
             dev->channels[j].wavein[dev->waveend] =
               sqrtf(fftout[dev->bins[j]][0] * fftout[dev->bins[j]][0] + fftout[dev->bins[j]][1] * fftout[dev->bins[j]][1]);
+#ifdef NFM
             if(dev->channels[j].modulation == MOD_NFM) {
                 dev->channels[j].complex_samples[2*dev->waveend] = fftout[dev->bins[j]][0];
                 dev->channels[j].complex_samples[2*dev->waveend+1] = fftout[dev->bins[j]][1];
             }
+#endif // NFM
         }
-#endif
+#endif // USE_BCM_VC
 
         dev->waveend += FFT_BATCH;
         
@@ -811,11 +837,13 @@ void demodulate() {
                                 channel->waveout[j] *= 0.85f;
                                 channel->agcavgfast *= 1.15f;
                             }
-                        } else {    // NFM
+                        }
+#ifdef NFM
+                        else {    // NFM
                             multiply(channel->complex_samples[2*(j - AGC_EXTRA)], channel->complex_samples[2*(j - AGC_EXTRA)+1],
 // FIXME: use j instead of wavecnt?
-                              cosf(dev->timeref_freq[i] * (float)channel->wavecnt),
-                              -sinf(dev->timeref_freq[i] * (float)channel->wavecnt),
+                              channel->timeref_cos[channel->wavecnt],
+                              channel->timeref_nsin[channel->wavecnt],
                               &rotated_r,
                               &rotated_j);
                             channel->waveout[j] = polar_discriminant(rotated_r, rotated_j, channel->pr, channel->pj);
@@ -823,19 +851,25 @@ void demodulate() {
                             channel->pj = rotated_j;
 // de-emphasis IIR + DC blocking
                             channel->agcavgfast = channel->agcavgfast * 0.995f + channel->waveout[j] * 0.005f;
-                            channel->waveout[j] = channel->waveout[j] * (1.0f - alpha) + channel->waveout[j-1] * alpha - channel->agcavgfast;
+                            channel->waveout[j] -= channel->agcavgfast;
+                            channel->waveout[j] = channel->waveout[j] * (1.0f - channel->alpha) + channel->waveout[j-1] * channel->alpha;
                         }
+#endif // NFM
                     }
+#ifdef NFM
                     if(channel->modulation == MOD_NFM) 
                         channel->wavecnt = (channel->wavecnt + 1) % WAVE_RATE;
+#endif // NFM
                 }
 #ifdef _WIN32
                 process_outputs(channel);
                 memcpy(channel->waveout, channel->waveout + WAVE_BATCH, AGC_EXTRA * 4);
 #endif
                 memcpy(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4);
+#ifdef NFM
                 if(channel->modulation == MOD_NFM)
                     memcpy(channel->complex_samples, channel->complex_samples + 2 * WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4 * 2);
+#endif
                 if (foreground) {
                     if(dev->mode == R_SCAN)
                         printf("%4.0f/%3.0f%c %7.3f", channel->agcavgslow, channel->agcmin, channel->agcindicate, (dev->channels[0].frequency / 1000000.0));
@@ -930,8 +964,10 @@ int main(int argc, char* argv[]) {
 #ifndef _WIN32
         if(root.exists("pidfile")) pidfile = strdup(root["pidfile"]);
 #endif
+#ifdef NFM
         if(root.exists("tau"))
             alpha = ((int)root["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)root["tau"])));
+#endif
         Setting &devs = config.lookup("devices");
         device_count = devs.getLength();
         if (device_count < 1) {
@@ -1000,6 +1036,13 @@ int main(int argc, char* argv[]) {
                 cerr<<"Configuration error: devices.["<<i<<"]: only one channel section is allowed in scan mode\n";
                 error();
             }
+#ifdef NFM
+            if(devs[i].exists("tau")) {
+                dev->alpha = ((int)devs[i]["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)devs[i]["tau"])));
+            } else {
+                dev->alpha = alpha;
+            }
+#endif
             dev->correction = (int)devs[i]["correction"];
             dev->bins[0] = dev->bins[1] = dev->bins[2] = dev->bins[3] = dev->bins[4] = dev->bins[5] = dev->bins[6] = dev->bins[7] = 0;
             dev->bufs = dev->bufe = dev->waveend = dev->waveavail = dev->row = 0;
@@ -1017,12 +1060,15 @@ int main(int argc, char* argv[]) {
                 channel->agclow = 0;
                 channel->modulation = MOD_AM;
                 if(devs[i]["channels"][j].exists("modulation")) {
+#ifdef NFM
                     if(!strncmp(devs[i]["channels"][j]["modulation"], "nfm", 3)) {
                         channel->modulation = MOD_NFM;
-                    } else if(!strncmp(devs[i]["channels"][j]["modulation"], "am", 2)) {
+                    } else 
+#endif
+                    if(!strncmp(devs[i]["channels"][j]["modulation"], "am", 2)) {
                         channel->modulation = MOD_AM;
                     } else {
-                        cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: invalid modulation (must be one of: \"am\", \"nfm\")\n";
+                        cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: unknown modulation\n";
                         error();
                     }
                 }
@@ -1047,6 +1093,13 @@ int main(int argc, char* argv[]) {
                     channel->frequency = channel->freqlist[0];
                     dev->centerfreq = channel->freqlist[0] + 2 * (double)(SOURCE_RATE / FFT_SIZE);
                 }
+#ifdef NFM
+                if(devs[i]["channels"][j].exists("tau")) {
+                    channel->alpha = ((int)devs[i]["channels"][j]["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)devs[i]["channels"][j]["tau"])));
+                } else {
+                    channel->alpha = dev->alpha;
+                }
+#endif
                 channel->output_count = devs[i]["channels"][j]["outputs"].getLength();
                 if(channel->output_count < 1) {
                     cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: no outputs defined\n";
@@ -1097,11 +1150,19 @@ int main(int argc, char* argv[]) {
                     channel->outputs[o].active = false;
                 }
                 dev->bins[j] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
-// Calculate mixing frequencies needed for NFM to remove linear phase shift caused by FFT sliding window
+#ifdef NFM
+                if(channel->modulation == MOD_NFM) {
+// Calculate mixing frequency needed for NFM to remove linear phase shift caused by FFT sliding window
 // This equals bin_width_Hz * (distance_from_DC_bin)
-                dev->timeref_freq[j] = 2.0 * M_PI * (float)(SOURCE_RATE / FFT_SIZE) *
-                    (float)(dev->bins[j] < (FFT_SIZE >> 1) ? dev->bins[j] + 1 : dev->bins[j] - FFT_SIZE + 1) / (float)WAVE_RATE;
-
+                    float timeref_freq = 2.0f * M_PI * (float)(SOURCE_RATE / FFT_SIZE) *
+                      (float)(dev->bins[j] < (FFT_SIZE >> 1) ? dev->bins[j] + 1 : dev->bins[j] - FFT_SIZE + 1) / (float)WAVE_RATE;
+// Pre-generate the waveform for better performance
+                    for(int k = 0; k < WAVE_RATE; k++) {
+                        channel->timeref_cos[k] = cosf(timeref_freq * k);
+                        channel->timeref_nsin[k] = -sinf(timeref_freq * k);
+                    }
+                }
+#endif
             }
         }
     } catch(FileIOException e) {

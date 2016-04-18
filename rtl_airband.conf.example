@@ -52,6 +52,7 @@
 # Larger values cause more noise suppression.
 # Set it to 0 if you don't want filtering.
 # Default value: 200 (microseconds).
+# You can also set this parameter per dongle and / or per channel.
 # tau = 200;
 
 # devices section contains all settings related to the RTLSDR receivers.
@@ -221,6 +222,9 @@ devices = (
     mode = "multichannel";
     centerfreq = 123000000;
     correction = 80;
+# De-emphasis filter time constant
+# This setting overrides the global tau setting for all channels on this dongle
+    tau = 0;
     channels = (
       {
         freq = 152000000;
@@ -239,6 +243,9 @@ devices = (
       {
         freq = 152100000;
 	modulation = "nfm";
+# De-emphasis filter time constant
+# Applies to this channel only
+	tau = 500;
         outputs = (
 	  {
             type = "icecast";

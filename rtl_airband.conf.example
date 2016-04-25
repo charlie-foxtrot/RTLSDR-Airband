@@ -80,6 +80,11 @@ devices = (
 # (ie. +- 1.25 MHz around center frequency)
 # This setting is valid in multichannel mode only.
         freq = 118925000;
+
+#Automatioc Frequency Control (AFC) level (optional value)
+#0 - disabled (by default)
+#value from range 1...255 - AGC enabled, larger value means more aggressive AGC
+        afc = 0;
 # Multiple outputs per channel are supported. For example, a single channel
 # can be sent to multiple Shoutcast servers.
         outputs = (

@@ -112,16 +112,17 @@
 #define MP3_RATE 8000
 #define MAX_SHOUT_QUEUELEN 32768
 #define AGC_EXTRA 48
-#define FFT_SIZE 512
 #define CHANNELS 8
 
 #if defined USE_BCM_VC
 extern "C" void samplefft(GPU_FFT_COMPLEX* dest, unsigned char* buffer, float* window, float* levels);
 extern "C" void fftwave(float* dest, GPU_FFT_COMPLEX* src, int* sizes, int* bins);
-#define FFT_SIZE_LOG 9
-#define FFT_BATCH 250
+# define FFT_SIZE_LOG 9
+# define FFT_SIZE (2<<(FFT_SIZE_LOG - 1))
+# define FFT_BATCH 250
 #else
-#define FFT_BATCH 1
+# define FFT_SIZE 512
+# define FFT_BATCH 1
 #endif
 #if defined _WIN32
 #pragma comment (lib, "Ws2_32.lib")
@@ -164,11 +165,12 @@ struct channel_t {
     float waveref[WAVE_LEN]; // for power level calculation
     float waveout[WAVE_LEN]; // waveform after squelch + AGC
     int agcsq;             // squelch status, 0 = signal, 1 = suppressed
-    char agcindicate;  // squelch status indicator
     float agcavgfast;  // average power, for AGC
     float agcavgslow;  // average power, for squelch level detection
     float agcmin;      // noise level
     int agclow;             // low level sample count
+    char agcindicate;  // squelch status indicator
+    unsigned char afc; //0 - AFC disabled; 1 - minimal AFC; 2 - more aggressive AFC and so on to 255
     int frequency;
     int freq_count;
     int *freqlist;
@@ -188,6 +190,7 @@ struct device_t {
     int correction;
     int gain;
     int channel_count;
+    int base_bins[8];
     int bins[8];
     channel_t channels[8];
     int waveend;
@@ -201,7 +204,7 @@ struct device_t {
 
 device_t* devices;
 int device_count;
-int device_opened = 0;
+volatile int device_opened = 0;
 #ifdef _WIN32
 int avx;
 #endif
@@ -213,6 +216,34 @@ void error() {
     system("pause");
 #endif
     exit(1);
+}
+
+
+int atomic_inc(volatile int *pv)
+{
+#ifdef _WIN32
+    return InterlockedIncrement((volatile LONG *)pv);
+#else
+    return __sync_fetch_and_add(pv, 1);
+#endif
+}
+
+int atomic_dec(volatile int *pv)
+{
+#ifdef _WIN32
+    return InterlockedDecrement((volatile LONG *)pv);
+#else
+    return __sync_fetch_and_sub(pv, 1);
+#endif
+}
+
+int atomic_get(volatile int *pv)
+{
+#ifdef _WIN32
+    return InterlockedCompareExchange((volatile LONG *)pv, 0, 0);
+#else
+    return __sync_fetch_and_add(pv, 0);
+#endif
 }
 
 void log(int priority, const char *format, ...) {
@@ -262,33 +293,49 @@ void rtlsdr_exec(void* params) {
 #else
 void* rtlsdr_exec(void* params) {
 #endif
+    int r;
     device_t *dev = (device_t*)params;
+
+    dev->rtlsdr = NULL;
     rtlsdr_open(&dev->rtlsdr, dev->device);
-    if (NULL == dev) {
+
+    if (NULL == dev->rtlsdr) {
         log(LOG_ERR, "Failed to open rtlsdr device #%d.\n", dev->device);
         error();
         return NULL;
     }
-    rtlsdr_set_sample_rate(dev->rtlsdr, SOURCE_RATE);
-    rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);
-    rtlsdr_set_freq_correction(dev->rtlsdr, dev->correction);
+    r = rtlsdr_set_sample_rate(dev->rtlsdr, SOURCE_RATE);
+    if (r < 0) log(LOG_ERR, "Failed to set sample rate for device #%d. Error %d.\n", dev->device, r);
+    r = rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);
+    if (r < 0) log(LOG_ERR, "Failed to set center freq for device #%d. Error %d.\n", dev->device, r);
+    r = rtlsdr_set_freq_correction(dev->rtlsdr, dev->correction);
+    if (r < 0 && r != -2 ) log(LOG_ERR, "Failed to set freq correction for device #%d. Error %d.\n", dev->device, r);
+
     if(dev->gain == AUTO_GAIN) {
-        rtlsdr_set_tuner_gain_mode(dev->rtlsdr, 0);
-        log(LOG_INFO, "Device #%d: gain set to automatic\n", dev->device);
+        r = rtlsdr_set_tuner_gain_mode(dev->rtlsdr, 0);
+        if (r < 0)
+            log(LOG_ERR, "Failed to set automatic gain for device #%d. Error %d.\n", dev->device, r);
+        else
+            log(LOG_INFO, "Device #%d: gain set to automatic\n", dev->device);
     } else {
-        rtlsdr_set_tuner_gain_mode(dev->rtlsdr, 1);
-        rtlsdr_set_tuner_gain(dev->rtlsdr, dev->gain);
-        log(LOG_INFO, "Device #%d: gain set to %0.2f dB\n", dev->device, (float)rtlsdr_get_tuner_gain(dev->rtlsdr) / 10.0);
+        r = rtlsdr_set_tuner_gain_mode(dev->rtlsdr, 1);
+        r |= rtlsdr_set_tuner_gain(dev->rtlsdr, dev->gain);
+        if (r < 0)
+            log(LOG_ERR, "Failed to set gain to %0.2f for device #%d. Error %d.\n", (float)rtlsdr_get_tuner_gain(dev->rtlsdr) / 10.0, dev->device, r);
+        else
+            log(LOG_INFO, "Device #%d: gain set to %0.2f dB\n", dev->device, (float)rtlsdr_get_tuner_gain(dev->rtlsdr) / 10.0);
     }
-    rtlsdr_set_agc_mode(dev->rtlsdr, 0);
+
+    r = rtlsdr_set_agc_mode(dev->rtlsdr, 0);
+    if (r < 0) log(LOG_ERR, "Failed to disable AGC for device #%d. Error %d.\n", dev->device, r);
     rtlsdr_reset_buffer(dev->rtlsdr);
     log(LOG_INFO, "Device %d started.\n", dev->device);
-    device_opened++;
+    atomic_inc(&device_opened);
     dev->failed = 0;
     if(rtlsdr_read_async(dev->rtlsdr, rtlsdr_callback, params, 15, 320000) < 0) {
         log(LOG_WARNING, "Device #%d: async read failed, disabling\n", dev->device);
         dev->failed = 1;
-        device_opened--;
+        atomic_dec(&device_opened);
     }
     return 0;
 }
@@ -544,6 +591,80 @@ void* icecast_check(void* params) {
 #endif
 }
 
+class AFC
+{
+    const char _prev_agcindicate;
+
+#ifdef USE_BCM_VC
+    float square(const GPU_FFT_COMPLEX *fft_results, int index)
+    {
+        return fft_results[index].re * fft_results[index].re + fft_results[index].im * fft_results[index].im;
+    }
+#else
+    float square(const fftwf_complex *fft_results, int index)
+    {
+        return fft_results[index][0] * fft_results[index][0] + fft_results[index][1] * fft_results[index][1];
+    }
+#endif
+    template <class FFT_RESULTS, int STEP>
+        int check(const FFT_RESULTS* fft_results, const int base, const float base_value, unsigned char afc)
+    {
+        float threshold = 0;
+        int bin;
+        for (bin = base;; bin+= STEP) {
+            if (STEP < 0) {
+              if (bin < -STEP)
+                  break;
+
+            } else if ( (bin + STEP) >= FFT_SIZE) 
+                  break;
+
+            const float value = square(fft_results, bin + STEP);
+            if (value <= base_value) 
+                break;
+             
+            if (base == bin) {
+                threshold = (value - base_value) / (float)afc;
+            } else {
+                if ((value - base_value) < threshold)
+                    break;
+
+                threshold+= threshold / 10.0;
+            }
+        }
+        return bin;
+    }
+
+public:
+    AFC(device_t* dev, int index) : _prev_agcindicate(dev->channels[index].agcindicate)
+    {
+    }
+
+    template <class FFT_RESULTS>
+        void finalize(device_t* dev, int index, const FFT_RESULTS* fft_results)
+    {
+        channel_t *channel = &dev->channels[index];
+        if (channel->afc==0)
+            return;
+
+        const char agcindicate = channel->agcindicate;
+        if (agcindicate != ' ' && _prev_agcindicate == ' ') {
+            const int base = dev->base_bins[index];
+            const float base_value = square(fft_results, base);
+            int bin = check<FFT_RESULTS, -1>(fft_results, base, base_value, channel->afc);
+            if (bin == base)
+                bin = check<FFT_RESULTS, 1>(fft_results, base, base_value, channel->afc);
+
+             if (dev->bins[index] != bin) {
+                 log(LOG_INFO, "AFC device=%d channel=%d: base=%d prev=%d now=%d\n", dev->device, index, base, dev->bins[index], bin);
+                 dev->bins[index] = bin;
+             }
+        }
+        else if (agcindicate == ' ' && _prev_agcindicate != ' ')
+            dev->bins[index] = dev->base_bins[index];
+    }
+};
+
 void demodulate() {
 
     // initialize fft engine
@@ -610,7 +731,7 @@ void demodulate() {
             available = (BUF_SIZE - dev->bufe) + dev->bufs;
         }
 
-        if(!device_opened) {
+        if(atomic_get(&device_opened)==0) {
             log(LOG_ERR, "All receivers failed, exiting\n");
             do_exit = 1;
             continue;
@@ -680,8 +801,9 @@ void demodulate() {
         fftwave(dev->channels[0].wavein + dev->waveend, fft->out, sizes, dev->bins);
 #else
         for (int j = 0; j < dev->channel_count; j++) {
+            int bin = dev->bins[j];
             dev->channels[j].wavein[dev->waveend] =
-              sqrtf(fftout[dev->bins[j]][0] * fftout[dev->bins[j]][0] + fftout[dev->bins[j]][1] * fftout[dev->bins[j]][1]);
+              sqrtf(fftout[bin][0] * fftout[bin][0] + fftout[bin][1] * fftout[bin][1]);
         }
 #endif
 
@@ -692,6 +814,7 @@ void demodulate() {
                 GOTOXY(0, device_num * 17 + dev->row + 3);
             }
             for (int i = 0; i < dev->channel_count; i++) {
+                AFC afc(dev, i);
                 channel_t* channel = dev->channels + i;
 #if defined __arm__
                 float agcmin2 = channel->agcmin * 4.5f;
@@ -765,9 +888,9 @@ void demodulate() {
                 }
 #ifdef _WIN32
                 process_outputs(channel);
-                memcpy(channel->waveout, channel->waveout + WAVE_BATCH, AGC_EXTRA * 4);
+                memmove(channel->waveout, channel->waveout + WAVE_BATCH, AGC_EXTRA * 4);
 #endif
-                memcpy(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4);
+                memmove(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4);
                 if (foreground) {
                     if(dev->mode == R_SCAN)
                         printf("%4.0f/%3.0f%c %7.3f", channel->agcavgslow, channel->agcmin, channel->agcindicate, (dev->channels[0].frequency / 1000000.0));
@@ -775,6 +898,11 @@ void demodulate() {
                         printf("%4.0f/%3.0f%c", channel->agcavgslow, channel->agcmin, channel->agcindicate);
                     fflush(stdout);
                 }
+#ifdef USE_BCM_VC
+                afc.finalize(dev, i, fft->out);
+#else
+                afc.finalize(dev, i, fftout);
+#endif
             }
             dev->waveavail = 1;
             dev->waveend -= WAVE_BATCH;
@@ -931,7 +1059,8 @@ int main(int argc, char* argv[]) {
                 error();
             }
             dev->correction = (int)devs[i]["correction"];
-            dev->bins[0] = dev->bins[1] = dev->bins[2] = dev->bins[3] = dev->bins[4] = dev->bins[5] = dev->bins[6] = dev->bins[7] = 0;
+            memset(dev->bins, 0, sizeof(dev->bins));
+            memset(dev->base_bins, 0, sizeof(dev->base_bins));
             dev->bufs = dev->bufe = dev->waveend = dev->waveavail = dev->row = 0;
             for (int j = 0; j < dev->channel_count; j++)  {
                 channel_t* channel = dev->channels + j;
@@ -945,6 +1074,7 @@ int main(int argc, char* argv[]) {
                 channel->agcavgslow = 0.5f;
                 channel->agcmin = 100.0f;
                 channel->agclow = 0;
+                channel->afc = devs[i]["channels"][j].exists("afc") ? (unsigned char) (unsigned int)devs[i]["channels"][j]["afc"] : 0;
                 if(dev->mode == R_MULTICHANNEL) {
                     channel->frequency = devs[i]["channels"][j]["freq"];
                 } else { /* R_SCAN */
@@ -1015,7 +1145,7 @@ int main(int argc, char* argv[]) {
                     channel->outputs[o].enabled = true;
                     channel->outputs[o].active = false;
                 }
-                dev->bins[j] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
+                dev->base_bins[j] = dev->bins[j] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
             }
         }
     } catch(FileIOException e) {
@@ -1101,11 +1231,11 @@ int main(int argc, char* argv[]) {
     }
 
     int timeout = 50;   // 5 seconds
-    while (device_opened != device_count && timeout > 0) {
+    while (atomic_get(&device_opened) != device_count && timeout > 0) {
         SLEEP(100);
         timeout--;
     }
-    if(device_opened != device_count) {
+    if(atomic_get(&device_opened) != device_count) {
         cerr<<"Some devices failed to initialize - aborting\n";
         error();
     }

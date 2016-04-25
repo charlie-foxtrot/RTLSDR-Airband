@@ -83,7 +83,7 @@ devices = (
 
 #Automatioc Frequency Control (AFC) level (optional value)
 #0 - disabled (by default)
-#value from range 1...255 - AGC enabled, larger value means more aggressive AGC
+#value from range 1...255 - AFC enabled, larger value means more aggressive AFC
         afc = 0;
 # Multiple outputs per channel are supported. For example, a single channel
 # can be sent to multiple Shoutcast servers.

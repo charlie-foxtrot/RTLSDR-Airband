@@ -113,17 +113,17 @@
 #define MAX_SHOUT_QUEUELEN 32768
 #define AGC_EXTRA 48
 #define CHANNELS 8
+#define FFT_SIZE_LOG 9
 
 #if defined USE_BCM_VC
 extern "C" void samplefft(GPU_FFT_COMPLEX* dest, unsigned char* buffer, float* window, float* levels);
 extern "C" void fftwave(float* dest, GPU_FFT_COMPLEX* src, int* sizes, int* bins);
-# define FFT_SIZE_LOG 9
-# define FFT_SIZE (2<<(FFT_SIZE_LOG - 1))
 # define FFT_BATCH 250
 #else
-# define FFT_SIZE 512
 # define FFT_BATCH 1
 #endif
+#define FFT_SIZE (2<<(FFT_SIZE_LOG - 1))
+
 #if defined _WIN32
 #pragma comment (lib, "Ws2_32.lib")
 #pragma comment (lib, "Mswsock.lib")
@@ -169,7 +169,7 @@ struct channel_t {
     float agcavgslow;  // average power, for squelch level detection
     float agcmin;      // noise level
     int agclow;             // low level sample count
-    char agcindicate;  // squelch status indicator
+    char axcindicate;  // squelch/AFC status indicator: ' ' - no signal; '*' - has signal; '>', '<' - signal tuned by AFC
     unsigned char afc; //0 - AFC disabled; 1 - minimal AFC; 2 - more aggressive AFC and so on to 255
     int frequency;
     int freq_count;
@@ -457,7 +457,7 @@ void process_outputs(channel_t* channel) {
             }
         } else if(channel->outputs[k].type == O_FILE) {
             file_data *fdata = (file_data *)(channel->outputs[k].data);
-            if(fdata->continuous == false && channel->agcindicate != '*' && channel->outputs[k].active == false) continue;
+            if(fdata->continuous == false && channel->axcindicate == ' ' && channel->outputs[k].active == false) continue;
             time_t t = time(NULL);
             struct tm *tmp = gmtime(&t);
             char suffix[32];
@@ -503,7 +503,7 @@ void process_outputs(channel_t* channel) {
                 fdata->f = NULL;
                 channel->outputs[k].enabled = false;
             }
-            channel->outputs[k].active = channel->agcindicate == '*' ? true : false;
+            channel->outputs[k].active = (channel->axcindicate != ' ');
         }
     }
 }
@@ -536,7 +536,7 @@ void* controller_thread(void* params) {
     if(dev->channels[0].freq_count < 2) return 0;
     while(!do_exit) {
         SLEEP(200);
-        if(dev->channels[0].agcindicate == ' ') {
+        if(dev->channels[0].axcindicate == ' ') {
             if(consecutive_squelch_off < 10) {
                 consecutive_squelch_off++;
             } else {
@@ -593,7 +593,7 @@ void* icecast_check(void* params) {
 
 class AFC
 {
-    const char _prev_agcindicate;
+    const char _prev_axcindicate;
 
 #ifdef USE_BCM_VC
     float square(const GPU_FFT_COMPLEX *fft_results, int index)
@@ -636,7 +636,7 @@ class AFC
     }
 
 public:
-    AFC(device_t* dev, int index) : _prev_agcindicate(dev->channels[index].agcindicate)
+    AFC(device_t* dev, int index) : _prev_axcindicate(dev->channels[index].axcindicate)
     {
     }
 
@@ -647,8 +647,8 @@ public:
         if (channel->afc==0)
             return;
 
-        const char agcindicate = channel->agcindicate;
-        if (agcindicate != ' ' && _prev_agcindicate == ' ') {
+        const char axcindicate = channel->axcindicate;
+        if (axcindicate != ' ' && _prev_axcindicate == ' ') {
             const int base = dev->base_bins[index];
             const float base_value = square(fft_results, base);
             int bin = check<FFT_RESULTS, -1>(fft_results, base, base_value, channel->afc);
@@ -658,9 +658,13 @@ public:
              if (dev->bins[index] != bin) {
                  log(LOG_INFO, "AFC device=%d channel=%d: base=%d prev=%d now=%d\n", dev->device, index, base, dev->bins[index], bin);
                  dev->bins[index] = bin;
+                 if ( bin > base )
+                     channel->axcindicate = '>';
+                 else if ( bin < base )
+                     channel->axcindicate = '<';
              }
         }
-        else if (agcindicate == ' ' && _prev_agcindicate != ' ')
+        else if (axcindicate == ' ' && _prev_axcindicate != ' ')
             dev->bins[index] = dev->base_bins[index];
     }
 };
@@ -855,7 +859,7 @@ void demodulate() {
                         channel->agcsq = max(channel->agcsq - 1, 1);
                         if (channel->agcsq == 1 && channel->agcavgslow > 3.0f * channel->agcmin) {
                             channel->agcsq = -AGC_EXTRA * 2;
-                            channel->agcindicate = '*';
+                            channel->axcindicate = '*';
                             // fade in
                             for (int k = j - AGC_EXTRA; k < j; k++) {
                                 if (channel->wavein[k] > channel->agcmin * 3.0f) {
@@ -873,7 +877,7 @@ void demodulate() {
                         channel->agcsq = min(channel->agcsq + 1, -1);
                         if ((channel->agcsq == -1 && channel->agcavgslow < 2.4f * channel->agcmin) || channel->agclow == AGC_EXTRA - 12) {
                             channel->agcsq = AGC_EXTRA * 2;
-                            channel->agcindicate = ' ';
+                            channel->axcindicate = ' ';
                             // fade out
                             for (int k = j - AGC_EXTRA + 1; k < j; k++) {
                                 channel->waveout[k] = channel->waveout[k - 1] * 0.94f;
@@ -893,9 +897,9 @@ void demodulate() {
                 memmove(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4);
                 if (foreground) {
                     if(dev->mode == R_SCAN)
-                        printf("%4.0f/%3.0f%c %7.3f", channel->agcavgslow, channel->agcmin, channel->agcindicate, (dev->channels[0].frequency / 1000000.0));
+                        printf("%4.0f/%3.0f%c %7.3f", channel->agcavgslow, channel->agcmin, channel->axcindicate, (dev->channels[0].frequency / 1000000.0));
                     else
-                        printf("%4.0f/%3.0f%c", channel->agcavgslow, channel->agcmin, channel->agcindicate);
+                        printf("%4.0f/%3.0f%c", channel->agcavgslow, channel->agcmin, channel->axcindicate);
                     fflush(stdout);
                 }
 #ifdef USE_BCM_VC
@@ -1069,7 +1073,7 @@ int main(int argc, char* argv[]) {
                     channel->waveout[k] = 0.5;
                 }
                 channel->agcsq = 1;
-                channel->agcindicate = ' ';
+                channel->axcindicate = ' ';
                 channel->agcavgfast = 0.5f;
                 channel->agcavgslow = 0.5f;
                 channel->agcmin = 100.0f;

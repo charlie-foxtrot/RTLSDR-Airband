@@ -30,6 +30,7 @@
 #define _USE_MATH_DEFINES
 #include <SDKDDKVer.h>
 #include <windows.h>
+#include <time.h>
 #include <process.h>
 #include <complex>
 #include <MMSystem.h>
@@ -116,8 +117,15 @@
 #define FFT_SIZE_LOG 9
 
 #if defined USE_BCM_VC
-extern "C" void samplefft(GPU_FFT_COMPLEX* dest, unsigned char* buffer, float* window, float* levels);
-extern "C" void fftwave(float* dest, GPU_FFT_COMPLEX* src, int* sizes, int* bins);
+struct sample_fft_arg
+{
+    int fft_size_by4;
+    GPU_FFT_COMPLEX* dest;
+};
+extern "C" void samplefft(sample_fft_arg *a, unsigned char* buffer, float* window, float* levels);
+
+#include <arm_neon.h>
+
 # define FFT_BATCH 250
 #else
 # define FFT_BATCH 1
@@ -688,9 +696,6 @@ void demodulate() {
         case -2: log(LOG_CRIT, "log2_N=%d not supported.  Try between 8 and 17.\n", FFT_SIZE_LOG); error();
         case -3: log(LOG_CRIT, "Out of memory.  Try a smaller batch or increase GPU memory.\n"); error();
     }
-    int sizes[2];
-    sizes[0] = fft->step * sizeof(GPU_FFT_COMPLEX);
-    sizes[1] = sizeof(channel_t);
 #endif
 
     ALIGN float ALIGN2 levels[256];
@@ -719,9 +724,9 @@ void demodulate() {
 
     // speed2 = number of bytes per wave sample (x 2 for I and Q)
     int speed2 = (SOURCE_RATE * 2) / WAVE_RATE;
-
     int device_num = 0;
     while (true) {
+
         if(do_exit) {
 #ifdef USE_BCM_VC
             log(LOG_INFO, "Freeing GPU memory\n");
@@ -729,6 +734,7 @@ void demodulate() {
 #endif
             return;
         }
+
         device_t* dev = devices + device_num;
         int available = dev->bufe - dev->bufs;
         if (dev->bufe < dev->bufs) {
@@ -752,8 +758,10 @@ void demodulate() {
         }
 
 #if defined USE_BCM_VC
+        sample_fft_arg sfa = {FFT_SIZE / 4, fft->in};
         for (int i = 0; i < FFT_BATCH; i++) {
-            samplefft(fft->in + i * fft->step, dev->buffer + dev->bufs + i * speed2, window, levels);
+            samplefft(&sfa, dev->buffer + dev->bufs + i * speed2, window, levels);
+            sfa.dest+= fft->step;
         }
 #elif defined __arm__
         for (int i = 0; i < FFT_SIZE; i++) {
@@ -802,11 +810,18 @@ void demodulate() {
 #endif
 
 #ifdef USE_BCM_VC
-        fftwave(dev->channels[0].wavein + dev->waveend, fft->out, sizes, dev->bins);
+        for (int i = 0; i < dev->channel_count; i++) {
+            float *wavein = dev->channels[i].wavein + dev->waveend;
+            __builtin_prefetch(wavein, 1);
+            const int bin = dev->bins[i];
+            const GPU_FFT_COMPLEX *fftout = fft->out + bin;
+            for (int j = 0; j < FFT_BATCH; j++, ++wavein, fftout+= fft->step)
+                *wavein = sqrtf(fftout->im * fftout->im + fftout->re * fftout->re);
+        }
 #else
-        for (int j = 0; j < dev->channel_count; j++) {
-            int bin = dev->bins[j];
-            dev->channels[j].wavein[dev->waveend] =
+        for (int i = 0; i < dev->channel_count; i++) {
+            int bin = dev->bins[i];
+            dev->channels[i].wavein[dev->waveend] =
               sqrtf(fftout[bin][0] * fftout[bin][0] + fftout[bin][1] * fftout[bin][1]);
         }
 #endif
@@ -895,6 +910,11 @@ void demodulate() {
                 memmove(channel->waveout, channel->waveout + WAVE_BATCH, AGC_EXTRA * 4);
 #endif
                 memmove(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4);
+#ifdef USE_BCM_VC
+                afc.finalize(dev, i, fft->out);
+#else
+                afc.finalize(dev, i, fftout);
+#endif
                 if (foreground) {
                     if(dev->mode == R_SCAN)
                         printf("%4.0f/%3.0f%c %7.3f", channel->agcavgslow, channel->agcmin, channel->axcindicate, (dev->channels[0].frequency / 1000000.0));
@@ -902,11 +922,6 @@ void demodulate() {
                         printf("%4.0f/%3.0f%c", channel->agcavgslow, channel->agcmin, channel->axcindicate);
                     fflush(stdout);
                 }
-#ifdef USE_BCM_VC
-                afc.finalize(dev, i, fft->out);
-#else
-                afc.finalize(dev, i, fftout);
-#endif
             }
             dev->waveavail = 1;
             dev->waveend -= WAVE_BATCH;
@@ -926,7 +941,7 @@ void demodulate() {
 }
 
 void usage() {
-    cout<<"Usage: rtl_airband [-f] [-c <config_file_path>]\n\
+    cout<<"Usage: rtl_airband [-f] [-p] [-c <config_file_path>]\n\
 \t-h\t\t\tDisplay this help text\n\
 \t-f\t\t\tRun in foreground, display textual waterfalls\n\
 \t-c <config_file_path>\tUse non-default configuration file\n\t\t\t\t(default: "<<CFGFILE<<")\n\

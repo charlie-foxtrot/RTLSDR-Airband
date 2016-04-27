@@ -123,13 +123,13 @@ struct sample_fft_arg
 };
 extern "C" void samplefft(sample_fft_arg *a, unsigned char* buffer, float* window, float* levels);
 
-#include <arm_neon.h>
-
 # define FFT_BATCH 250
 #else
 # define FFT_BATCH 1
 #endif
 #define FFT_SIZE (2<<(FFT_SIZE_LOG - 1))
+
+//#define AFC_LOGGING
 
 #if defined _WIN32
 #pragma comment (lib, "Ws2_32.lib")
@@ -663,7 +663,9 @@ public:
                 bin = check<FFT_RESULTS, 1>(fft_results, base, base_value, channel->afc);
 
              if (dev->bins[index] != bin) {
+#ifdef AFC_LOGGING
                  log(LOG_INFO, "AFC device=%d channel=%d: base=%d prev=%d now=%d\n", dev->device, index, base, dev->bins[index], bin);
+#endif
                  dev->bins[index] = bin;
                  if ( bin > base )
                      channel->axcindicate = '>';

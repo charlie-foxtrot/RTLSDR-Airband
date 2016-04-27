@@ -30,7 +30,6 @@
 #define _USE_MATH_DEFINES
 #include <SDKDDKVer.h>
 #include <windows.h>
-#include <time.h>
 #include <process.h>
 #include <complex>
 #include <MMSystem.h>
@@ -941,7 +940,7 @@ void demodulate() {
 }
 
 void usage() {
-    cout<<"Usage: rtl_airband [-f] [-p] [-c <config_file_path>]\n\
+    cout<<"Usage: rtl_airband [-f] [-c <config_file_path>]\n\
 \t-h\t\t\tDisplay this help text\n\
 \t-f\t\t\tRun in foreground, display textual waterfalls\n\
 \t-c <config_file_path>\tUse non-default configuration file\n\t\t\t\t(default: "<<CFGFILE<<")\n\

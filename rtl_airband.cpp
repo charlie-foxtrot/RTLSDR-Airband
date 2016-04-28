@@ -164,6 +164,7 @@ struct file_data {
     const char *prefix;
     char *suffix;
     bool continuous;
+    bool append;
     FILE *f;
 };
 
@@ -438,6 +439,90 @@ void lame_setup(channel_t *channel) {
 }
 
 unsigned char lamebuf[22000];
+
+class WaveTone
+{
+float *_buf;
+int _samples;
+public:
+    WaveTone(int msec, unsigned int hz = 0) {
+         _samples = (msec * WAVE_RATE) / 1000;
+         _buf = (float *)malloc(_samples * sizeof(float));
+         if (!_buf) {
+             log(LOG_WARNING, "WaveTone: can't allocate %u samples\n", _samples);
+             return;
+         }
+
+         if (hz > 0) {
+             const float period = 1.0 / (float)hz;
+             const float sample_time = 1.0 / (float)WAVE_RATE;
+             float t = 0;
+             for (int i = 0; i < _samples; ++i, t+= sample_time) {
+                 _buf[i] = sin(t * 2.0 * M_PI / period);
+             }
+     } else
+         memset(_buf, 0, _samples * sizeof(float));
+    }
+
+    ~WaveTone() {
+        if (_buf)
+            free(_buf);
+    }
+
+    int Write(lame_t lame, FILE *f) {
+        if (!_buf)
+            return 1;
+
+        int bytes = lame_encode_buffer_ieee_float(lame, _buf, NULL, _samples, lamebuf, 22000);
+        if (bytes < 0) {
+            log(LOG_WARNING, "WaveTone: encode error %d\n");
+            return 1;
+        }
+
+
+        if(fwrite(lamebuf, 1, bytes, f) != (unsigned int)bytes) {
+            log(LOG_WARNING, "WaveTone: failed to write %d bytes\n", bytes);
+            return -1;
+        }
+
+         return 0;
+    }
+};
+
+static int fdata_open(lame_t lame, file_data *fdata, const char *filename) {
+    fdata->f = fopen(filename, fdata->append ? "a+" : "w");
+    if(fdata->f == NULL)
+        return -1;
+
+    struct stat st = {0};
+    if (!fdata->append || fstat(fileno(fdata->f), &st)!=0 || st.st_size == 0) {
+        log(LOG_INFO, "Writing to %s\n", filename);
+        return 0;
+    }
+    log(LOG_INFO, "Appending from pos %llu to %s\n", (unsigned long long)st.st_size, filename);
+
+    //fill missing space with marker tones
+    WaveTone wt_a(250, 2222);
+    WaveTone wt_b(500, 1111);
+    WaveTone wt_c(1000, 555);
+
+    int r = wt_a.Write(lame, fdata->f);
+    if (r==0) r = wt_b.Write(lame, fdata->f);
+    if (r==0) r = wt_c.Write(lame, fdata->f);
+    time_t now = time(NULL);
+    if (now > st.st_mtime ) {
+        WaveTone wt_silence(1000);
+        for (time_t delta = now - st.st_mtime; (r==0 && delta > 4); --delta)
+            r = wt_silence.Write(lame, fdata->f);
+    }
+    if (r==0) r = wt_c.Write(lame, fdata->f);
+    if (r==0) r = wt_b.Write(lame, fdata->f);
+    if (r==0) r = wt_a.Write(lame, fdata->f);
+
+    if (r<0) fseek(fdata->f, st.st_size, SEEK_SET);
+    return 0;
+}
+
 void process_outputs(channel_t* channel) {
     int bytes = lame_encode_buffer_ieee_float(channel->lame, channel->waveout, NULL, WAVE_BATCH, lamebuf, 22000);
     if (bytes < 0) {
@@ -485,15 +570,13 @@ void process_outputs(channel_t* channel) {
                     fclose(fdata->f);
                     fdata->f = NULL;
                 }
-                fdata->f = fopen(filename, "w");
-                if(fdata->f == NULL) {
+                int r = fdata_open(channel->lame, fdata, filename);
+                free(filename);
+                if (r<0) {
                     log(LOG_WARNING, "Cannot open output file %s (%s), output disabled\n", filename, strerror(errno));
                     channel->outputs[k].enabled = false;
-                    free(filename);
                     continue;
                 }
-                log(LOG_INFO, "Writing to %s\n", filename);
-                free(filename);
             }
 // bytes is signed, but we've checked for negative values earlier
 // so it's save to ignore the warning here
@@ -1158,6 +1241,7 @@ int main(int argc, char* argv[]) {
                         fdata->prefix = strdup(devs[i]["channels"][j]["outputs"][o]["filename_template"]);
                         fdata->continuous = devs[i]["channels"][j]["outputs"][o].exists("continuous") ?
                             (bool)(devs[i]["channels"][j]["outputs"][o]["continuous"]) : false;
+                        fdata->append = devs[i]["channels"][j]["outputs"][o].exists("append") && (bool)(devs[i]["channels"][j]["outputs"][o]["append"]);
                     } else {
                         cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown output type\n";
                         error();

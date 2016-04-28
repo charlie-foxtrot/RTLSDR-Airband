@@ -153,6 +153,10 @@ devices = (
 # Set this to false if you want to skip silence (record only when squelch is open).
 # Default is false.
             continuous = true;
+# Set this to true if you want to append to file if its exists with demarkation of missing fragment.
+# Set this to false if you want to overwrite existing files.
+# Default is false.
+            append = false;
           }
 	);
       },

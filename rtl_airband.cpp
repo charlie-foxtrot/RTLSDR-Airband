@@ -114,7 +114,7 @@
 #define AGC_EXTRA 48
 #define CHANNELS 8
 #define FFT_SIZE_LOG 9
-
+#define LAMEBUF_SIZE 22000 //todo: calculate
 #if defined USE_BCM_VC
 struct sample_fft_arg
 {
@@ -425,31 +425,42 @@ void shout_setup(icecast_data *icecast) {
         return;
     }
 }
-void lame_setup(channel_t *channel) {
-    if(channel == NULL) return;
-    channel->lame = lame_init();
-    lame_set_in_samplerate(channel->lame, WAVE_RATE);
-    lame_set_VBR(channel->lame, vbr_off);
-    lame_set_brate(channel->lame, 16);
-    lame_set_quality(channel->lame, 7);
-    lame_set_out_samplerate(channel->lame, MP3_RATE);
-    lame_set_num_channels(channel->lame, 1);
-    lame_set_mode(channel->lame, MONO);
-    lame_init_params(channel->lame);
+
+lame_t airlame_init() {
+    lame_t lame = lame_init();
+    if (!lame) {
+        log(LOG_WARNING, "lame_init failed\n");
+        return NULL;
+    }
+
+    lame_set_in_samplerate(lame, WAVE_RATE);
+    lame_set_VBR(lame, vbr_off);
+    lame_set_brate(lame, 16);
+    lame_set_quality(lame, 7);
+    lame_set_out_samplerate(lame, MP3_RATE);
+    lame_set_num_channels(lame, 1);
+    lame_set_mode(lame, MONO);
+    lame_init_params(lame);
+    return lame;
 }
 
-unsigned char lamebuf[22000];
-
-class WaveTone
+class LameTone
 {
-float *_buf;
-int _samples;
+    unsigned char* _data;
+    int _bytes;
+
 public:
-    WaveTone(int msec, unsigned int hz = 0) {
-         _samples = (msec * WAVE_RATE) / 1000;
-         _buf = (float *)malloc(_samples * sizeof(float));
-         if (!_buf) {
-             log(LOG_WARNING, "WaveTone: can't allocate %u samples\n", _samples);
+    LameTone(int msec, unsigned int hz = 0) : _data(NULL), _bytes(0) {
+         _data = (unsigned char *)malloc(LAMEBUF_SIZE);
+         if (!_data) {
+             log(LOG_WARNING, "LameTone: can't alloc %u bytes\n", LAMEBUF_SIZE);
+             return;
+         }
+
+         int samples = (msec * WAVE_RATE) / 1000;
+         float *buf = (float *)malloc(samples * sizeof(float));
+         if (!buf) {
+             log(LOG_WARNING, "LameTone: can't alloc %u samples\n", samples);
              return;
          }
 
@@ -457,39 +468,53 @@ public:
              const float period = 1.0 / (float)hz;
              const float sample_time = 1.0 / (float)WAVE_RATE;
              float t = 0;
-             for (int i = 0; i < _samples; ++i, t+= sample_time) {
-                 _buf[i] = sin(t * 2.0 * M_PI / period);
+             for (int i = 0; i < samples; ++i, t+= sample_time) {
+                 buf[i] = sin(t * 2.0 * M_PI / period);
              }
-     } else
-         memset(_buf, 0, _samples * sizeof(float));
+         } else
+             memset(buf, 0, samples * sizeof(float));
+
+         lame_t lame = airlame_init();
+         if (lame) {
+             _bytes = lame_encode_buffer_ieee_float(lame, buf, NULL, samples, _data, LAMEBUF_SIZE);
+             if (_bytes > 0) {
+                 int flush_ofs = _bytes;
+                 if (flush_ofs&0x1f)
+                     flush_ofs+= 0x20 - (flush_ofs&0x1f);
+                 if (flush_ofs < LAMEBUF_SIZE) {
+                     int flush_bytes = lame_encode_flush(lame, _data + flush_ofs, LAMEBUF_SIZE - flush_ofs);
+                     if (flush_bytes > 0) {
+                         memmove(_data + _bytes, _data + flush_ofs, flush_bytes);
+                         _bytes+= flush_bytes;
+                     }
+                 }
+             }
+             else
+                 log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n", _bytes);
+             lame_close(lame);
+         }
+         free(buf);
     }
 
-    ~WaveTone() {
-        if (_buf)
-            free(_buf);
+    ~LameTone() {
+        if (_data)
+            free(_data);
     }
 
-    int Write(lame_t lame, FILE *f) {
-        if (!_buf)
+    int write(FILE *f) {
+        if (!_data || _bytes<=0)
             return 1;
 
-        int bytes = lame_encode_buffer_ieee_float(lame, _buf, NULL, _samples, lamebuf, 22000);
-        if (bytes < 0) {
-            log(LOG_WARNING, "WaveTone: encode error %d\n");
-            return 1;
-        }
-
-
-        if(fwrite(lamebuf, 1, bytes, f) != (unsigned int)bytes) {
-            log(LOG_WARNING, "WaveTone: failed to write %d bytes\n", bytes);
+        if(fwrite(_data, 1, _bytes, f) != (unsigned int)_bytes) {
+            log(LOG_WARNING, "LameTone: failed to write %d bytes\n", _bytes);
             return -1;
         }
 
-         return 0;
+        return 0;
     }
 };
 
-static int fdata_open(lame_t lame, file_data *fdata, const char *filename) {
+static int fdata_open(file_data *fdata, const char *filename) {
     fdata->f = fopen(filename, fdata->append ? "a+" : "w");
     if(fdata->f == NULL)
         return -1;
@@ -502,31 +527,33 @@ static int fdata_open(lame_t lame, file_data *fdata, const char *filename) {
     log(LOG_INFO, "Appending from pos %llu to %s\n", (unsigned long long)st.st_size, filename);
 
     //fill missing space with marker tones
-    WaveTone wt_a(250, 2222);
-    WaveTone wt_b(500, 1111);
-    WaveTone wt_c(1000, 555);
+    LameTone lt_a(250, 2222);
+    LameTone lt_b(500, 1111);
+    LameTone lt_c(1000, 555);
 
-    int r = wt_a.Write(lame, fdata->f);
-    if (r==0) r = wt_b.Write(lame, fdata->f);
-    if (r==0) r = wt_c.Write(lame, fdata->f);
+    int r = lt_a.write(fdata->f);
+    if (r==0) r = lt_b.write(fdata->f);
+    if (r==0) r = lt_c.write(fdata->f);
     time_t now = time(NULL);
     if (now > st.st_mtime ) {
-        WaveTone wt_silence(1000);
+        LameTone lt_silence(1000);
         for (time_t delta = now - st.st_mtime; (r==0 && delta > 4); --delta)
-            r = wt_silence.Write(lame, fdata->f);
+            r = lt_silence.write(fdata->f);
     }
-    if (r==0) r = wt_c.Write(lame, fdata->f);
-    if (r==0) r = wt_b.Write(lame, fdata->f);
-    if (r==0) r = wt_a.Write(lame, fdata->f);
+    if (r==0) r = lt_c.write(fdata->f);
+    if (r==0) r = lt_b.write(fdata->f);
+    if (r==0) r = lt_a.write(fdata->f);
 
     if (r<0) fseek(fdata->f, st.st_size, SEEK_SET);
     return 0;
 }
 
+unsigned char lamebuf[LAMEBUF_SIZE];
+
 void process_outputs(channel_t* channel) {
-    int bytes = lame_encode_buffer_ieee_float(channel->lame, channel->waveout, NULL, WAVE_BATCH, lamebuf, 22000);
+    int bytes = lame_encode_buffer_ieee_float(channel->lame, channel->waveout, NULL, WAVE_BATCH, lamebuf, LAMEBUF_SIZE);
     if (bytes < 0) {
-        log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n");
+        log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n", bytes);
         return;
     } else if (bytes == 0)
         return;
@@ -567,10 +594,11 @@ void process_outputs(channel_t* channel) {
                 }
                 sprintf(filename, "%s/%s%s", fdata->dir, fdata->prefix, fdata->suffix);
                 if(fdata->f != NULL) {
+                    //todo: finalize file stream with lame_encode_flush_nogap
                     fclose(fdata->f);
                     fdata->f = NULL;
                 }
-                int r = fdata_open(channel->lame, fdata, filename);
+                int r = fdata_open(fdata, filename);
                 free(filename);
                 if (r<0) {
                     log(LOG_WARNING, "Cannot open output file %s (%s), output disabled\n", filename, strerror(errno));
@@ -1315,7 +1343,7 @@ int main(int argc, char* argv[]) {
         device_t* dev = devices + i;
         for (int j = 0; j < dev->channel_count; j++)  {
             channel_t* channel = dev->channels + j;
-            lame_setup(channel);
+            channel->lame = airlame_init();
             for (int k = 0; k < channel->output_count; k++) {
                 output_t *output = channel->outputs + k;
                 if(output->type == O_ICECAST)

@@ -1123,7 +1123,7 @@ void demodulate() {
                 memmove(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4);
 #ifdef NFM
                 if(channel->modulation == MOD_NFM)
-                    memcpy(channel->complex_samples, channel->complex_samples + 2 * WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4 * 2);
+                    memmove(channel->complex_samples, channel->complex_samples + 2 * WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4 * 2);
 #endif
 
 #ifdef USE_BCM_VC

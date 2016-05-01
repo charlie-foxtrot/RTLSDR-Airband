@@ -562,11 +562,13 @@ static int fdata_open(file_data *fdata, const char *filename) {
     int r = lt_a.write(fdata->f);
     if (r==0) r = lt_b.write(fdata->f);
     if (r==0) r = lt_c.write(fdata->f);
-    time_t now = time(NULL);
-    if (now > st.st_mtime ) {
-        LameTone lt_silence(1000);
-        for (time_t delta = now - st.st_mtime; (r==0 && delta > 4); --delta)
-            r = lt_silence.write(fdata->f);
+    if (fdata->continuous) {
+        time_t now = time(NULL);
+        if (now > st.st_mtime ) {
+            LameTone lt_silence(1000);
+            for (time_t delta = now - st.st_mtime; (r==0 && delta > 4); --delta)
+                r = lt_silence.write(fdata->f);
+        }
     }
     if (r==0) r = lt_c.write(fdata->f);
     if (r==0) r = lt_b.write(fdata->f);

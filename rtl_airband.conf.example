@@ -80,6 +80,11 @@ devices = (
 # (ie. +- 1.25 MHz around center frequency)
 # This setting is valid in multichannel mode only.
         freq = 118925000;
+
+#Automatioc Frequency Control (AFC) level (optional value)
+#0 - disabled (by default)
+#value from range 1...10 - AFC enabled, larger value means more aggressive AFC.
+        afc = 0;
 # Multiple outputs per channel are supported. For example, a single channel
 # can be sent to multiple Shoutcast servers.
         outputs = (
@@ -148,6 +153,10 @@ devices = (
 # Set this to false if you want to skip silence (record only when squelch is open).
 # Default is false.
             continuous = true;
+# Set this to true if you want to append to file if its exists with demarkation of missing fragment.
+# Set this to false if you want to overwrite existing files.
+# Default is true.
+            append = false;
           }
 	);
       },

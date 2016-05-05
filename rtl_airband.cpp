@@ -537,8 +537,13 @@ static int fdata_open(file_data *fdata, const char *filename) {
     if (fdata->continuous) {
         time_t now = time(NULL);
         if (now > st.st_mtime ) {
+            time_t delta = now - st.st_mtime;
+            if (delta > 3600) {
+                log(LOG_WARNING, "Too big time difference: %llu sec, limiting to one hour\n", (unsigned long long)delta);
+                delta = 3600;
+            }
             LameTone lt_silence(1000);
-            for (time_t delta = now - st.st_mtime; (r==0 && delta > 4); --delta)
+            for (; (r==0 && delta > 1); --delta)
                 r = lt_silence.write(fdata->f);
         }
     }

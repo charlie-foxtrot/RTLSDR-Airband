@@ -155,7 +155,7 @@ devices = (
             continuous = true;
 # Set this to true if you want to append to file if its exists with demarkation of missing fragment.
 # Set this to false if you want to overwrite existing files.
-# Default is false.
+# Default is true.
             append = false;
           }
 	);

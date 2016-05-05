@@ -497,7 +497,7 @@ public:
              const float sample_time = 1.0 / (float)WAVE_RATE;
              float t = 0;
              for (int i = 0; i < samples; ++i, t+= sample_time) {
-                 buf[i] = sin(t * 2.0 * M_PI / period);
+                 buf[i] = 0.9 * sinf(t * 2.0 * M_PI / period);
              }
          } else
              memset(buf, 0, samples * sizeof(float));
@@ -555,9 +555,9 @@ static int fdata_open(file_data *fdata, const char *filename) {
     log(LOG_INFO, "Appending from pos %llu to %s\n", (unsigned long long)st.st_size, filename);
 
     //fill missing space with marker tones
-    LameTone lt_a(250, 2222);
-    LameTone lt_b(500, 1111);
-    LameTone lt_c(1000, 555);
+    LameTone lt_a(120, 2222);
+    LameTone lt_b(120, 1111);
+    LameTone lt_c(120, 555);
 
     int r = lt_a.write(fdata->f);
     if (r==0) r = lt_b.write(fdata->f);
@@ -1408,7 +1408,7 @@ int main(int argc, char* argv[]) {
                         fdata->prefix = strdup(devs[i]["channels"][j]["outputs"][o]["filename_template"]);
                         fdata->continuous = devs[i]["channels"][j]["outputs"][o].exists("continuous") ?
                             (bool)(devs[i]["channels"][j]["outputs"][o]["continuous"]) : false;
-                        fdata->append = devs[i]["channels"][j]["outputs"][o].exists("append") && (bool)(devs[i]["channels"][j]["outputs"][o]["append"]);
+                        fdata->append = (!devs[i]["channels"][j]["outputs"][o].exists("append")) || (bool)(devs[i]["channels"][j]["outputs"][o]["append"]);
                     } else {
                         cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown output type\n";
                         error();

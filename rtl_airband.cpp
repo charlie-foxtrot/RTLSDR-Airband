@@ -245,6 +245,11 @@ int foreground = 0, do_syslog = 1;
 static volatile int do_exit = 0;
 #ifdef NFM
 float alpha = exp(-1.0f/(WAVE_RATE * 2e-4));
+enum fm_demod_algo {
+    FM_FAST_ATAN2,
+    FM_QUADRI_DEMOD
+};
+enum fm_demod_algo fm_demod = FM_FAST_ATAN2;
 #endif
 
 void error() {
@@ -751,14 +756,39 @@ void multiply(float ar, float aj, float br, float bj, float *cr, float *cj)
     *cj = aj*br + ar*bj;
 }
 
-float polar_discriminant(float ar, float aj, float br, float bj)
+float fast_atan2(float y, float x)
+{
+    float yabs, angle;
+    float pi4=M_PI_4, pi34=3*M_PI_4;
+    if (x==0.0f && y==0.0f) {
+            return 0;
+    }
+    yabs = y;
+    if (yabs < 0.0f) {
+            yabs = -yabs;
+    }
+    if (x >= 0.0f) {
+            angle = pi4  - pi4 * (x-yabs) / (x+yabs);
+    } else {
+            angle = pi34 - pi4 * (x+yabs) / (yabs-x);
+    }  
+    if (y < 0.0f) {
+            return -angle;
+    }
+    return angle;
+}
+
+float polar_disc_fast(float ar, float aj, float br, float bj)
 {
     float cr, cj;
-    double angle;
     multiply(ar, aj, br, -bj, &cr, &cj);
-    angle = atan2((double)cj, (double)cr);
-    return (float)(angle * M_1_PI);
+    return (float)(fast_atan2(cj, cr) * M_1_PI);
 }
+
+float fm_quadri_demod(float ar, float aj, float br, float bj) {
+    return (float)((br*aj - ar*bj)/(ar*ar + aj*aj + 1.0f) * M_1_PI);
+}
+
 #endif
 
 class AFC
@@ -1108,7 +1138,11 @@ void demodulate() {
                               channel->timeref_nsin[channel->wavecnt],
                               &rotated_r,
                               &rotated_j);
-                            channel->waveout[j] = polar_discriminant(rotated_r, rotated_j, channel->pr, channel->pj);
+                            if(fm_demod == FM_FAST_ATAN2) {
+                                channel->waveout[j] = polar_disc_fast(rotated_r, rotated_j, channel->pr, channel->pj);
+                            } else if(fm_demod == FM_QUADRI_DEMOD) {
+                                channel->waveout[j] = fm_quadri_demod(rotated_r, rotated_j, channel->pr, channel->pj);
+                            }
                             channel->pr = rotated_r;
                             channel->pj = rotated_j;
 // de-emphasis IIR + DC blocking
@@ -1182,8 +1216,17 @@ int main(int argc, char* argv[]) {
 #pragma GCC diagnostic warning "-Wwrite-strings"
     int opt;
 
+#ifdef NFM
+    while((opt = getopt(argc, argv, "Qfhvc:")) != -1) {
+#else
     while((opt = getopt(argc, argv, "fhvc:")) != -1) {
+#endif
         switch(opt) {
+#ifdef NFM
+            case 'Q':
+                fm_demod = FM_QUADRI_DEMOD;
+                break;
+#endif
             case 'f':
                 foreground = 1;
                 break;

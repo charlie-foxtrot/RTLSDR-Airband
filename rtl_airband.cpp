@@ -1420,16 +1420,20 @@ int main(int argc, char* argv[]) {
                     cerr<<"Cannot allocate memory for outputs\n";
                     error();
                 }
+                int oo = 0;
                 for(int o = 0; o < channel->output_count; o++) {
+                    if(devs[i]["channels"][j]["outputs"][o].exists("disable") && (bool)devs[i]["channels"][j]["outputs"][o]["disable"] == true) {
+                        continue;
+                    }
                     if(!strncmp(devs[i]["channels"][j]["outputs"][o]["type"], "icecast", 7)) {
-                        channel->outputs[o].data = malloc(sizeof(struct icecast_data));
-                        if(channel->outputs[o].data == NULL) {
+                        channel->outputs[oo].data = malloc(sizeof(struct icecast_data));
+                        if(channel->outputs[oo].data == NULL) {
                             cerr<<"Cannot allocate memory for outputs\n";
                             error();
                         }
-                        memset(channel->outputs[o].data, 0, sizeof(struct icecast_data));
-                        channel->outputs[o].type = O_ICECAST;
-                        icecast_data *idata = (icecast_data *)(channel->outputs[o].data);
+                        memset(channel->outputs[oo].data, 0, sizeof(struct icecast_data));
+                        channel->outputs[oo].type = O_ICECAST;
+                        icecast_data *idata = (icecast_data *)(channel->outputs[oo].data);
                         idata->hostname = strdup(devs[i]["channels"][j]["outputs"][o]["server"]);
                         idata->port = devs[i]["channels"][j]["outputs"][o]["port"];
                         idata->mountpoint = strdup(devs[i]["channels"][j]["outputs"][o]["mountpoint"]);
@@ -1440,14 +1444,14 @@ int main(int argc, char* argv[]) {
                         if(devs[i]["channels"][j]["outputs"][o].exists("genre"))
                             idata->genre = strdup(devs[i]["channels"][j]["outputs"][o]["genre"]);
                     } else if(!strncmp(devs[i]["channels"][j]["outputs"][o]["type"], "file", 4)) {
-                        channel->outputs[o].data = malloc(sizeof(struct file_data));
-                        if(channel->outputs[o].data == NULL) {
+                        channel->outputs[oo].data = malloc(sizeof(struct file_data));
+                        if(channel->outputs[oo].data == NULL) {
                             cerr<<"Cannot allocate memory for outputs\n";
                             error();
                         }
-                        memset(channel->outputs[o].data, 0, sizeof(struct file_data));
-                        channel->outputs[o].type = O_FILE;
-                        file_data *fdata = (file_data *)(channel->outputs[o].data);
+                        memset(channel->outputs[oo].data, 0, sizeof(struct file_data));
+                        channel->outputs[oo].type = O_FILE;
+                        file_data *fdata = (file_data *)(channel->outputs[oo].data);
                         fdata->dir = strdup(devs[i]["channels"][j]["outputs"][o]["directory"]);
                         fdata->prefix = strdup(devs[i]["channels"][j]["outputs"][o]["filename_template"]);
                         fdata->continuous = devs[i]["channels"][j]["outputs"][o].exists("continuous") ?
@@ -1457,9 +1461,21 @@ int main(int argc, char* argv[]) {
                         cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown output type\n";
                         error();
                     }
-                    channel->outputs[o].enabled = true;
-                    channel->outputs[o].active = false;
+                    channel->outputs[oo].enabled = true;
+                    channel->outputs[oo].active = false;
+                    oo++;
                 }
+                if(oo < 1) {
+                    cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: no outputs defined\n";
+                    error();
+                }
+                channel->outputs = (output_t *)realloc(channel->outputs, oo * sizeof(struct output_t));
+                if(channel->outputs == NULL) {
+                    cerr<<"Cannot allocate memory for outputs\n";
+                    error();
+                }
+                channel->output_count = oo;
+
                 dev->base_bins[jj] = dev->bins[jj] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
 #ifdef NFM
                 if(channel->modulation == MOD_NFM) {

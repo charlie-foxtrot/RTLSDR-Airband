@@ -1286,11 +1286,6 @@ int main(int argc, char* argv[]) {
             cerr<<"Configuration error: no devices defined\n";
             error();
         }
-        int device_count2 = rtlsdr_get_device_count();
-        if (device_count2 < device_count) {
-            cerr<<"Not enough devices ("<<device_count<<" configured, "<<device_count2<<" detected)\n";
-            error();
-        }
 #ifndef _WIN32
         struct sigaction sigact, pipeact;
 
@@ -1314,12 +1309,10 @@ int main(int argc, char* argv[]) {
 #ifndef _WIN32
         if(do_syslog) openlog("rtl_airband", LOG_PID, LOG_DAEMON);
 #endif
+        int ii = 0;
         for (int i = 0; i < devs.getLength(); i++) {
-            device_t* dev = devices + i;
-            if((int)devs[i]["index"] >= device_count2) {
-                cerr<<"Specified device id "<<(int)devs[i]["index"]<<" is >= number of devices "<<device_count2<<"\n";
-                error();
-            }
+            if(devs[i].exists("disable") && (bool)devs[i]["disable"] == true) continue;
+            device_t* dev = devices + ii;
             if(!devs[i].exists("correction")) devs[i].add("correction", Setting::TypeInt);
             dev->device = (int)devs[i]["index"];
             dev->channel_count = 0;
@@ -1501,7 +1494,25 @@ int main(int argc, char* argv[]) {
                 error();
             }
             dev->channel_count = jj;
+            ii++;
         }
+        if (ii < 1) {
+            cerr<<"Configuration error: no devices defined\n";
+            error();
+        }
+        int device_count2 = rtlsdr_get_device_count();
+        if (device_count2 < ii) {
+            cerr<<"Not enough devices ("<<ii<<" configured, "<<device_count2<<" detected)\n";
+            error();
+        }
+        for(int i = 0; i < ii; i++) {
+            device_t* dev = devices + i;
+            if(dev->device >= device_count2) {
+                cerr<<"Specified device id "<<(int)dev->device<<" is greater or equal than number of devices ("<<device_count2<<")\n";
+                error();
+            }
+        }
+        device_count = ii;
     } catch(FileIOException e) {
             cerr<<"Cannot read configuration file "<<cfgfile<<"\n";
             error();

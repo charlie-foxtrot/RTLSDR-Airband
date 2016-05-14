@@ -64,6 +64,8 @@ devices = (
   {
 # Device index (as identified by librtlsdr library)
     index = 0;
+# A quick way to ignore this device temporarily. Default: false
+    disable = false;
 # Gain (integer, in decibels, optional). Default is auto-gain.
 #    gain = 28;
 # Dongle mode. Can be one of the following:
@@ -88,6 +90,8 @@ devices = (
 # (ie. +- 1.25 MHz around center frequency)
 # This setting is valid in multichannel mode only.
         freq = 118925000;
+# A quick way to ignore this channel temporarily. Default: false
+        disable = false;
 # Modulation - "am" or "nfm". Default is "am".
 	modulation = "am";
 #Automatioc Frequency Control (AFC) level (optional value)
@@ -98,6 +102,8 @@ devices = (
 # can be sent to multiple Shoutcast servers.
         outputs = (
 	  {
+# A quick way to ignore this output temporarily. Default: false
+            disable = false;
 # Output type. Supported types are: icecast and file.
             type = "icecast";
 # Host name or IP address of Shoutcast/Icecast server
@@ -195,6 +201,10 @@ devices = (
 	);
       },
       {
+# This channel will be ignored.
+# This way you can quickly disable a channel without commenting out or deleting
+# large sections of config file
+	disable = true;
         freq = 121300000;
 	modulation = "am";
         outputs = (
@@ -290,7 +300,15 @@ devices = (
             mountpoint = "152300.mp3";
             username = "source";
             password = "password";
-	  }
+	  },
+          {
+# This output will be ignored.
+# This way you can quickly disable an output without deleting or commenting it out
+	    disabled = true;
+            type = "file";
+            directory = "/home/pi/streams";
+            filename_template = "152300";
+          }
 	);
       } );
   },
@@ -317,4 +335,28 @@ devices = (
 	);
       }
     );
-  } );
+  },
+  {
+# This device will be ignored.
+# This way you can quickly disable a device without deleting or commenting it out
+    index = 3;
+    gain = 28;
+    mode = "scan";
+    correction = 80;
+    channels = (
+      {
+        freqs = ( 126300000, 121500000 );
+        outputs = (
+	  {
+            type = "icecast";
+            server = "www.example.com";
+            port = 8000;
+            mountpoint = "test.mp3";
+            username = "source";
+            password = "password";
+	  }
+	);
+      }
+    );
+  }
+);

@@ -1322,11 +1322,7 @@ int main(int argc, char* argv[]) {
             }
             if(!devs[i].exists("correction")) devs[i].add("correction", Setting::TypeInt);
             dev->device = (int)devs[i]["index"];
-            dev->channel_count = devs[i]["channels"].getLength();
-            if(dev->channel_count < 1 || dev->channel_count > 8) {
-                cerr<<"Configuration error: devices.["<<i<<"]: invalid channel count (min 1, max 8)\n";
-                error();
-            }
+            dev->channel_count = 0;
             if(devs[i].exists("gain"))
                 dev->gain = (int)devs[i]["gain"] * 10;
             else
@@ -1344,10 +1340,6 @@ int main(int argc, char* argv[]) {
                 dev->mode = R_MULTICHANNEL;
             }
             if(dev->mode == R_MULTICHANNEL) dev->centerfreq = (int)devs[i]["centerfreq"];
-            if(dev->mode == R_SCAN && dev->channel_count > 1) {
-                cerr<<"Configuration error: devices.["<<i<<"]: only one channel section is allowed in scan mode\n";
-                error();
-            }
 #ifdef NFM
             if(devs[i].exists("tau")) {
                 dev->alpha = ((int)devs[i]["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)devs[i]["tau"])));
@@ -1359,8 +1351,12 @@ int main(int argc, char* argv[]) {
             memset(dev->bins, 0, sizeof(dev->bins));
             memset(dev->base_bins, 0, sizeof(dev->base_bins));
             dev->bufs = dev->bufe = dev->waveend = dev->waveavail = dev->row = 0;
-            for (int j = 0; j < dev->channel_count; j++)  {
-                channel_t* channel = dev->channels + j;
+            int jj = 0;
+            for (int j = 0; j < devs[i]["channels"].getLength(); j++)  {
+                if(devs[i]["channels"][j].exists("disable") && (bool)devs[i]["channels"][j]["disable"] == true) {
+                    continue;
+                }
+                channel_t* channel = dev->channels + jj;
                 for (int k = 0; k < AGC_EXTRA; k++) {
                     channel->wavein[k] = 20;
                     channel->waveout[k] = 0.5;
@@ -1464,13 +1460,13 @@ int main(int argc, char* argv[]) {
                     channel->outputs[o].enabled = true;
                     channel->outputs[o].active = false;
                 }
-                dev->base_bins[j] = dev->bins[j] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
+                dev->base_bins[jj] = dev->bins[jj] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
 #ifdef NFM
                 if(channel->modulation == MOD_NFM) {
 // Calculate mixing frequency needed for NFM to remove linear phase shift caused by FFT sliding window
 // This equals bin_width_Hz * (distance_from_DC_bin)
                     float timeref_freq = 2.0f * M_PI * (float)(SOURCE_RATE / FFT_SIZE) *
-                      (float)(dev->bins[j] < (FFT_SIZE >> 1) ? dev->bins[j] + 1 : dev->bins[j] - FFT_SIZE + 1) / (float)WAVE_RATE;
+                      (float)(dev->bins[jj] < (FFT_SIZE >> 1) ? dev->bins[jj] + 1 : dev->bins[jj] - FFT_SIZE + 1) / (float)WAVE_RATE;
 // Pre-generate the waveform for better performance
                     for(int k = 0; k < WAVE_RATE; k++) {
                         channel->timeref_cos[k] = cosf(timeref_freq * k);
@@ -1478,7 +1474,17 @@ int main(int argc, char* argv[]) {
                     }
                 }
 #endif
+                jj++;
             }
+            if(jj < 1 || jj > 8) {
+                cerr<<"Configuration error: devices.["<<i<<"]: invalid channel count (min 1, max 8)\n";
+                error();
+            }
+            if(dev->mode == R_SCAN && jj > 1) {
+                cerr<<"Configuration error: devices.["<<i<<"]: only one channel section is allowed in scan mode\n";
+                error();
+            }
+            dev->channel_count = jj;
         }
     } catch(FileIOException e) {
             cerr<<"Cannot read configuration file "<<cfgfile<<"\n";

@@ -114,7 +114,7 @@
 #define WAVE_BATCH WAVE_RATE / 8
 #define AGC_EXTRA WAVE_RATE / 160
 #define WAVE_LEN 2 * WAVE_BATCH + AGC_EXTRA
-#define MP3_RATE WAVE_RATE
+#define MP3_RATE 8000
 #define MAX_SHOUT_QUEUELEN 32768
 #define CHANNELS 8
 #define FFT_SIZE_LOG 9
@@ -467,7 +467,7 @@ lame_t airlame_init() {
     }
 
     lame_set_in_samplerate(lame, WAVE_RATE);
-    lame_set_VBR(lame, vbr_off);
+    lame_set_VBR(lame, vbr_mtrh);
     lame_set_brate(lame, 16);
     lame_set_quality(lame, 7);
     lame_set_out_samplerate(lame, MP3_RATE);

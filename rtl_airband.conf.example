@@ -55,6 +55,12 @@
 # You can also set this parameter per dongle and / or per channel.
 # tau = 200;
 
+# Number of USB read buffers to be used per dongle
+# The default value is 10. If you use four or more dongles simultaneously
+# or you get error messages like "Failed to submit transfer 12!"
+# you may need to lower this value
+# rtlsdr_buffers = 10;
+
 # devices section contains all settings related to the RTLSDR receivers.
 #
 # It's a list of groups - each group contains settings for a single receiver,

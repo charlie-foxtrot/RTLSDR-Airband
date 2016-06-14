@@ -238,6 +238,7 @@ struct device_t {
 device_t* devices;
 int device_count;
 volatile int device_opened = 0;
+int rtlsdr_buffers = 10;
 #ifdef _WIN32
 int avx;
 #endif
@@ -373,7 +374,7 @@ void* rtlsdr_exec(void* params) {
     log(LOG_INFO, "Device %d started.\n", dev->device);
     atomic_inc(&device_opened);
     dev->failed = 0;
-    if(rtlsdr_read_async(dev->rtlsdr, rtlsdr_callback, params, 15, 320000) < 0) {
+    if(rtlsdr_read_async(dev->rtlsdr, rtlsdr_callback, params, rtlsdr_buffers, 320000) < 0) {
         log(LOG_WARNING, "Device #%d: async read failed, disabling\n", dev->device);
         dev->failed = 1;
         atomic_dec(&device_opened);
@@ -1276,6 +1277,11 @@ int main(int argc, char* argv[]) {
 #ifndef _WIN32
         if(root.exists("pidfile")) pidfile = strdup(root["pidfile"]);
 #endif
+        if(root.exists("rtlsdr_buffers")) rtlsdr_buffers = (int)(root["rtlsdr_buffers"]);
+        if(rtlsdr_buffers < 1) {
+            cerr<<"Configuration error: rtlsdr_buffers must be greater than 0\n";
+            error();
+        }
 #ifdef NFM
         if(root.exists("tau"))
             alpha = ((int)root["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)root["tau"])));

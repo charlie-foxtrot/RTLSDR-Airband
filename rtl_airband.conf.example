@@ -45,7 +45,7 @@
 
 # PID file path (default: /run/rtl_airband.pid)
 # This setting has no effect on Windows.
-# pidfile = /run/rtl_airband.pid
+# pidfile = "/run/rtl_airband.pid"
 
 # De-emphasis filter time constant
 # The filter suppresses high-frequency noise in NFM channels.

@@ -229,6 +229,8 @@ struct device_t {
     int waveavail;
     THREAD rtl_thread;
     THREAD controller_thread;
+    int cur_scan_freq;
+    pthread_mutex_t cur_scan_freq_lock;
     int row;
     int failed;
     enum rec_modes mode;
@@ -590,8 +592,7 @@ static int fdata_open(file_data *fdata, const char *filename) {
 }
 
 unsigned char lamebuf[LAMEBUF_SIZE];
-
-void process_outputs(channel_t* channel) {
+void process_outputs(channel_t* channel, int cur_scan_freq) {
     int bytes = lame_encode_buffer_ieee_float(channel->lame, channel->waveout, NULL, WAVE_BATCH, lamebuf, LAMEBUF_SIZE);
     if (bytes < 0) {
         log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n", bytes);
@@ -614,6 +615,13 @@ void process_outputs(channel_t* channel) {
                 shout_close(icecast->shout);
                 shout_free(icecast->shout);
                 icecast->shout = NULL;
+            } else if(cur_scan_freq != 0) {
+                shout_metadata_t *meta = shout_metadata_new();
+                char description[32];
+                snprintf(description, sizeof(description), "freq: %.3f MHz", cur_scan_freq / 1000000.0);
+                shout_metadata_add(meta, "song", description);
+                shout_set_metadata(icecast->shout, meta);
+                shout_metadata_free(meta);
             }
         } else if(channel->outputs[k].type == O_FILE) {
             file_data *fdata = (file_data *)(channel->outputs[k].data);
@@ -671,17 +679,27 @@ void process_outputs(channel_t* channel) {
 pthread_cond_t      mp3_cond = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t     mp3_mutex = PTHREAD_MUTEX_INITIALIZER;
 void* output_thread(void* params) {
+    int cur_scan_freq = 0;
     while (!do_exit) {
         pthread_cond_wait(&mp3_cond, &mp3_mutex);
         for (int i = 0; i < device_count; i++) {
             if (!devices[i].failed && devices[i].waveavail) {
                 devices[i].waveavail = 0;
+                if(devices[i].mode == R_SCAN) {
+                    pthread_mutex_lock(&(devices[i].cur_scan_freq_lock));
+                        cur_scan_freq = devices[i].cur_scan_freq;
+                        devices[i].cur_scan_freq = 0;
+                    pthread_mutex_unlock(&(devices[i].cur_scan_freq_lock));
+                }
                 for (int j = 0; j < devices[i].channel_count; j++) {
                     channel_t* channel = devices[i].channels + j;
-                    process_outputs(channel);
+                    process_outputs(channel, cur_scan_freq);
                     memcpy(channel->waveout, channel->waveout + WAVE_BATCH, AGC_EXTRA * 4);
                 }
             }
+// make sure we don't carry cur_scan_freq value to the next receiver which might be working
+// in multichannel mode
+            cur_scan_freq = 0;
         }
     }
     return 0;
@@ -699,12 +717,18 @@ void* controller_thread(void* params) {
             if(consecutive_squelch_off < 10) {
                 consecutive_squelch_off++;
             } else {
-		dev->channels[0].frequency = dev->channels[0].freqlist[i];
+                dev->channels[0].frequency = dev->channels[0].freqlist[i];
                 dev->centerfreq = dev->channels[0].freqlist[i] + 2 * (double)(SOURCE_RATE / FFT_SIZE);
                 rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);
                 i++; i %= dev->channels[0].freq_count;
             }
         } else {
+            if(consecutive_squelch_off == 10) {
+// squelch has just opened on a new frequency - we might need to update outputs' metadata
+                pthread_mutex_lock(&dev->cur_scan_freq_lock);
+                    dev->cur_scan_freq = dev->channels[0].frequency;
+                pthread_mutex_unlock(&dev->cur_scan_freq_lock);
+            }
             consecutive_squelch_off = 0;
         }
     }
@@ -1595,9 +1619,11 @@ int main(int argc, char* argv[]) {
             dev->controller_thread = (THREAD)_beginthread(controller_thread, 0, dev);
 #else
         pthread_create(&dev->rtl_thread, NULL, &rtlsdr_exec, dev);
-        if(dev->mode == R_SCAN)
+        if(dev->mode == R_SCAN) {
+            dev->cur_scan_freq_lock = PTHREAD_MUTEX_INITIALIZER;
 // FIXME: not needed when freq_count == 1?
             pthread_create(&dev->controller_thread, NULL, &controller_thread, dev);
+        }
 #endif
     }
 

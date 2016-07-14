@@ -107,7 +107,7 @@ Building
  * Install RTLSDR library (http://sdr.osmocom.org/trac/wiki/rtl-sdr):
 
         sudo apt-get update
-        sudo apt-get install git gcc autoconf make libusb-1.0-0-dev
+        sudo apt-get install git gcc autoconf make libusb-1.0-0-dev libtool
         cd
         git clone git://git.osmocom.org/rtl-sdr.git
         cd rtl-sdr/

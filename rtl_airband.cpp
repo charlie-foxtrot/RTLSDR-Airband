@@ -180,7 +180,6 @@ enum modulations {
 };
 struct channel_t {
     float wavein[WAVE_LEN];  // FFT output waveform
-    float waveref[WAVE_LEN]; // for power level calculation
     float waveout[WAVE_LEN]; // waveform after squelch + AGC
 #ifdef NFM
     float complex_samples[2*WAVE_LEN];  // raw samples for NFM demod
@@ -1052,32 +1051,6 @@ void demodulate() {
             for (int i = 0; i < dev->channel_count; i++) {
                 AFC afc(dev, i);
                 channel_t* channel = dev->channels + i;
-#if defined __arm__
-                float agcmin2 = channel->agcmin * 4.5f;
-                for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j++) {
-                    channel->waveref[j] = min(channel->wavein[j], agcmin2);
-                }
-#elif defined _WIN32
-                if (avx) {
-                    __m256 agccap = _mm256_set1_ps(channel->agcmin * 4.5f);
-                    for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j += 8) {
-                        __m256 t = _mm256_loadu_ps(channel->wavein + j);
-                        _mm256_storeu_ps(channel->waveref + j, _mm256_min_ps(t, agccap));
-                    }
-                } else {
-                    __m128 agccap = _mm_set1_ps(channel->agcmin * 4.5f);
-                    for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j += 4) {
-                        __m128 t = _mm_loadu_ps(channel->wavein + j);
-                        _mm_storeu_ps(channel->waveref + j, _mm_min_ps(t, agccap));
-                    }
-                }
-#else
-                __m128 agccap = _mm_set1_ps(channel->agcmin * 4.5f);
-                for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j += 4) {
-                    __m128 t = _mm_loadu_ps(channel->wavein + j);
-                    _mm_storeu_ps(channel->waveref + j, _mm_min_ps(t, agccap));
-                }
-#endif
                 for (int j = AGC_EXTRA; j < WAVE_BATCH + AGC_EXTRA; j++) {
                     // auto noise floor
                     if (j % 16 == 0) {
@@ -1085,7 +1058,7 @@ void demodulate() {
                     }
 
                     // average power
-                    channel->agcavgslow = channel->agcavgslow * 0.99f + channel->waveref[j] * 0.01f;
+                    channel->agcavgslow = channel->agcavgslow * 0.99f + channel->wavein[j] * 0.01f;
 
                     if (channel->agcsq > 0) {
                         channel->agcsq = max(channel->agcsq - 1, 1);

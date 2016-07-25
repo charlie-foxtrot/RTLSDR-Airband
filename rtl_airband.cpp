@@ -196,6 +196,7 @@ struct channel_t {
     float agcavgfast;  // average power, for AGC
     float agcavgslow;  // average power, for squelch level detection
     float agcmin;      // noise level
+    int sqlevel;     // manually configured squelch level
     int agclow;             // low level sample count
     char axcindicate;  // squelch/AFC status indicator: ' ' - no signal; '*' - has signal; '>', '<' - signal tuned by AFC
     unsigned char afc; //0 - AFC disabled; 1 - minimal AFC; 2 - more aggressive AFC and so on to 255
@@ -1053,29 +1054,30 @@ void demodulate() {
                 channel_t* channel = dev->channels + i;
                 for (int j = AGC_EXTRA; j < WAVE_BATCH + AGC_EXTRA; j++) {
                     // auto noise floor
-                    if (j % 16 == 0) {
+                    if (channel->sqlevel < 0 && j % 16 == 0) {
                         channel->agcmin = channel->agcmin * 0.97f + min(channel->agcavgslow, channel->agcmin) * 0.03f + 0.0001f;
                     }
 
                     // average power
                     channel->agcavgslow = channel->agcavgslow * 0.99f + channel->wavein[j] * 0.01f;
 
+                    float sqlevel = channel->sqlevel > 0 ? (float)channel->sqlevel : 3.0f * channel->agcmin;
                     if (channel->agcsq > 0) {
                         channel->agcsq = max(channel->agcsq - 1, 1);
-                        if (channel->agcsq == 1 && channel->agcavgslow > 3.0f * channel->agcmin) {
+                        if (channel->agcsq == 1 && channel->agcavgslow > sqlevel) {
                             channel->agcsq = -AGC_EXTRA * 2;
                             channel->axcindicate = '*';
                             if(channel->modulation == MOD_AM) {
                             // fade in
                                 for (int k = j - AGC_EXTRA; k < j; k++) {
-                                    if (channel->wavein[k] > channel->agcmin * 3.0f) {
+                                    if (channel->wavein[k] > sqlevel) {
                                         channel->agcavgfast = channel->agcavgfast * 0.98f + channel->wavein[k] * 0.02f;
                                     }
                                 }
                             }
                         }
                     } else {
-                        if (channel->wavein[j] > channel->agcmin * 3.0f) {
+                        if (channel->wavein[j] > sqlevel) {
                             if(channel->modulation == MOD_AM)
                                 channel->agcavgfast = channel->agcavgfast * 0.995f + channel->wavein[j] * 0.005f;
                             channel->agclow = 0;
@@ -1083,7 +1085,8 @@ void demodulate() {
                             channel->agclow++;
                         }
                         channel->agcsq = min(channel->agcsq + 1, -1);
-                        if ((channel->agcsq == -1 && channel->agcavgslow < 2.4f * channel->agcmin) || channel->agclow == AGC_EXTRA - 12) {
+                        sqlevel = channel->sqlevel > 0 ? (float)channel->sqlevel : 2.4f * channel->agcmin;
+                        if ((channel->agcsq == -1 && channel->agcavgslow < sqlevel) || channel->agclow == AGC_EXTRA - 12) {
                             channel->agcsq = AGC_EXTRA * 2;
                             channel->axcindicate = ' ';
                             if(channel->modulation == MOD_AM) {
@@ -1339,6 +1342,7 @@ int main(int argc, char* argv[]) {
                 channel->agcavgslow = 0.5f;
                 channel->agcmin = 100.0f;
                 channel->agclow = 0;
+                channel->sqlevel = -1.0f;
                 channel->modulation = MOD_AM;
                 if(devs[i]["channels"][j].exists("modulation")) {
 #ifdef NFM
@@ -1350,6 +1354,13 @@ int main(int argc, char* argv[]) {
                         channel->modulation = MOD_AM;
                     } else {
                         cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: unknown modulation\n";
+                        error();
+                    }
+                }
+                if(devs[i]["channels"][j].exists("squelch")) {
+                    channel->sqlevel = (int)devs[i]["channels"][j]["squelch"];
+                    if(channel->sqlevel <= 0) {
+                        cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch must be greater than 0\n";
                         error();
                     }
                 }

@@ -100,6 +100,11 @@ devices = (
         disable = false;
 # Modulation - "am" or "nfm". Default is "am".
 	modulation = "am";
+# Squelch level (integer, greater than 0). Default is auto.
+# Set this parameter only when auto squelch does not work correctly
+# (this is common with channels which transmit continuously, like ATIS/AWOS,
+# when auto squelch is unable to figure out the correct noise floor level)
+#	squelch = 100;
 #Automatioc Frequency Control (AFC) level (optional value)
 #0 - disabled (by default)
 #value from range 1...10 - AFC enabled, larger value means more aggressive AFC.
@@ -187,6 +192,8 @@ devices = (
       },
       {
         freq = 120600000;
+# Manual squelch setting for this channel
+	squelch = 250;
 	modulation = "am";
 # This channel is not streamed to Icecast.
 # It is saved to local files into two destinations - one of them records continuously, the other one

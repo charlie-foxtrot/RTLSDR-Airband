@@ -1,5 +1,17 @@
 NEWS:
 
+Version 2.1.0:
+ * Narrowband FM demodulation support
+ * Automatic Frequency Control
+ * Append mode for recording (enabled by default)
+ * Dongles, channels and outputs can be individually enabled and disabled
+   by a simple config flag (no need to comment out or delete large
+   configuration sections)
+ * Use VBR for MP3 encoding
+ * Modified power level calculation algorithm (better sensitivity)
+ * Support for manual squelch setting
+ * Bug fixes
+
 Version 2.0.2:
  * Fixed a problem with running three dongles or more, simultaneously
 

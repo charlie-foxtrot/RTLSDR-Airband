@@ -1,12 +1,12 @@
 RTLSDR-Airband
 =====================
 
-RTLSDR Airband is intended for Airband reception and online streaming to services such as liveatc.net
+RTLSDR Airband is intended for AM/NFM voice channels reception and online streaming to services such as liveatc.net
 
 Features
 ---------------------
- * Multichannel mode - decode up to eight AM channels per dongle (within bandwidth frequency range)
- * Scanner mode - decode unlimited number of AM channels with frequency hopping in a round-robin
+ * Multichannel mode - decode up to eight AM or NFM channels per dongle (within bandwidth frequency range)
+ * Scanner mode - decode unlimited number of AM and/or NFM channels with frequency hopping in a round-robin
    fashion (no frequency range limitations)
  * Decode multiple dongles simutaneously
  * Auto squelch and Automatic Gain Control
@@ -107,7 +107,7 @@ Building
  * Install RTLSDR library (http://sdr.osmocom.org/trac/wiki/rtl-sdr):
 
         sudo apt-get update
-        sudo apt-get install git gcc autoconf make libusb-1.0-0-dev
+        sudo apt-get install git gcc autoconf make libusb-1.0-0-dev libtool
         cd
         git clone git://git.osmocom.org/rtl-sdr.git
         cd rtl-sdr/
@@ -143,26 +143,39 @@ Building
 
         sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev libconfig++-dev
 
- * Set the PLATFORM environment variable (to indicate your hardware platform) and run `make`.
-   For example, to build a binary for RPi version 1 (ARMv6 CPU, Broadcom VideoCore GPU) type
-   the following:
+ * Set the build options and run `make`. Available build options:
+
+   `PLATFORM=platform_name` - selects the hardware platform. This option is mandatory. See below.
+
+   `NFM=1` - enables NFM support. By default, NFM is disabled.
+
+   **Warning:** Do not enable NFM, if you only use AM (especially on low-power platforms, like RPi).
+   This incurs performance penalty, both for AM and NFM.
+
+   Examples:
+
+   Build a binary for RPi version 1 (ARMv6 CPU, Broadcom VideoCore GPU):
 
         PLATFORM=rpiv1 make
 
-   Building for RPi V2 (ARMv7 CPU, Broadcom VideoCore GPU):
+   Same platform, but with NFM support enabled:
 
-        PLATFORM=rpiv2 make
+        PLATFORM=rpiv1 NFM=1 make
+
+   Building for RPi V2 (ARMv7 CPU, Broadcom VideoCore GPU), with NFM support:
+
+        PLATFORM=rpiv2 NFM=1 make
 
    Building for other ARMv7-based platforms without VideoCore GPU, eg. Cubieboard (FFTW3
-   library is needed in this case):
+   library is needed in this case), NFM disabled:
 
         sudo apt-get install libfftw3-dev
         PLATFORM=armv7-generic make
 
-   Building for generic x86 CPU (FFTW3 library is needed in this case):
+   Building for generic x86 CPU (FFTW3 library is needed in this case), NFM enabled:
 
         sudo apt-get install libfftw3-dev
-        PLATFORM=x86 make
+        PLATFORM=x86 NFM=1 make
 
  * Install the software:
 
@@ -214,6 +227,10 @@ rtl_airband accepts the following command line options:
     -h                      Display this help text
     -f                      Run in foreground, display textual waterfalls
     -c <config_file_path>   Use non-default configuration file
+
+Additional options are avalable when rtl_airband is compiled with NFM support:
+
+    -Q                      Use quadri correlator for FM demodulation (default is atan2)
 
 Troubleshooting
 --------------------
@@ -278,7 +295,7 @@ any error messages, for example: `tail /var/log/messages`. Common problems:
 
 License
 --------------------
-Copyright (C) 2015 Tomasz Lemiech <szpajder@gmail.com>
+Copyright (C) 2015-2016 Tomasz Lemiech <szpajder@gmail.com>
 
 Based on original work by Wong Man Hang <microtony@gmail.com>
 

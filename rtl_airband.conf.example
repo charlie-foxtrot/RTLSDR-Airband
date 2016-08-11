@@ -45,7 +45,21 @@
 
 # PID file path (default: /run/rtl_airband.pid)
 # This setting has no effect on Windows.
-# pidfile = /run/rtl_airband.pid
+# pidfile = "/run/rtl_airband.pid"
+
+# De-emphasis filter time constant
+# The filter suppresses high-frequency noise in NFM channels.
+# Larger values cause more noise suppression.
+# Set it to 0 if you don't want filtering.
+# Default value: 200 (microseconds).
+# You can also set this parameter per dongle and / or per channel.
+# tau = 200;
+
+# Number of USB read buffers to be used per dongle
+# The default value is 10. If you use four or more dongles simultaneously
+# or you get error messages like "Failed to submit transfer 12!"
+# you may need to lower this value
+# rtlsdr_buffers = 10;
 
 # devices section contains all settings related to the RTLSDR receivers.
 #
@@ -56,6 +70,8 @@ devices = (
   {
 # Device index (as identified by librtlsdr library)
     index = 0;
+# A quick way to ignore this device temporarily. Default: false
+    disable = false;
 # Gain (integer, in decibels, optional). Default is auto-gain.
 #    gain = 28;
 # Dongle mode. Can be one of the following:
@@ -80,10 +96,25 @@ devices = (
 # (ie. +- 1.25 MHz around center frequency)
 # This setting is valid in multichannel mode only.
         freq = 118925000;
+# A quick way to ignore this channel temporarily. Default: false
+        disable = false;
+# Modulation - "am" or "nfm". Default is "am".
+	modulation = "am";
+# Squelch level (integer, greater than 0). Default is auto.
+# Set this parameter only when auto squelch does not work correctly
+# (this is common with channels which transmit continuously, like ATIS/AWOS,
+# when auto squelch is unable to figure out the correct noise floor level)
+#	squelch = 100;
+#Automatioc Frequency Control (AFC) level (optional value)
+#0 - disabled (by default)
+#value from range 1...10 - AFC enabled, larger value means more aggressive AFC.
+        afc = 0;
 # Multiple outputs per channel are supported. For example, a single channel
 # can be sent to multiple Shoutcast servers.
         outputs = (
 	  {
+# A quick way to ignore this output temporarily. Default: false
+            disable = false;
 # Output type. Supported types are: icecast and file.
             type = "icecast";
 # Host name or IP address of Shoutcast/Icecast server
@@ -105,6 +136,9 @@ devices = (
 # Subsequent channels
       {
         freq = 119100000;
+# You can use both AM and NFM modulations for different channels on the same dongle.
+# Probably not very useful in multichannel mode, but it's possible.
+	modulation = "nfm";
 # This channel is streamed to two destinations
         outputs = (
 	  {
@@ -127,6 +161,7 @@ devices = (
       },
       {
         freq = 119500000;
+	modulation = "am";
 # This channel is streamed to Icecast and saved to local files
         outputs = (
 	  {
@@ -148,11 +183,18 @@ devices = (
 # Set this to false if you want to skip silence (record only when squelch is open).
 # Default is false.
             continuous = true;
+# Set this to true if you want to append to file if its exists with demarkation of missing fragment.
+# Set this to false if you want to overwrite existing files.
+# Default is true.
+            append = false;
           }
 	);
       },
       {
         freq = 120600000;
+# Manual squelch setting for this channel
+	squelch = 250;
+	modulation = "am";
 # This channel is not streamed to Icecast.
 # It is saved to local files into two destinations - one of them records continuously, the other one
 # skips silence periods.
@@ -172,7 +214,12 @@ devices = (
 	);
       },
       {
+# This channel will be ignored.
+# This way you can quickly disable a channel without commenting out or deleting
+# large sections of config file
+	disable = true;
         freq = 121300000;
+	modulation = "am";
         outputs = (
 	  {
             type = "icecast";
@@ -186,6 +233,7 @@ devices = (
       },
       {
         freq = 121600000;
+	modulation = "am";
         outputs = (
 	  {
             type = "icecast";
@@ -198,68 +246,86 @@ devices = (
 	);
       } );
   },
-# Receiver 1 - multichannel mode
+# Receiver 1 - multichannel mode, 4 NFM channels
   {
     index = 1;
     gain = 28;
     mode = "multichannel";
     centerfreq = 123000000;
     correction = 80;
+# De-emphasis filter time constant
+# This setting overrides the global tau setting for all channels on this dongle
+    tau = 0;
     channels = (
       {
-        freq = 122000000;
+        freq = 152000000;
+	modulation = "nfm";
         outputs = (
 	  {
             type = "icecast";
             server = "www.example.com";
             port = 8000;
-            mountpoint = "122000.mp3";
+            mountpoint = "152000.mp3";
             username = "source";
             password = "password";
 	  }
 	);
       },
       {
-        freq = 122950000;
+        freq = 152100000;
+	modulation = "nfm";
+# De-emphasis filter time constant
+# Applies to this channel only
+	tau = 500;
         outputs = (
 	  {
             type = "icecast";
             server = "www.example.com";
             port = 8000;
-            mountpoint = "122950.mp3";
+            mountpoint = "152100.mp3";
             username = "source";
             password = "password";
 	  }
 	);
       },
       {
-        freq = 123800000;
+        freq = 152200000;
+	modulation = "nfm";
         outputs = (
 	  {
             type = "icecast";
             server = "www.example.com";
             port = 8000;
-            mountpoint = "123800.mp3";
+            mountpoint = "152200.mp3";
             username = "source";
             password = "password";
 	  }
 	);
       },
       {
-        freq = 123950000;
+        freq = 152300000;
+	modulation = "nfm";
         outputs = (
 	  {
             type = "icecast";
             server = "www.example.com";
             port = 8000;
-            mountpoint = "123950.mp3";
+            mountpoint = "152300.mp3";
             username = "source";
             password = "password";
-	  }
+	  },
+          {
+# This output will be ignored.
+# This way you can quickly disable an output without deleting or commenting it out
+	    disabled = true;
+            type = "file";
+            directory = "/home/pi/streams";
+            filename_template = "152300";
+          }
 	);
       } );
   },
-# Receiver 2 - scan mode
+# Receiver 2 - scan mode, AM modulation (default)
   {
     index = 2;
     gain = 28;
@@ -282,4 +348,28 @@ devices = (
 	);
       }
     );
-  } );
+  },
+  {
+# This device will be ignored.
+# This way you can quickly disable a device without deleting or commenting it out
+    index = 3;
+    gain = 28;
+    mode = "scan";
+    correction = 80;
+    channels = (
+      {
+        freqs = ( 126300000, 121500000 );
+        outputs = (
+	  {
+            type = "icecast";
+            server = "www.example.com";
+            port = 8000;
+            mountpoint = "test.mp3";
+            username = "source";
+            password = "password";
+	  }
+	);
+      }
+    );
+  }
+);

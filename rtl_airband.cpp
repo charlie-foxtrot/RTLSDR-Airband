@@ -1176,10 +1176,13 @@ void demodulate() {
 }
 
 void usage() {
-    cout<<"Usage: rtl_airband [-f] [-c <config_file_path>]\n\
+    cout<<"Usage: rtl_airband [options] [-c <config_file_path>]\n\
 \t-h\t\t\tDisplay this help text\n\
-\t-f\t\t\tRun in foreground, display textual waterfalls\n\
-\t-c <config_file_path>\tUse non-default configuration file\n\t\t\t\t(default: "<<CFGFILE<<")\n\
+\t-f\t\t\tRun in foreground, display textual waterfalls\n";
+#ifdef NFM
+    cout<<"\t-Q\t\t\tUse quadri correlator for FM demodulation (default is atan2)\n";
+#endif
+    cout<<"\t-c <config_file_path>\tUse non-default configuration file\n\t\t\t\t(default: "<<CFGFILE<<")\n\
 \t-v\t\t\tDisplay version and exit\n";
     exit(EXIT_SUCCESS);
 } 

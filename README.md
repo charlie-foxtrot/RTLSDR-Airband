@@ -228,6 +228,10 @@ rtl_airband accepts the following command line options:
     -f                      Run in foreground, display textual waterfalls
     -c <config_file_path>   Use non-default configuration file
 
+Additional options are avalable when rtl_airband is compiled with NFM support:
+
+    -Q                      Use quadri correlator for FM demodulation (default is atan2)
+
 Troubleshooting
 --------------------
 

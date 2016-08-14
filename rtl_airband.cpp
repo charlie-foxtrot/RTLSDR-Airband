@@ -77,6 +77,7 @@
 #include <syslog.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <algorithm>
@@ -117,6 +118,7 @@
 #define WAVE_LEN 2 * WAVE_BATCH + AGC_EXTRA
 #define MP3_RATE 8000
 #define MAX_SHOUT_QUEUELEN 32768
+#define TAG_QUEUE_LEN 16
 #define CHANNELS 8
 #define FFT_SIZE_LOG 9
 #define LAMEBUF_SIZE 22000 //todo: calculate
@@ -161,6 +163,7 @@ struct icecast_data {
     const char *mountpoint;
     const char *name;
     const char *genre;
+    bool send_scan_freq_tags;
     shout_t *shout;
 };
 
@@ -171,6 +174,11 @@ struct file_data {
     bool continuous;
     bool append;
     FILE *f;
+};
+
+struct freq_tag {
+    int freq;
+    struct timeval tv;
 };
 
 enum modulations { 
@@ -230,10 +238,13 @@ struct device_t {
     int waveavail;
     THREAD rtl_thread;
     THREAD controller_thread;
+    struct freq_tag tag_queue[TAG_QUEUE_LEN];
+    int tq_head, tq_tail;
+    int last_frequency;
+    pthread_mutex_t tag_queue_lock;
     int row;
     int failed;
     enum rec_modes mode;
-
 };
 
 device_t* devices;
@@ -243,7 +254,7 @@ int rtlsdr_buffers = 10;
 #ifdef _WIN32
 int avx;
 #endif
-int foreground = 0, do_syslog = 1;
+int foreground = 0, do_syslog = 1, shout_metadata_delay = 3;
 static volatile int do_exit = 0;
 #ifdef NFM
 float alpha = exp(-1.0f/(WAVE_RATE * 2e-4));
@@ -591,8 +602,7 @@ static int fdata_open(file_data *fdata, const char *filename) {
 }
 
 unsigned char lamebuf[LAMEBUF_SIZE];
-
-void process_outputs(channel_t* channel) {
+void process_outputs(channel_t* channel, int cur_scan_freq) {
     int bytes = lame_encode_buffer_ieee_float(channel->lame, channel->waveout, NULL, WAVE_BATCH, lamebuf, LAMEBUF_SIZE);
     if (bytes < 0) {
         log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n", bytes);
@@ -615,6 +625,13 @@ void process_outputs(channel_t* channel) {
                 shout_close(icecast->shout);
                 shout_free(icecast->shout);
                 icecast->shout = NULL;
+            } else if(icecast->send_scan_freq_tags && cur_scan_freq != 0) {
+                shout_metadata_t *meta = shout_metadata_new();
+                char description[32];
+                snprintf(description, sizeof(description), "freq: %.3f MHz", cur_scan_freq / 1000000.0);
+                shout_metadata_add(meta, "song", description);
+                shout_set_metadata(icecast->shout, meta);
+                shout_metadata_free(meta);
             }
         } else if(channel->outputs[k].type == O_FILE) {
             file_data *fdata = (file_data *)(channel->outputs[k].data);
@@ -668,21 +685,74 @@ void process_outputs(channel_t* channel) {
     }
 }
 
+void tag_queue_put(device_t *dev, int freq, struct timeval tv) {
+    pthread_mutex_lock(&dev->tag_queue_lock);
+    dev->tq_head++; dev->tq_head %= TAG_QUEUE_LEN;
+    if(dev->tq_head == dev->tq_tail) {
+        log(LOG_WARNING, "tag_queue_put: queue overrun");
+        dev->tq_tail++;
+    }
+    dev->tag_queue[dev->tq_head].freq = freq;
+    memcpy(&dev->tag_queue[dev->tq_head].tv, &tv, sizeof(struct timeval));
+    pthread_mutex_unlock(&dev->tag_queue_lock);
+}
+
+void tag_queue_get(device_t *dev, struct freq_tag *tag) {
+    int i;
+
+    if(!tag) return;
+    pthread_mutex_lock(&dev->tag_queue_lock);
+    if(dev->tq_head == dev->tq_tail) {      /* empty queue */
+        tag->freq = 0;
+    } else {
+// read queue entry at pos tq_tail+1 without dequeueing it
+        i = dev->tq_tail+1; i %= TAG_QUEUE_LEN;
+        tag->freq = dev->tag_queue[i].freq;
+        memcpy(&tag->tv, &dev->tag_queue[i].tv, sizeof(struct timeval));
+    }
+    pthread_mutex_unlock(&dev->tag_queue_lock);
+}
+
+void tag_queue_advance(device_t *dev) {
+    pthread_mutex_lock(&dev->tag_queue_lock);
+    dev->tq_tail++; dev->tq_tail %= TAG_QUEUE_LEN;
+    pthread_mutex_unlock(&dev->tag_queue_lock);
+}
+
 #ifndef _WIN32
 pthread_cond_t      mp3_cond = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t     mp3_mutex = PTHREAD_MUTEX_INITIALIZER;
 void* output_thread(void* params) {
+    struct freq_tag tag;
+    struct timeval tv;
+    int new_freq = 0;
+
     while (!do_exit) {
         pthread_cond_wait(&mp3_cond, &mp3_mutex);
         for (int i = 0; i < device_count; i++) {
-            if (!devices[i].failed && devices[i].waveavail) {
-                devices[i].waveavail = 0;
-                for (int j = 0; j < devices[i].channel_count; j++) {
+            device_t* dev = devices + i;
+            if (!dev->failed && dev->waveavail) {
+                dev->waveavail = 0;
+                if(dev->mode == R_SCAN) {
+                    tag_queue_get(dev, &tag);
+                    if(tag.freq != 0) {
+                        tag.tv.tv_sec += shout_metadata_delay;
+                        gettimeofday(&tv, NULL);
+                        if(tag.tv.tv_sec < tv.tv_sec || (tag.tv.tv_sec == tv.tv_sec && tag.tv.tv_usec <= tv.tv_usec)) {
+                            new_freq = tag.freq;
+                            tag_queue_advance(dev);
+                        }
+                    }
+                }
+                for (int j = 0; j < dev->channel_count; j++) {
                     channel_t* channel = devices[i].channels + j;
-                    process_outputs(channel);
+                    process_outputs(channel, new_freq);
                     memcpy(channel->waveout, channel->waveout + WAVE_BATCH, AGC_EXTRA * 4);
                 }
             }
+// make sure we don't carry new_freq value to the next receiver which might be working
+// in multichannel mode
+            new_freq = 0;
         }
     }
     return 0;
@@ -693,6 +763,8 @@ void* controller_thread(void* params) {
     device_t *dev = (device_t*)params;
     int i = 1;
     int consecutive_squelch_off = 0;
+    struct timeval tv;
+
     if(dev->channels[0].freq_count < 2) return 0;
     while(!do_exit) {
         SLEEP(200);
@@ -700,12 +772,20 @@ void* controller_thread(void* params) {
             if(consecutive_squelch_off < 10) {
                 consecutive_squelch_off++;
             } else {
-		dev->channels[0].frequency = dev->channels[0].freqlist[i];
+                dev->channels[0].frequency = dev->channels[0].freqlist[i];
                 dev->centerfreq = dev->channels[0].freqlist[i] + 2 * (double)(SOURCE_RATE / FFT_SIZE);
                 rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);
                 i++; i %= dev->channels[0].freq_count;
             }
         } else {
+            if(consecutive_squelch_off == 10) {
+                if(dev->channels[0].frequency != dev->last_frequency) {
+// squelch has just opened on a new frequency - we might need to update outputs' metadata
+                    gettimeofday(&tv, NULL);
+                    tag_queue_put(dev, dev->channels[0].frequency, tv);
+                    dev->last_frequency = dev->channels[0].frequency;
+                }
+            }
             consecutive_squelch_off = 0;
         }
     }
@@ -1262,6 +1342,11 @@ int main(int argc, char* argv[]) {
             cerr<<"Configuration error: rtlsdr_buffers must be greater than 0\n";
             error();
         }
+        if(root.exists("shout_metadata_delay")) shout_metadata_delay = (int)(root["shout_metadata_delay"]);
+        if(shout_metadata_delay < 0 || shout_metadata_delay > 2*TAG_QUEUE_LEN) {
+            cerr<<"Configuration error: shout_metadata_delay is out of allowed range (0-"<<2 * TAG_QUEUE_LEN<<")\n";
+            error();
+        }
 #ifdef NFM
         if(root.exists("tau"))
             alpha = ((int)root["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)root["tau"])));
@@ -1329,7 +1414,7 @@ int main(int argc, char* argv[]) {
             dev->correction = (int)devs[i]["correction"];
             memset(dev->bins, 0, sizeof(dev->bins));
             memset(dev->base_bins, 0, sizeof(dev->base_bins));
-            dev->bufs = dev->bufe = dev->waveend = dev->waveavail = dev->row = 0;
+            dev->bufs = dev->bufe = dev->waveend = dev->waveavail = dev->row = dev->tq_head = dev->tq_tail = dev->last_frequency = 0;
             int jj = 0;
             for (int j = 0; j < devs[i]["channels"].getLength(); j++)  {
                 if(devs[i]["channels"][j].exists("disable") && (bool)devs[i]["channels"][j]["disable"] == true) {
@@ -1430,6 +1515,10 @@ int main(int argc, char* argv[]) {
                             idata->name = strdup(devs[i]["channels"][j]["outputs"][o]["name"]);
                         if(devs[i]["channels"][j]["outputs"][o].exists("genre"))
                             idata->genre = strdup(devs[i]["channels"][j]["outputs"][o]["genre"]);
+                        if(devs[i]["channels"][j]["outputs"][o].exists("send_scan_freq_tags"))
+                            idata->send_scan_freq_tags = (bool)devs[i]["channels"][j]["outputs"][o]["send_scan_freq_tags"];
+                        else
+                            idata->send_scan_freq_tags = 0;
                     } else if(!strncmp(devs[i]["channels"][j]["outputs"][o]["type"], "file", 4)) {
                         channel->outputs[oo].data = malloc(sizeof(struct file_data));
                         if(channel->outputs[oo].data == NULL) {
@@ -1583,9 +1672,14 @@ int main(int argc, char* argv[]) {
             dev->controller_thread = (THREAD)_beginthread(controller_thread, 0, dev);
 #else
         pthread_create(&dev->rtl_thread, NULL, &rtlsdr_exec, dev);
-        if(dev->mode == R_SCAN)
+        if(dev->mode == R_SCAN) {
+            if(pthread_mutex_init(&dev->tag_queue_lock, NULL) != 0) {
+                cerr<<"Failed to initialize mutex - aborting\n";
+                error();
+            }
 // FIXME: not needed when freq_count == 1?
             pthread_create(&dev->controller_thread, NULL, &controller_thread, dev);
+        }
 #endif
     }
 

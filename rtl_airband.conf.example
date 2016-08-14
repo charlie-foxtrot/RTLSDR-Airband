@@ -61,6 +61,12 @@
 # you may need to lower this value
 # rtlsdr_buffers = 10;
 
+# Delay (seconds) which should be applied to Shoutcast metadata updates
+# This is only used in scan mode to keep tag updates in sync with the audio.
+# Refer to "send_shout_freq_tags" output setting for details.
+# Default value: 3 seconds
+# shout_metadata_delay = 3;
+
 # devices section contains all settings related to the RTLSDR receivers.
 #
 # It's a list of groups - each group contains settings for a single receiver,
@@ -130,6 +136,22 @@ devices = (
             name = "Example ATC feed";
 # optional: genre (default: none)
             genre = "ATC";
+# optional: when the squelch opens on a different frequency in scan mode, 
+# rtl_airband will put the current frequency (in MHz) in the song title.
+# Listeners will be able to see which channel they are listening to in 
+# a particular point in time. Caveats:
+# - it is not possible to achieve perfect sync between the audio and
+#   Icecast metadata changes. You can tweak the shout_metadata_delay
+#   global setting to correct the offset, however there is no "one size
+#   fits all" value. The offset depends mainly on the buffer size in the
+#   player.
+# - Icecast server, by default, writes each metadata change request to the
+#   log file. By using this feature, you may clog the server's logs
+#   pretty quickly, so if you are feeding to a server which is not owned
+#   by you, ask the owner for permission before enabling this.
+# This setting has no effect when the dongle is set to multichannel mode.
+# Default: false
+            send_scan_freq_tags = true;
 	  }
 	);
       },

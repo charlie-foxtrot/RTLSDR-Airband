@@ -171,6 +171,7 @@ struct file_data {
     bool continuous;
     bool append;
     FILE *f;
+    bool localtime;
 };
 
 enum modulations { 
@@ -620,7 +621,12 @@ void process_outputs(channel_t* channel) {
             file_data *fdata = (file_data *)(channel->outputs[k].data);
             if(fdata->continuous == false && channel->axcindicate == ' ' && channel->outputs[k].active == false) continue;
             time_t t = time(NULL);
-            struct tm *tmp = gmtime(&t);
+            struct tm *tmp;
+            if(fdata->localtime) {
+                tmp = localtime(&t);
+            } else {
+                tmp = gmtime(&t);
+            }
             char suffix[32];
             if(strftime(suffix, sizeof(suffix), "_%Y%m%d_%H.mp3", tmp) == 0) {
                 log(LOG_NOTICE, "strftime returned 0\n");
@@ -1444,6 +1450,8 @@ int main(int argc, char* argv[]) {
                         fdata->continuous = devs[i]["channels"][j]["outputs"][o].exists("continuous") ?
                             (bool)(devs[i]["channels"][j]["outputs"][o]["continuous"]) : false;
                         fdata->append = (!devs[i]["channels"][j]["outputs"][o].exists("append")) || (bool)(devs[i]["channels"][j]["outputs"][o]["append"]);
+                        fdata->localtime = devs[i]["channels"][j]["outputs"][o].exists("localtime") ?
+                            (bool)(devs[i]["channels"][j]["outputs"][o]["localtime"]) : false;
                     } else {
                         cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown output type\n";
                         error();

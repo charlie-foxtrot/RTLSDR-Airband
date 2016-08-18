@@ -187,8 +187,8 @@ devices = (
 # Set this to false if you want to overwrite existing files.
 # Default is true.
             append = false;
-# Set this to true if you want you file names to be created with localtime vs GMT timestamps
-# Set this to false if you want you file names to be created with GMT timestamps
+# Set this to true if you want your file names to be created with localtime vs GMT timestamps
+# Set this to false if you want your file names to be created with GMT timestamps
             localtime = false;
           }
 	);

@@ -67,6 +67,11 @@
 # Default value: 3 seconds
 # shout_metadata_delay = 3;
 
+# Use local timezone for output filenames
+# By default the time used for the output filenames will use UTC time.
+# Setting localtime to true will use the system's local timezone
+# localtime = false;
+
 # devices section contains all settings related to the RTLSDR receivers.
 #
 # It's a list of groups - each group contains settings for a single receiver,

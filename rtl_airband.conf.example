@@ -107,6 +107,15 @@ devices = (
 # (ie. +- 1.25 MHz around center frequency)
 # This setting is valid in multichannel mode only.
         freq = 118925000;
+# Channel frequency list (in hertz) to be scanned in round-robin fashion
+# They can be arbitralily spaced (there is no 2.5 MHz band restriction like
+# in multichannel mode).
+# This setting is valid in scan mode only
+        # freqs = ( 126300000, 121500000, 128225000, 131375000 );
+# Optional: descriptive labels for scanned frequencies
+# They are sent to Icecast server as song titles, when metadata updating
+# is enabled. See the comment for send_scan_freq_tags option for more info.
+        # labels = ( "Radar", "Emergency", "Tower", "Ground" );
 # A quick way to ignore this channel temporarily. Default: false
         disable = false;
 # Modulation - "am" or "nfm". Default is "am".
@@ -144,7 +153,9 @@ devices = (
 # optional: when the squelch opens on a different frequency in scan mode, 
 # rtl_airband will put the current frequency (in MHz) in the song title.
 # Listeners will be able to see which channel they are listening to in 
-# a particular point in time. Caveats:
+# a particular point in time. Alternatively, you may define textual 
+# descriptions for scanned frequencies - see "labels" option above.
+# Caveats:
 # - it is not possible to achieve perfect sync between the audio and
 #   Icecast metadata changes. You can tweak the shout_metadata_delay
 #   global setting to correct the offset, however there is no "one size

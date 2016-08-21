@@ -212,6 +212,7 @@ struct channel_t {
     int frequency;
     int freq_count;
     int *freqlist;
+    char **labels;
     int output_count;
     output_t *outputs;
     lame_t lame;
@@ -603,7 +604,7 @@ static int fdata_open(file_data *fdata, const char *filename) {
 }
 
 unsigned char lamebuf[LAMEBUF_SIZE];
-void process_outputs(channel_t* channel, int cur_scan_freq) {
+void process_outputs(channel_t *channel, int cur_scan_freq) {
     int bytes = lame_encode_buffer_ieee_float(channel->lame, channel->waveout, NULL, WAVE_BATCH, lamebuf, LAMEBUF_SIZE);
     if (bytes < 0) {
         log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n", bytes);
@@ -626,11 +627,15 @@ void process_outputs(channel_t* channel, int cur_scan_freq) {
                 shout_close(icecast->shout);
                 shout_free(icecast->shout);
                 icecast->shout = NULL;
-            } else if(icecast->send_scan_freq_tags && cur_scan_freq != 0) {
+            } else if(icecast->send_scan_freq_tags && cur_scan_freq >= 0) {
                 shout_metadata_t *meta = shout_metadata_new();
                 char description[32];
-                snprintf(description, sizeof(description), "freq: %.3f MHz", cur_scan_freq / 1000000.0);
-                shout_metadata_add(meta, "song", description);
+                if(channel->labels[cur_scan_freq] != NULL)
+                    shout_metadata_add(meta, "song", channel->labels[cur_scan_freq]);
+                else {
+                    snprintf(description, sizeof(description), "%.3f MHz", channel->freqlist[cur_scan_freq] / 1000000.0);
+                    shout_metadata_add(meta, "song", description);
+                }
                 shout_set_metadata(icecast->shout, meta);
                 shout_metadata_free(meta);
             }
@@ -709,7 +714,7 @@ void tag_queue_get(device_t *dev, struct freq_tag *tag) {
     if(!tag) return;
     pthread_mutex_lock(&dev->tag_queue_lock);
     if(dev->tq_head == dev->tq_tail) {      /* empty queue */
-        tag->freq = 0;
+        tag->freq = -1;
     } else {
 // read queue entry at pos tq_tail+1 without dequeueing it
         i = dev->tq_tail+1; i %= TAG_QUEUE_LEN;
@@ -731,7 +736,7 @@ pthread_mutex_t     mp3_mutex = PTHREAD_MUTEX_INITIALIZER;
 void* output_thread(void* params) {
     struct freq_tag tag;
     struct timeval tv;
-    int new_freq = 0;
+    int new_freq = -1;
 
     while (!do_exit) {
         pthread_cond_wait(&mp3_cond, &mp3_mutex);
@@ -741,7 +746,7 @@ void* output_thread(void* params) {
                 dev->waveavail = 0;
                 if(dev->mode == R_SCAN) {
                     tag_queue_get(dev, &tag);
-                    if(tag.freq != 0) {
+                    if(tag.freq >= 0) {
                         tag.tv.tv_sec += shout_metadata_delay;
                         gettimeofday(&tv, NULL);
                         if(tag.tv.tv_sec < tv.tv_sec || (tag.tv.tv_sec == tv.tv_sec && tag.tv.tv_usec <= tv.tv_usec)) {
@@ -758,7 +763,7 @@ void* output_thread(void* params) {
             }
 // make sure we don't carry new_freq value to the next receiver which might be working
 // in multichannel mode
-            new_freq = 0;
+            new_freq = -1;
         }
     }
     return 0;
@@ -767,7 +772,7 @@ void* output_thread(void* params) {
 
 void* controller_thread(void* params) {
     device_t *dev = (device_t*)params;
-    int i = 1;
+    int i = 0;
     int consecutive_squelch_off = 0;
     struct timeval tv;
 
@@ -778,18 +783,18 @@ void* controller_thread(void* params) {
             if(consecutive_squelch_off < 10) {
                 consecutive_squelch_off++;
             } else {
+                i++; i %= dev->channels[0].freq_count;
                 dev->channels[0].frequency = dev->channels[0].freqlist[i];
                 dev->centerfreq = dev->channels[0].freqlist[i] + 2 * (double)(SOURCE_RATE / FFT_SIZE);
                 rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);
-                i++; i %= dev->channels[0].freq_count;
             }
         } else {
             if(consecutive_squelch_off == 10) {
-                if(dev->channels[0].frequency != dev->last_frequency) {
+                if(i != dev->last_frequency) {
 // squelch has just opened on a new frequency - we might need to update outputs' metadata
                     gettimeofday(&tv, NULL);
-                    tag_queue_put(dev, dev->channels[0].frequency, tv);
-                    dev->last_frequency = dev->channels[0].frequency;
+                    tag_queue_put(dev, i, tv);
+                    dev->last_frequency = i;
                 }
             }
             consecutive_squelch_off = 0;
@@ -1422,7 +1427,8 @@ int main(int argc, char* argv[]) {
             dev->correction = (int)devs[i]["correction"];
             memset(dev->bins, 0, sizeof(dev->bins));
             memset(dev->base_bins, 0, sizeof(dev->base_bins));
-            dev->bufs = dev->bufe = dev->waveend = dev->waveavail = dev->row = dev->tq_head = dev->tq_tail = dev->last_frequency = 0;
+            dev->bufs = dev->bufe = dev->waveend = dev->waveavail = dev->row = dev->tq_head = dev->tq_tail = 0;
+            dev->last_frequency = -1;
             int jj = 0;
             for (int j = 0; j < devs[i]["channels"].getLength(); j++)  {
                 if(devs[i]["channels"][j].exists("disable") && (bool)devs[i]["channels"][j]["disable"] == true) {
@@ -1470,13 +1476,22 @@ int main(int argc, char* argv[]) {
                         cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: freqs should be a list with at least one element\n";
                         error();
                     }
+                    if(devs[i]["channels"][j].exists("labels") && devs[i]["channels"][j]["labels"].getLength() < channel->freq_count) {
+                        cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: labels should be a list with at least "
+                            <<channel->freq_count<<" elements\n";
+                        error();
+                    }
                     channel->freqlist = (int *)malloc(channel->freq_count * sizeof(int));
-                    if(channel->freqlist == NULL) {
+                    channel->labels = (char **)malloc(channel->freq_count * sizeof(char *));
+                    memset(channel->labels, 0, channel->freq_count * sizeof(char *));
+                    if(channel->freqlist == NULL || channel->labels == NULL) {
                         cerr<<"Cannot allocate memory for freqlist\n";
                         error();
                     }
                     for(int f = 0; f<channel->freq_count; f++) {
                         channel->freqlist[f] = (int)(devs[i]["channels"][j]["freqs"][f]);
+                        if(devs[i]["channels"][j].exists("labels"))
+                            channel->labels[f] = strdup(devs[i]["channels"][j]["labels"][f]);
                     }
 // Set initial frequency for scanning
 // We tune 2 FFT bins higher to avoid DC spike

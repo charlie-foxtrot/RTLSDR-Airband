@@ -71,7 +71,6 @@
 #endif
 #define CFGFILE SYSCONFDIR "/rtl_airband.conf"
 #define PIDFILE "/run/rtl_airband.pid"
-#define AUTO_GAIN -100
 #include <unistd.h>
 #include <pthread.h>
 #include <syslog.h>
@@ -367,20 +366,12 @@ void* rtlsdr_exec(void* params) {
     r = rtlsdr_set_freq_correction(dev->rtlsdr, dev->correction);
     if (r < 0 && r != -2 ) log(LOG_ERR, "Failed to set freq correction for device #%d. Error %d.\n", dev->device, r);
 
-    if(dev->gain == AUTO_GAIN) {
-        r = rtlsdr_set_tuner_gain_mode(dev->rtlsdr, 0);
-        if (r < 0)
-            log(LOG_ERR, "Failed to set automatic gain for device #%d. Error %d.\n", dev->device, r);
-        else
-            log(LOG_INFO, "Device #%d: gain set to automatic\n", dev->device);
-    } else {
-        r = rtlsdr_set_tuner_gain_mode(dev->rtlsdr, 1);
-        r |= rtlsdr_set_tuner_gain(dev->rtlsdr, dev->gain);
-        if (r < 0)
-            log(LOG_ERR, "Failed to set gain to %0.2f for device #%d. Error %d.\n", (float)rtlsdr_get_tuner_gain(dev->rtlsdr) / 10.0, dev->device, r);
-        else
-            log(LOG_INFO, "Device #%d: gain set to %0.2f dB\n", dev->device, (float)rtlsdr_get_tuner_gain(dev->rtlsdr) / 10.0);
-    }
+    r = rtlsdr_set_tuner_gain_mode(dev->rtlsdr, 1);
+    r |= rtlsdr_set_tuner_gain(dev->rtlsdr, dev->gain);
+    if (r < 0)
+        log(LOG_ERR, "Failed to set gain to %0.2f for device #%d. Error %d.\n", (float)rtlsdr_get_tuner_gain(dev->rtlsdr) / 10.0, dev->device, r);
+    else
+        log(LOG_INFO, "Device #%d: gain set to %0.2f dB\n", dev->device, (float)rtlsdr_get_tuner_gain(dev->rtlsdr) / 10.0);
 
     r = rtlsdr_set_agc_mode(dev->rtlsdr, 0);
     if (r < 0) log(LOG_ERR, "Failed to disable AGC for device #%d. Error %d.\n", dev->device, r);
@@ -1402,8 +1393,10 @@ int main(int argc, char* argv[]) {
             dev->channel_count = 0;
             if(devs[i].exists("gain"))
                 dev->gain = (int)devs[i]["gain"] * 10;
-            else
-                dev->gain = AUTO_GAIN;
+            else {
+                cerr<<"Configuration error: devices.["<<i<<"]: gain is not configured\n";
+                error();
+            }
             if(devs[i].exists("mode")) {
                 if(!strncmp(devs[i]["mode"], "multichannel", 12)) {
                     dev->mode = R_MULTICHANNEL;

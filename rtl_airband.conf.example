@@ -83,8 +83,8 @@ devices = (
     index = 0;
 # A quick way to ignore this device temporarily. Default: false
     disable = false;
-# Gain (integer, in decibels, optional). Default is auto-gain.
-#    gain = 28;
+# Gain (integer, in decibels). There is no default value.
+    gain = 28;
 # Dongle mode. Can be one of the following:
 # - "multichannel" - this is the default. Dongle is set to the configured
 #   center frequency. Multiple channels are received simultaneously. Every

@@ -1,7 +1,7 @@
 RTLSDR-Airband
 =====================
 
-RTLSDR Airband is intended for AM/NFM voice channels reception and online streaming to services such as liveatc.net
+RTLSDR Airband is a Linux program intended for AM/NFM voice channels reception and online streaming to services such as liveatc.net
 
 Features
 ---------------------
@@ -36,73 +36,6 @@ Demo
 
 Building
 ---------------------
-### Windows using VS Express 2013 for Desktop
-#### WARNING: Windows build is currently unmaintained and might not work
-#### Getting/Building prerequisites
-##### FFTW3
- * Download fftw-3.3.4-dll32.zip from http://www.fftw.org/install/windows.html
- * Start the VS2013 x86 Native Tools Command Prompt
- * Run lib /def:libfftw3f-3.def to get libfftw3f-3.lib
- * Place the lib into win32/lib
- * Place fftw3.h into win32/include
- * Place libfftw3f-3.dll into the root folder
-
-##### libogg and libvorbis
- * Download libogg-1.3.1.zip and libvorbis-1.3.4.zip from http://www.xiph.org/downloads/
- * Extract both zip files in the same folder
- * Rename libogg-1.x.x to libogg
- * Open libogg/win32/libogg_static.sln
- * Change to "Release" and build libogg_static
- * Open libvorbis-1.x.x/win32/VS2010/vorbis_static.sln
- * Change to "Release" and build libvorbis_static **(NOT the highlighted libvorbisfile)**
- * Copy both the generated .libs to win32/lib
- * Copy libogg/includes/ogg (the folder) to win32/include
- * Copy libvorbis-1.x.x/includes/vorbis (the folder) to win32/include
-
-##### libmp3lame
- * Download from http://sourceforge.net/projects/lame/files/lame/3.99/
- * Open vc_solution/vc9_lame.sln
- * Change the Configuration to ReleaseSSE2
- * (optional) Right click libmp3lame-static and open Properties... C/C++... Code Generation... Enable Enhanced Instruction Set... Advanced Vector Instructions
- * Build libmp3lame-static
- * Copy output/ReleaseSSE2/libmp3lame-static.lib and libmpghip-static.lib to win32/lib
- * Copy include/lame.h to win32/include
-
-##### librtlsdr
- * Download from http://sdr.osmocom.org/trac/wiki/rtl-sdr (search word: "pre-built")
- * Copy rtl-sdr-release/rtl-sdr.h and rtl-sdr_export.h to win32/includes
- * Copy rtl-sdr-release/x32/rtlsdr.lib to win32/lib
- * Copy rtl-sdr-release/x32/rtlsdr.dll and libusb-1.0.dll to root folder
-
-##### pthreads
- * Download from ftp://sourceware.org/pub/pthreads-win32/
- * Extract Pre-built.2 to the same folder where libogg and libvorbis are located
- * Copy Pre-built.2/lib/x86/pthreadVCE2.lib to win32/lib
- * Copy Pre-built.2/dll/x86/pthreadVCE2.dll to root folder
-
-##### libshout
- * This is the most complicated one
- * Download from http://www.icecast.org/download.php
- * Extract libshout to the same folder where libogg and libvorbis are located
- * Go to libshout-2.x.x/include/shout and rename shout.h.in to shout.h
- * Open libshout/win32/libshout.dsw
- * Change to "Release"... and then open project properties
- * On the General page change Character Set to Use Unicode Character Set
- * Go to C/C++... edit Additional Include Directories
- * Add ../../libogg/include, ../../libvorbis-1.x.x/include and ../../Pre-built.2/include
- * Go to C/C++... Preprocessor... edit Preprocessor Definitions
- * Add HAVE_SYS_TIMEB_H and HAVE_FTIME
- * Try to build, you should get errors
- * One of the error is "error C1083: Cannot open include file: 'compat.h': No such file or directory"
- * Double click on it and change that line from #include &lt;compat.h&gt; to #include &lt;os.h&gt;
- * Build again
- * Copy win32/Release/libshout.lib to win32/lib
- * Copy include/shout (the folder) to win32/include
-
-#### Building this project
- * Browse into win32 and open the solution
- * Simply build solution or click the "Start Local Windows Debugger" button
-
 ### Linux (Raspbian)
  * Install RTLSDR library (http://sdr.osmocom.org/trac/wiki/rtl-sdr):
 

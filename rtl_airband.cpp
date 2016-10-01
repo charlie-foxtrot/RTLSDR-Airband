@@ -25,27 +25,7 @@
 
 // From this point we may safely assume that USE_BCM_VC implies __arm__
 
-#if defined _WIN32
-
-#define WIN32_LEAN_AND_MEAN
-#define _USE_MATH_DEFINES
-#include <SDKDDKVer.h>
-#include <windows.h>
-#include <process.h>
-#include <complex>
-#include <MMSystem.h>
-#include <xmmintrin.h>
-#define ALIGN __declspec(align(32))
-#define ALIGN2
-#define SLEEP(x) Sleep(x)
-#define THREAD HANDLE
-#define GOTOXY(x, y) { COORD xy; xy.X = x; xy.Y = y; SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), xy); }
-#define scanf scanf_s
-#define sscanf sscanf_s
-#define fscanf fscanf_s
-#define CFGFILE "rtl_airband.conf"
-
-#elif defined __arm__
+#ifdef __arm__
 
 #ifdef USE_BCM_VC
 #include "hello_fft/mailbox.h"
@@ -60,7 +40,6 @@
 
 #endif /* x86 */
 
-#ifndef _WIN32
 #define ALIGN
 #define ALIGN2 __attribute__((aligned(32)))
 #define SLEEP(x) usleep(x * 1000)
@@ -83,8 +62,6 @@
 #include <csignal>
 #include <cstdarg>
 #include <cerrno>
-#endif /* !_WIN32 */ 
-
 #include <iostream>
 #include <cstring>
 #include <cstdio>
@@ -93,16 +70,10 @@
 #include <cstdlib>
 #include <ctime>
 #include <libconfig.h++>
-
 #include <ogg/ogg.h>
 #include <vorbis/vorbisenc.h>
 #include <shout/shout.h>
-#ifdef _WIN32
-#include <lame.h>
-#else
 #include <lame/lame.h>
-#endif
-
 #include <rtl-sdr.h>
 
 #define BUF_SIZE 2560000
@@ -136,12 +107,6 @@ extern "C" void samplefft(sample_fft_arg *a, unsigned char* buffer, float* windo
 #define FFT_SIZE (2<<(FFT_SIZE_LOG - 1))
 
 //#define AFC_LOGGING
-
-#if defined _WIN32
-#pragma comment (lib, "Ws2_32.lib")
-#pragma comment (lib, "Mswsock.lib")
-#pragma comment (lib, "AdvApi32.lib")
-#endif /* _WIN32 */
 
 using namespace std;
 using namespace libconfig;
@@ -251,9 +216,6 @@ device_t* devices;
 int device_count;
 volatile int device_opened = 0;
 int rtlsdr_buffers = 10;
-#ifdef _WIN32
-int avx;
-#endif
 int foreground = 0, do_syslog = 1, shout_metadata_delay = 3;
 static volatile int do_exit = 0;
 bool use_localtime = false;
@@ -267,52 +229,32 @@ enum fm_demod_algo fm_demod = FM_FAST_ATAN2;
 #endif
 
 void error() {
-#ifdef _WIN32
-    system("pause");
-#endif
     exit(1);
 }
 
 
 int atomic_inc(volatile int *pv)
 {
-#ifdef _WIN32
-    return InterlockedIncrement((volatile LONG *)pv);
-#else
     return __sync_fetch_and_add(pv, 1);
-#endif
 }
 
 int atomic_dec(volatile int *pv)
 {
-#ifdef _WIN32
-    return InterlockedDecrement((volatile LONG *)pv);
-#else
     return __sync_fetch_and_sub(pv, 1);
-#endif
 }
 
 int atomic_get(volatile int *pv)
 {
-#ifdef _WIN32
-    return InterlockedCompareExchange((volatile LONG *)pv, 0, 0);
-#else
     return __sync_fetch_and_add(pv, 0);
-#endif
 }
 
 void log(int priority, const char *format, ...) {
     va_list args;
     va_start(args, format);
-#ifdef _WIN32
-    if(!foreground) 
-        vprintf(format, args);
-#else
     if(do_syslog)
         vsyslog(priority, format, args);
     else if(foreground)
         vprintf(format, args);
-#endif
     va_end(args);
 }
 
@@ -327,27 +269,12 @@ void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx) {
     if (dev->bufe == BUF_SIZE) dev->bufe = 0;
 }
 
-#ifdef _WIN32
-BOOL WINAPI sighandler(int sig) {
-    if (CTRL_C_EVENT == sig) {
-        log(LOG_NOTICE, "Got signal %d, exiting\n", sig);
-        do_exit = 1;
-        return TRUE;
-    }
-    return FALSE;
-}
-#else
 void sighandler(int sig) {
     log(LOG_NOTICE, "Got signal %d, exiting\n", sig);
     do_exit = 1;
 }
-#endif
 
-#ifdef _WIN32
-void rtlsdr_exec(void* params) {
-#else
 void* rtlsdr_exec(void* params) {
-#endif
     int r;
     device_t *dev = (device_t*)params;
 
@@ -403,11 +330,7 @@ void shout_setup(icecast_data *icecast) {
         shout_free(shouttemp); return;
     }
     char mp[100];
-#ifdef _WIN32
-    sprintf_s(mp, 80, "/%s", icecast->mountpoint);
-#else
     sprintf(mp, "/%s", icecast->mountpoint);
-#endif
     if (shout_set_mount(shouttemp, mp) != SHOUTERR_SUCCESS) {
         shout_free(shouttemp); return;
     }
@@ -427,11 +350,7 @@ void shout_setup(icecast_data *icecast) {
         shout_free(shouttemp); return;
     }
     char samplerates[20];
-#ifdef _WIN32
-    sprintf_s(samplerates, 15, "%d", MP3_RATE);
-#else
     sprintf(samplerates, "%d", MP3_RATE);
-#endif
     shout_set_audio_info(shouttemp, SHOUT_AI_SAMPLERATE, samplerates);
     shout_set_audio_info(shouttemp, SHOUT_AI_CHANNELS, "1");
 
@@ -721,7 +640,6 @@ void tag_queue_advance(device_t *dev) {
     pthread_mutex_unlock(&dev->tag_queue_lock);
 }
 
-#ifndef _WIN32
 pthread_cond_t      mp3_cond = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t     mp3_mutex = PTHREAD_MUTEX_INITIALIZER;
 void* output_thread(void* params) {
@@ -759,7 +677,6 @@ void* output_thread(void* params) {
     }
     return 0;
 }
-#endif
 
 void* controller_thread(void* params) {
     device_t *dev = (device_t*)params;
@@ -795,11 +712,7 @@ void* controller_thread(void* params) {
 }
 
 // reconnect as required
-#ifdef _WIN32
-void icecast_check(void* params) {
-#else
 void* icecast_check(void* params) {
-#endif
     while (!do_exit) {
         SLEEP(10000);
         for (int i = 0; i < device_count; i++) {
@@ -828,9 +741,7 @@ void* icecast_check(void* params) {
             }
         }
     }
-#ifndef _WIN32
     return 0;
-#endif
 }
 
 #ifdef NFM
@@ -1050,27 +961,6 @@ void demodulate() {
             fftin[i][0] = levels[*(buf2)] * window[i*2];
             fftin[i][1] = levels[*(buf2+1)] * window[i*2];
         }
-#elif defined _WIN32
-        // process 4 rtl samples (16 bytes)
-        if (avx) {
-            for (int i = 0; i < FFT_SIZE; i += 4) {
-                unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
-                __m256 a = _mm256_set_ps(levels[*(buf2+7)], levels[*(buf2+6)], levels[*(buf2+5)], levels[*(buf2+4)], levels[*(buf2+3)], levels[*(buf2+2)], levels[*(buf2+1)], levels[*(buf2)]);
-                __m256 b = _mm256_load_ps(&window[i * 2]);
-                a = _mm256_mul_ps(a, b);
-                _mm_prefetch((const CHAR *)&window[i * 2 + 128], _MM_HINT_T0);
-                _mm_prefetch((const CHAR *)buf2 + 128, _MM_HINT_T0);
-                _mm256_store_ps(&fftin[i][0], a);
-            }
-        } else {
-            for (int i = 0; i < FFT_SIZE; i += 2) {
-                unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
-                __m128 a = _mm_set_ps(levels[*(buf2 + 3)], levels[*(buf2 + 2)], levels[*(buf2 + 1)], levels[*(buf2)]);
-                __m128 b = _mm_load_ps(&window[i * 2]);
-                a = _mm_mul_ps(a, b);
-                _mm_store_ps(&fftin[i][0], a);
-            }
-        }
 #else /* x86 */
         for (int i = 0; i < FFT_SIZE; i += 2) {
             unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
@@ -1080,10 +970,8 @@ void demodulate() {
             _mm_store_ps(&fftin[i][0], a);
         }
 #endif
-#ifndef _WIN32
         // allow mp3 encoding thread to run while waiting for FFT to finish
         pthread_cond_signal(&mp3_cond);
-#endif
 #ifdef USE_BCM_VC
         gpu_fft_execute(fft);
 #else
@@ -1217,10 +1105,6 @@ void demodulate() {
                         channel->wavecnt = (channel->wavecnt + 1) % WAVE_RATE;
 #endif // NFM
                 }
-#ifdef _WIN32
-                process_outputs(channel);
-                memmove(channel->waveout, channel->waveout + WAVE_BATCH, AGC_EXTRA * 4);
-#endif
                 memmove(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4);
 #ifdef NFM
                 if(channel->modulation == MOD_NFM)
@@ -1251,10 +1135,7 @@ void demodulate() {
 
         dev->bufs += speed2 * FFT_BATCH;
         if (dev->bufs >= BUF_SIZE) dev->bufs -= BUF_SIZE;
-#ifndef _WIN32
-        // always rotate to next device on unix
         device_num = (device_num + 1) % device_count;
-#endif
     }
 }
 
@@ -1273,9 +1154,7 @@ void usage() {
 int main(int argc, char* argv[]) {
 #pragma GCC diagnostic ignored "-Wwrite-strings"
     char *cfgfile = CFGFILE;
-#ifndef _WIN32
     char *pidfile = PIDFILE;
-#endif
 #pragma GCC diagnostic warning "-Wwrite-strings"
     int opt;
 
@@ -1307,15 +1186,6 @@ int main(int argc, char* argv[]) {
     }
 
 #ifndef __arm__
-#ifdef _WIN32
-// check cpu features
-	int cpuinfo[4];
-	__cpuid(cpuinfo, 1);
-	if (cpuinfo[2] & 1 << 28) {
-		avx = 1;
-	} else if (cpuinfo[2] & 1) {
-		avx = 0;
-#else /* !_WIN32 */
 #define cpuid(func,ax,bx,cx,dx)\
 	__asm__ __volatile__ ("cpuid":\
         "=a" (ax), "=b" (bx), "=c" (cx), "=d" (dx) : "a" (func));
@@ -1323,7 +1193,6 @@ int main(int argc, char* argv[]) {
 	cpuid(1,a,b,c,d);
 	if((int)((d >> 25) & 0x1)) {
 		/* NOOP */
-#endif /* !_WIN32 */
 	} else {
 		printf("Unsupported CPU.\n");
 		error();
@@ -1336,9 +1205,7 @@ int main(int argc, char* argv[]) {
         config.readFile(cfgfile);
         Setting &root = config.getRoot();
         if(root.exists("syslog")) do_syslog = root["syslog"];
-#ifndef _WIN32
         if(root.exists("pidfile")) pidfile = strdup(root["pidfile"]);
-#endif
         if(root.exists("rtlsdr_buffers")) rtlsdr_buffers = (int)(root["rtlsdr_buffers"]);
         if(rtlsdr_buffers < 1) {
             cerr<<"Configuration error: rtlsdr_buffers must be greater than 0\n";
@@ -1361,7 +1228,6 @@ int main(int argc, char* argv[]) {
             cerr<<"Configuration error: no devices defined\n";
             error();
         }
-#ifndef _WIN32
         struct sigaction sigact, pipeact;
 
         memset(&sigact, 0, sizeof(sigact));
@@ -1373,17 +1239,13 @@ int main(int argc, char* argv[]) {
         sigaction(SIGINT, &sigact, NULL);
         sigaction(SIGQUIT, &sigact, NULL);
         sigaction(SIGTERM, &sigact, NULL);
-#else
-        SetConsoleCtrlHandler( (PHANDLER_ROUTINE) sighandler, TRUE );
-#endif
 
         uintptr_t tempptr = (uintptr_t)malloc(device_count * sizeof(device_t)+31);
         tempptr &= ~0x0F;
         devices = (device_t *)tempptr;
         shout_init();
-#ifndef _WIN32
         if(do_syslog) openlog("rtl_airband", LOG_PID, LOG_DAEMON);
-#endif
+
         int ii = 0;
         for (int i = 0; i < devs.getLength(); i++) {
             if(devs[i].exists("disable") && (bool)devs[i]["disable"] == true) continue;
@@ -1628,7 +1490,7 @@ int main(int argc, char* argv[]) {
             cerr<<"Unhandled config exception\n";
             error();
     }
-#ifndef _WIN32
+
     if(!foreground) {
         int pid1, pid2;
         if((pid1 = fork()) == -1) {
@@ -1669,7 +1531,7 @@ int main(int argc, char* argv[]) {
             }
         }
     }
-#endif
+
     log(LOG_INFO, "RTLSDR-Airband version %s starting\n", RTL_AIRBAND_VERSION);
     for (int i = 0; i < device_count; i++) {
         device_t* dev = devices + i;
@@ -1682,11 +1544,6 @@ int main(int argc, char* argv[]) {
                     shout_setup((icecast_data *)(output->data));
             }
         }
-#ifdef _WIN32
-        dev->rtl_thread = (THREAD)_beginthread(rtlsdr_exec, 0, dev);
-        if(dev->mode == R_SCAN)
-            dev->controller_thread = (THREAD)_beginthread(controller_thread, 0, dev);
-#else
         pthread_create(&dev->rtl_thread, NULL, &rtlsdr_exec, dev);
         if(dev->mode == R_SCAN) {
             if(pthread_mutex_init(&dev->tag_queue_lock, NULL) != 0) {
@@ -1696,7 +1553,6 @@ int main(int argc, char* argv[]) {
 // FIXME: not needed when freq_count == 1?
             pthread_create(&dev->controller_thread, NULL, &controller_thread, dev);
         }
-#endif
     }
 
     int timeout = 50;   // 5 seconds
@@ -1709,11 +1565,7 @@ int main(int argc, char* argv[]) {
         error();
     }
     if (foreground) {
-#ifdef _WIN32
-        system("cls");
-#else
         printf("\e[1;1H\e[2J");
-#endif
 
         GOTOXY(0, 0);
         printf("                                                                               ");
@@ -1729,13 +1581,9 @@ int main(int argc, char* argv[]) {
         }
     }
     THREAD thread2;
-#ifdef _WIN32
-    thread2 = (THREAD)_beginthread(icecast_check, 0, NULL);
-#else
     pthread_create(&thread2, NULL, &icecast_check, NULL);
     THREAD thread3;
     pthread_create(&thread3, NULL, &output_thread, NULL);
-#endif
 
     demodulate();
 
@@ -1747,9 +1595,6 @@ int main(int argc, char* argv[]) {
             pthread_join(devices[i].controller_thread, NULL);
     }
     log(LOG_INFO, "rtlsdr threads closed\n");
-#ifndef _WIN32
-    if(!foreground) unlink(pidfile);
-#endif
     return 0;
 }
 // vim: ts=4:expandtab

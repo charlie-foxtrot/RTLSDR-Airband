@@ -207,19 +207,6 @@ Refer to `rtl_airband.conf.example` for the description of the format. You can
 copy this file to `/usr/local/etc/rtl_airband.conf` and edit it to suit your needs
 (`make install` does this, unless you already have your own config file installed).
 
-Old versions of RTLSDR-Airband used a simple flat `config.txt` file. This is no longer
-supported. You have to rewrite your config file to the new syntax - or just use a
-small utility `convert_cfg` which is included in the `util` subdirectory:
-
-    cd util
-    make
-    ./convert_cfg /path/to/old/config.txt /path/to/new/rtl_airband.conf
-
-Review the `rtl_airband.conf` file and move it to `/usr/local/etc` before launching
-rtl_airband:
-
-    sudo mv /path/to/new/rtl_airband.conf /usr/local/etc
-
 Command line options
 --------------------
 rtl_airband accepts the following command line options:

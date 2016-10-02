@@ -1083,7 +1083,7 @@ void demodulate() {
 						channel->waveout[j] = 0;
 					} else {
 						if(channel->modulation == MOD_AM) {
-							channel->waveout[j] = (channel->wavein[j - AGC_EXTRA] - channel->agcavgfast) / (channel->agcavgfast * 2.5f);
+							channel->waveout[j] = (channel->wavein[j - AGC_EXTRA] - channel->agcavgfast) / (channel->agcavgfast * 1.5f);
 							if (abs(channel->waveout[j]) > 0.8f) {
 								channel->waveout[j] *= 0.85f;
 								channel->agcavgfast *= 1.15f;

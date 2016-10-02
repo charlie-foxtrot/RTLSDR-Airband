@@ -1067,8 +1067,7 @@ void demodulate() {
 							channel->agclow++;
 						}
 						channel->agcsq = min(channel->agcsq + 1, -1);
-						sqlevel = channel->sqlevel > 0 ? (float)channel->sqlevel : 2.4f * channel->agcmin;
-						if ((channel->agcsq == -1 && channel->agcavgslow < sqlevel) || channel->agclow == AGC_EXTRA - 12) {
+						if (channel->agclow == AGC_EXTRA - 12) {
 							channel->agcsq = AGC_EXTRA * 2;
 							channel->axcindicate = ' ';
 							if(channel->modulation == MOD_AM) {

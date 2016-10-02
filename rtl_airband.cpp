@@ -1053,7 +1053,7 @@ void demodulate() {
 							// fade in
 								for (int k = j - AGC_EXTRA; k < j; k++) {
 									if (channel->wavein[k] > sqlevel) {
-										channel->agcavgfast = channel->agcavgfast * 0.98f + channel->wavein[k] * 0.02f;
+										channel->agcavgfast = channel->agcavgfast * 0.9f + channel->wavein[k] * 0.1f;
 									}
 								}
 							}

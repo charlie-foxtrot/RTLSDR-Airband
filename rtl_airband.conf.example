@@ -61,6 +61,17 @@
 # you may need to lower this value
 # rtlsdr_buffers = 10;
 
+# Delay (seconds) which should be applied to Shoutcast metadata updates
+# This is only used in scan mode to keep tag updates in sync with the audio.
+# Refer to "send_shout_freq_tags" output setting for details.
+# Default value: 3 seconds
+# shout_metadata_delay = 3;
+
+# Use local timezone for output filenames
+# By default the time used for the output filenames will use UTC time.
+# Setting localtime to true will use the system's local timezone
+# localtime = false;
+
 # devices section contains all settings related to the RTLSDR receivers.
 #
 # It's a list of groups - each group contains settings for a single receiver,
@@ -72,8 +83,8 @@ devices = (
     index = 0;
 # A quick way to ignore this device temporarily. Default: false
     disable = false;
-# Gain (integer, in decibels, optional). Default is auto-gain.
-#    gain = 28;
+# Gain (integer, in decibels). There is no default value.
+    gain = 28;
 # Dongle mode. Can be one of the following:
 # - "multichannel" - this is the default. Dongle is set to the configured
 #   center frequency. Multiple channels are received simultaneously. Every
@@ -96,6 +107,15 @@ devices = (
 # (ie. +- 1.25 MHz around center frequency)
 # This setting is valid in multichannel mode only.
         freq = 118925000;
+# Channel frequency list (in hertz) to be scanned in round-robin fashion
+# They can be arbitralily spaced (there is no 2.5 MHz band restriction like
+# in multichannel mode).
+# This setting is valid in scan mode only
+        # freqs = ( 126300000, 121500000, 128225000, 131375000 );
+# Optional: descriptive labels for scanned frequencies
+# They are sent to Icecast server as song titles, when metadata updating
+# is enabled. See the comment for send_scan_freq_tags option for more info.
+        # labels = ( "Radar", "Emergency", "Tower", "Ground" );
 # A quick way to ignore this channel temporarily. Default: false
         disable = false;
 # Modulation - "am" or "nfm". Default is "am".
@@ -130,6 +150,24 @@ devices = (
             name = "Example ATC feed";
 # optional: genre (default: none)
             genre = "ATC";
+# optional: when the squelch opens on a different frequency in scan mode, 
+# rtl_airband will put the current frequency (in MHz) in the song title.
+# Listeners will be able to see which channel they are listening to in 
+# a particular point in time. Alternatively, you may define textual 
+# descriptions for scanned frequencies - see "labels" option above.
+# Caveats:
+# - it is not possible to achieve perfect sync between the audio and
+#   Icecast metadata changes. You can tweak the shout_metadata_delay
+#   global setting to correct the offset, however there is no "one size
+#   fits all" value. The offset depends mainly on the buffer size in the
+#   player.
+# - Icecast server, by default, writes each metadata change request to the
+#   log file. By using this feature, you may clog the server's logs
+#   pretty quickly, so if you are feeding to a server which is not owned
+#   by you, ask the owner for permission before enabling this.
+# This setting has no effect when the dongle is set to multichannel mode.
+# Default: false
+            send_scan_freq_tags = true;
 	  }
 	);
       },

@@ -13,7 +13,7 @@ SUBDIRS = hello_fft
 CLEANDIRS = $(SUBDIRS:%=clean-%)
 
 BIN = rtl_airband
-OBJ = rtl_airband.o
+OBJ = rtl_airband.o output.o
 FFT = hello_fft/hello_fft.a
 
 .PHONY: all clean install $(SUBDIRS) $(CLEANDIRS)
@@ -62,6 +62,10 @@ ifndef DEPS
 endif
 
 $(FFT):	hello_fft ;
+
+rtl_airband.o: rtl_airband.h
+
+output.o: rtl_airband.h
 
 $(SUBDIRS):
 	$(MAKE) -C $@

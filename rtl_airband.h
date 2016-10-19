@@ -177,7 +177,7 @@ void *output_thread(void* params);
 // rtl_airband.cpp
 extern bool use_localtime;
 extern int device_count;
-extern int shout_metadata_delay;
+extern int shout_metadata_delay, do_syslog, foreground;
 extern device_t *devices;
 extern volatile int do_exit;
 extern pthread_cond_t mp3_cond;
@@ -185,6 +185,13 @@ extern pthread_mutex_t mp3_mutex;
 void tag_queue_get(device_t *dev, struct freq_tag *tag);
 void tag_queue_advance(device_t *dev);
 
-
+// util.cpp
+void error();
+int atomic_inc(volatile int *pv);
+int atomic_dec(volatile int *pv);
+int atomic_get(volatile int *pv);
 void log(int priority, const char *format, ...);
+void tag_queue_put(device_t *dev, int freq, struct timeval tv);
+void tag_queue_get(device_t *dev, struct freq_tag *tag);
+void tag_queue_advance(device_t *dev);
 

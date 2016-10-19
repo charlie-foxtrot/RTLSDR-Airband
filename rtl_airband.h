@@ -18,8 +18,15 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <cstdio>
 #include <pthread.h>
+#include <sys/time.h>
+#include <shout/shout.h>
+#include <lame/lame.h>
 #include <rtl-sdr.h>
+#ifdef USE_BCM_VC
+#include "hello_fft/gpu_fft.h"
+#endif
 
 #define ALIGN
 #define ALIGN2 __attribute__((aligned(32)))

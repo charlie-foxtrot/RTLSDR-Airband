@@ -23,6 +23,7 @@
 #include <sys/time.h>
 #include <shout/shout.h>
 #include <lame/lame.h>
+#include <libconfig.h++>
 #include <rtl-sdr.h>
 #ifdef USE_BCM_VC
 #include "hello_fft/gpu_fft.h"
@@ -222,3 +223,6 @@ void tag_queue_advance(device_t *dev);
 // mixer.cpp
 struct mixer_t *getmixerbyname(const char *name);
 void mixer_put(struct mixer_t *mixer, float *samples, size_t len);
+
+// config.cpp
+int parse_devices(libconfig::Setting &devs);

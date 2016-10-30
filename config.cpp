@@ -28,6 +28,75 @@
 
 using namespace std;
 
+static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, int j) {
+	int oo = 0;
+	for(int o = 0; o < channel->output_count; o++) {
+		if(outs[o].exists("disable") && (bool)outs[o]["disable"] == true) {
+			continue;
+		}
+		if(!strncmp(outs[o]["type"], "icecast", 7)) {
+			channel->outputs[oo].data = malloc(sizeof(struct icecast_data));
+			if(channel->outputs[oo].data == NULL) {
+				cerr<<"Cannot allocate memory for outputs\n";
+				error();
+			}
+			memset(channel->outputs[oo].data, 0, sizeof(struct icecast_data));
+			channel->outputs[oo].type = O_ICECAST;
+			icecast_data *idata = (icecast_data *)(channel->outputs[oo].data);
+			idata->hostname = strdup(outs[o]["server"]);
+			idata->port = outs[o]["port"];
+			idata->mountpoint = strdup(outs[o]["mountpoint"]);
+			idata->username = strdup(outs[o]["username"]);
+			idata->password = strdup(outs[o]["password"]);
+			if(outs[o].exists("name"))
+				idata->name = strdup(outs[o]["name"]);
+			if(outs[o].exists("genre"))
+				idata->genre = strdup(outs[o]["genre"]);
+			if(outs[o].exists("send_scan_freq_tags"))
+				idata->send_scan_freq_tags = (bool)outs[o]["send_scan_freq_tags"];
+			else
+				idata->send_scan_freq_tags = 0;
+			channel->need_mp3 = 1;
+		} else if(!strncmp(outs[o]["type"], "file", 4)) {
+			channel->outputs[oo].data = malloc(sizeof(struct file_data));
+			if(channel->outputs[oo].data == NULL) {
+				cerr<<"Cannot allocate memory for outputs\n";
+				error();
+			}
+			memset(channel->outputs[oo].data, 0, sizeof(struct file_data));
+			channel->outputs[oo].type = O_FILE;
+			file_data *fdata = (file_data *)(channel->outputs[oo].data);
+			fdata->dir = strdup(outs[o]["directory"]);
+			fdata->prefix = strdup(outs[o]["filename_template"]);
+			fdata->continuous = outs[o].exists("continuous") ?
+				(bool)(outs[o]["continuous"]) : false;
+			fdata->append = (!outs[o].exists("append")) || (bool)(outs[o]["append"]);
+			channel->need_mp3 = 1;
+		} else if(!strncmp(outs[o]["type"], "mixer", 5)) {
+			channel->outputs[oo].data = malloc(sizeof(struct mixer_data));
+			if(channel->outputs[oo].data == NULL) {
+				cerr<<"Cannot allocate memory for outputs\n";
+				error();
+			}
+			memset(channel->outputs[oo].data, 0, sizeof(struct mixer_data));
+			channel->outputs[oo].type = O_MIXER;
+			mixer_data *mdata = (mixer_data *)(channel->outputs[oo].data);
+			if((mdata->mixer = getmixerbyname((const char *)outs[o]["name"])) == NULL) {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown mixer \""<< \
+					(const char *)outs[o]["name"]<<"\"\n";
+				error();
+			}
+		} else {
+			cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown output type\n";
+			error();
+		}
+		channel->outputs[oo].enabled = true;
+		channel->outputs[oo].active = false;
+		oo++;
+	}
+	return oo;
+}
+
 static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 	int jj = 0;
 	for (int j = 0; j < chans.getLength(); j++) {
@@ -106,7 +175,8 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			channel->alpha = dev->alpha;
 		}
 #endif
-		channel->output_count = chans[j]["outputs"].getLength();
+		libconfig::Setting &outputs = chans[j]["outputs"];
+		channel->output_count = outputs.getLength();
 		if(channel->output_count < 1) {
 			cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: no outputs defined\n";
 			error();
@@ -116,81 +186,17 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			cerr<<"Cannot allocate memory for outputs\n";
 			error();
 		}
-		int oo = 0;
-		for(int o = 0; o < channel->output_count; o++) {
-			if(chans[j]["outputs"][o].exists("disable") && (bool)chans[j]["outputs"][o]["disable"] == true) {
-				continue;
-			}
-			if(!strncmp(chans[j]["outputs"][o]["type"], "icecast", 7)) {
-				channel->outputs[oo].data = malloc(sizeof(struct icecast_data));
-				if(channel->outputs[oo].data == NULL) {
-					cerr<<"Cannot allocate memory for outputs\n";
-					error();
-				}
-				memset(channel->outputs[oo].data, 0, sizeof(struct icecast_data));
-				channel->outputs[oo].type = O_ICECAST;
-				icecast_data *idata = (icecast_data *)(channel->outputs[oo].data);
-				idata->hostname = strdup(chans[j]["outputs"][o]["server"]);
-				idata->port = chans[j]["outputs"][o]["port"];
-				idata->mountpoint = strdup(chans[j]["outputs"][o]["mountpoint"]);
-				idata->username = strdup(chans[j]["outputs"][o]["username"]);
-				idata->password = strdup(chans[j]["outputs"][o]["password"]);
-				if(chans[j]["outputs"][o].exists("name"))
-					idata->name = strdup(chans[j]["outputs"][o]["name"]);
-				if(chans[j]["outputs"][o].exists("genre"))
-					idata->genre = strdup(chans[j]["outputs"][o]["genre"]);
-				if(chans[j]["outputs"][o].exists("send_scan_freq_tags"))
-					idata->send_scan_freq_tags = (bool)chans[j]["outputs"][o]["send_scan_freq_tags"];
-				else
-					idata->send_scan_freq_tags = 0;
-				channel->need_mp3 = 1;
-			} else if(!strncmp(chans[j]["outputs"][o]["type"], "file", 4)) {
-				channel->outputs[oo].data = malloc(sizeof(struct file_data));
-				if(channel->outputs[oo].data == NULL) {
-					cerr<<"Cannot allocate memory for outputs\n";
-					error();
-				}
-				memset(channel->outputs[oo].data, 0, sizeof(struct file_data));
-				channel->outputs[oo].type = O_FILE;
-				file_data *fdata = (file_data *)(channel->outputs[oo].data);
-				fdata->dir = strdup(chans[j]["outputs"][o]["directory"]);
-				fdata->prefix = strdup(chans[j]["outputs"][o]["filename_template"]);
-				fdata->continuous = chans[j]["outputs"][o].exists("continuous") ?
-					(bool)(chans[j]["outputs"][o]["continuous"]) : false;
-				fdata->append = (!chans[j]["outputs"][o].exists("append")) || (bool)(chans[j]["outputs"][o]["append"]);
-				channel->need_mp3 = 1;
-			} else if(!strncmp(chans[j]["outputs"][o]["type"], "mixer", 5)) {
-				channel->outputs[oo].data = malloc(sizeof(struct mixer_data));
-				if(channel->outputs[oo].data == NULL) {
-					cerr<<"Cannot allocate memory for outputs\n";
-					error();
-				}
-				memset(channel->outputs[oo].data, 0, sizeof(struct mixer_data));
-				channel->outputs[oo].type = O_MIXER;
-				mixer_data *mdata = (mixer_data *)(channel->outputs[oo].data);
-				if((mdata->mixer = getmixerbyname((const char *)chans[j]["outputs"][o]["name"])) == NULL) {
-					cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown mixer \""<< \
-						(const char *)chans[j]["outputs"][o]["name"]<<"\"\n";
-					error();
-				}
-			} else {
-				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown output type\n";
-				error();
-			}
-			channel->outputs[oo].enabled = true;
-			channel->outputs[oo].active = false;
-			oo++;
-		}
-		if(oo < 1) {
+		int outputs_enabled = parse_outputs(outputs, channel, i, j);
+		if(outputs_enabled < 1) {
 			cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: no outputs defined\n";
 			error();
 		}
-		channel->outputs = (output_t *)realloc(channel->outputs, oo * sizeof(struct output_t));
+		channel->outputs = (output_t *)realloc(channel->outputs, outputs_enabled * sizeof(struct output_t));
 		if(channel->outputs == NULL) {
 			cerr<<"Cannot allocate memory for outputs\n";
 			error();
 		}
-		channel->output_count = oo;
+		channel->output_count = outputs_enabled;
 
 		dev->base_bins[jj] = dev->bins[jj] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
 #ifdef NFM

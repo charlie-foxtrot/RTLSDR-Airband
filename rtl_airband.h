@@ -53,6 +53,8 @@
 #define MAX_SHOUT_QUEUELEN 32768
 #define TAG_QUEUE_LEN 16
 #define CHANNELS 8
+#define MIXERS 32
+#define MAX_MIXINPUTS 32
 #define FFT_SIZE_LOG 9
 #define LAMEBUF_SIZE 22000 //todo: calculate
 
@@ -93,7 +95,11 @@ struct file_data {
 	FILE *f;
 };
 
-enum output_type { O_ICECAST, O_FILE };
+struct mixer_data {
+	struct mixer_t *mixer;
+};
+
+enum output_type { O_ICECAST, O_FILE, O_MIXER };
 struct output_t {
 	enum output_type type;
 	bool enabled;
@@ -141,6 +147,7 @@ struct channel_t {
 	int *freqlist;
 	char **labels;
 	int output_count;
+	int need_mp3;
 	output_t *outputs;
 	lame_t lame;
 };
@@ -175,6 +182,16 @@ struct device_t {
 	enum rec_modes mode;
 };
 
+struct mixinput_t {
+	float *wavein;
+};
+
+struct mixer_t {
+	mixinput_t inputs[MAX_MIXINPUTS];
+	int num_inputs;
+	channel_t mixout;
+};
+
 // output.cpp
 lame_t airlame_init();
 void shout_setup(icecast_data *icecast);
@@ -202,3 +219,6 @@ void tag_queue_put(device_t *dev, int freq, struct timeval tv);
 void tag_queue_get(device_t *dev, struct freq_tag *tag);
 void tag_queue_advance(device_t *dev);
 
+// mixer.cpp
+struct mixer_t *getmixerbyname(const char *name);
+void mixer_put(struct mixer_t *mixer, float *samples, size_t len);

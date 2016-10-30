@@ -13,7 +13,7 @@ SUBDIRS = hello_fft
 CLEANDIRS = $(SUBDIRS:%=clean-%)
 
 BIN = rtl_airband
-OBJ = rtl_airband.o output.o util.o
+OBJ = rtl_airband.o output.o util.o mixer.o
 FFT = hello_fft/hello_fft.a
 
 .PHONY: all clean install $(SUBDIRS) $(CLEANDIRS)

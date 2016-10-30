@@ -744,6 +744,7 @@ int main(int argc, char* argv[]) {
 				channel->agclow = 0;
 				channel->sqlevel = -1.0f;
 				channel->modulation = MOD_AM;
+				channel->need_mp3 = 0;
 				if(devs[i]["channels"][j].exists("modulation")) {
 #ifdef NFM
 					if(!strncmp(devs[i]["channels"][j]["modulation"], "nfm", 3)) {
@@ -839,6 +840,7 @@ int main(int argc, char* argv[]) {
 							idata->send_scan_freq_tags = (bool)devs[i]["channels"][j]["outputs"][o]["send_scan_freq_tags"];
 						else
 							idata->send_scan_freq_tags = 0;
+						channel->need_mp3 = 1;
 					} else if(!strncmp(devs[i]["channels"][j]["outputs"][o]["type"], "file", 4)) {
 						channel->outputs[oo].data = malloc(sizeof(struct file_data));
 						if(channel->outputs[oo].data == NULL) {
@@ -853,6 +855,21 @@ int main(int argc, char* argv[]) {
 						fdata->continuous = devs[i]["channels"][j]["outputs"][o].exists("continuous") ?
 							(bool)(devs[i]["channels"][j]["outputs"][o]["continuous"]) : false;
 						fdata->append = (!devs[i]["channels"][j]["outputs"][o].exists("append")) || (bool)(devs[i]["channels"][j]["outputs"][o]["append"]);
+						channel->need_mp3 = 1;
+					} else if(!strncmp(devs[i]["channels"][j]["outputs"][o]["type"], "mixer", 5)) {
+						channel->outputs[oo].data = malloc(sizeof(struct mixer_data));
+						if(channel->outputs[oo].data == NULL) {
+							cerr<<"Cannot allocate memory for outputs\n";
+							error();
+						}
+						memset(channel->outputs[oo].data, 0, sizeof(struct mixer_data));
+						channel->outputs[oo].type = O_MIXER;
+						mixer_data *mdata = (mixer_data *)(channel->outputs[oo].data);
+						if((mdata->mixer = getmixerbyname((const char *)devs[i]["channels"][j]["outputs"][o]["name"])) == NULL) {
+							cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown mixer \""<< \
+								(const char *)devs[i]["channels"][j]["outputs"][o]["name"]<<"\"\n";
+							error();
+						}
 					} else {
 						cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown output type\n";
 						error();

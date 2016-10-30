@@ -236,18 +236,21 @@ static int fdata_open(file_data *fdata, const char *filename) {
 
 unsigned char lamebuf[LAMEBUF_SIZE];
 void process_outputs(channel_t *channel, int cur_scan_freq) {
-	int bytes = lame_encode_buffer_ieee_float(channel->lame, channel->waveout, NULL, WAVE_BATCH, lamebuf, LAMEBUF_SIZE);
-	if (bytes < 0) {
-		log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n", bytes);
-		return;
-	} else if (bytes == 0)
-		return;
+	int mp3_bytes;
+	if(channel->need_mp3) {
+		mp3_bytes = lame_encode_buffer_ieee_float(channel->lame, channel->waveout, NULL, WAVE_BATCH, lamebuf, LAMEBUF_SIZE);
+		if (mp3_bytes < 0) {
+			log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n", mp3_bytes);
+			return;
+		} else if (mp3_bytes == 0)
+			return;
+	}
 	for (int k = 0; k < channel->output_count; k++) {
 		if(channel->outputs[k].enabled == false) continue;
 		if(channel->outputs[k].type == O_ICECAST) {
 			icecast_data *icecast = (icecast_data *)(channel->outputs[k].data);
 			if(icecast->shout == NULL) continue;
-			int ret = shout_send(icecast->shout, lamebuf, bytes);
+			int ret = shout_send(icecast->shout, lamebuf, mp3_bytes);
 			if (ret != SHOUTERR_SUCCESS || shout_queuelen(icecast->shout) > MAX_SHOUT_QUEUELEN) {
 				if (shout_queuelen(icecast->shout) > MAX_SHOUT_QUEUELEN)
 					log(LOG_WARNING, "Exceeded max backlog for %s:%d/%s, disconnecting\n",
@@ -307,10 +310,10 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 					continue;
 				}
 			}
-// bytes is signed, but we've checked for negative values earlier
+// mp3_bytes is signed, but we've checked for negative values earlier
 // so it's save to ignore the warning here
 #pragma GCC diagnostic ignored "-Wsign-compare"
-			if(fwrite(lamebuf, 1, bytes, fdata->f) < bytes) {
+			if(fwrite(lamebuf, 1, mp3_bytes, fdata->f) < mp3_bytes) {
 #pragma GCC diagnostic warning "-Wsign-compare"
 				if(ferror(fdata->f))
 					log(LOG_WARNING, "Cannot write to %s/%s%s (%s), output disabled\n",
@@ -323,6 +326,10 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 				channel->outputs[k].enabled = false;
 			}
 			channel->outputs[k].active = (channel->axcindicate != ' ');
+		} else if(channel->outputs[k].type == O_MIXER) {
+			mixer_data *mdata = (mixer_data *)(channel->outputs[k].data);
+			if(mdata->mixer == NULL) continue;
+			mixer_put(mdata->mixer, channel->waveout, WAVE_BATCH);
 		}
 	}
 }

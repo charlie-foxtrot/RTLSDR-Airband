@@ -203,14 +203,12 @@ void *output_thread(void* params);
 extern bool use_localtime;
 extern int device_count, mixer_count;
 extern int shout_metadata_delay, do_syslog, foreground;
+extern volatile int do_exit;
 extern float alpha;
 extern device_t *devices;
 extern mixer_t *mixers;
-extern volatile int do_exit;
 extern pthread_cond_t mp3_cond;
 extern pthread_mutex_t mp3_mutex;
-void tag_queue_get(device_t *dev, struct freq_tag *tag);
-void tag_queue_advance(device_t *dev);
 
 // util.cpp
 void error();
@@ -225,7 +223,6 @@ void tag_queue_advance(device_t *dev);
 // mixer.cpp
 mixer_t *getmixerbyname(const char *name);
 void mixer_put(struct mixer_t *mixer, float *samples, size_t len);
-//const char *mixer_get_last_err();
 
 // config.cpp
 int parse_devices(libconfig::Setting &devs);

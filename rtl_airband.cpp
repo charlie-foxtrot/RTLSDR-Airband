@@ -705,11 +705,6 @@ int main(int argc, char* argv[]) {
 			} else {
 				free(mixers);
 			}
-			log(LOG_DEBUG, "mixer_count=%d\n", mixer_count);
-			for(int z = 0; z < mixer_count; z++) {
-				mixer_t *m = &mixers[z];
-				log(LOG_DEBUG, "mixer[%d]: name=%s, input_count=%d, output_count=%d\n", z, m->name, m->input_count, m->channel.output_count);
-			}
 		} else {
 			mixer_count = 0;
 		}
@@ -718,6 +713,11 @@ int main(int argc, char* argv[]) {
 		if (devs_enabled < 1) {
 			cerr<<"Configuration error: no devices defined\n";
 			error();
+		}
+		log(LOG_DEBUG, "mixer_count=%d\n", mixer_count);
+		for(int z = 0; z < mixer_count; z++) {
+			mixer_t *m = &mixers[z];
+			log(LOG_DEBUG, "mixer[%d]: name=%s, input_count=%d, output_count=%d\n", z, m->name, m->input_count, m->channel.output_count);
 		}
 		int device_count2 = rtlsdr_get_device_count();
 		if (device_count2 < devs_enabled) {
@@ -791,10 +791,23 @@ int main(int argc, char* argv[]) {
 	}
 
 	log(LOG_INFO, "RTLSDR-Airband version %s starting\n", RTL_AIRBAND_VERSION);
+	for (int i = 0; i < mixer_count; i++) {
+		if(mixers[i].input_count == 0)
+			continue;		// no inputs connected = no need to initialize output
+		channel_t *channel = &mixers[i].channel;
+// FIXME: need_mp3
+		channel->lame = airlame_init();
+		for (int k = 0; k < channel->output_count; k++) {
+			output_t *output = channel->outputs + k;
+			if(output->type == O_ICECAST)
+				shout_setup((icecast_data *)(output->data));
+		}
+	}
 	for (int i = 0; i < device_count; i++) {
 		device_t* dev = devices + i;
 		for (int j = 0; j < dev->channel_count; j++) {
 			channel_t* channel = dev->channels + j;
+// FIXME: need_mp3
 			channel->lame = airlame_init();
 			for (int k = 0; k < channel->output_count; k++) {
 				output_t *output = channel->outputs + k;

@@ -97,6 +97,7 @@ struct file_data {
 
 struct mixer_data {
 	struct mixer_t *mixer;
+	int input;
 };
 
 enum output_type { O_ICECAST, O_FILE, O_MIXER };
@@ -222,7 +223,9 @@ void tag_queue_advance(device_t *dev);
 
 // mixer.cpp
 mixer_t *getmixerbyname(const char *name);
-void mixer_put(struct mixer_t *mixer, float *samples, size_t len);
+int mixer_connect_input(mixer_t *mixer);
+void mixer_put_samples(mixer_t *mixer, int input, float *samples, unsigned int len);
+const char *mixer_get_error();
 
 // config.cpp
 int parse_devices(libconfig::Setting &devs);

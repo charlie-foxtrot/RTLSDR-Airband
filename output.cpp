@@ -328,8 +328,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 			channel->outputs[k].active = (channel->axcindicate != ' ');
 		} else if(channel->outputs[k].type == O_MIXER) {
 			mixer_data *mdata = (mixer_data *)(channel->outputs[k].data);
-			if(mdata->mixer == NULL) continue;
-			mixer_put(mdata->mixer, channel->waveout, WAVE_BATCH);
+			mixer_put_samples(mdata->mixer, mdata->input, channel->waveout, WAVE_BATCH);
 		}
 	}
 }

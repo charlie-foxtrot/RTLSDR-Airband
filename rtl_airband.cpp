@@ -71,7 +71,8 @@ using namespace std;
 using namespace libconfig;
 
 device_t* devices;
-int device_count;
+mixer_t* mixers;
+int device_count, mixer_count;
 volatile int device_opened = 0;
 int rtlsdr_buffers = 10;
 int foreground = 0, do_syslog = 1, shout_metadata_delay = 3;
@@ -687,6 +688,31 @@ int main(int argc, char* argv[]) {
 		devices = (device_t *)tempptr;
 		shout_init();
 		if(do_syslog) openlog("rtl_airband", LOG_PID, LOG_DAEMON);
+
+		if(root.exists("mixers")) {
+			Setting &mx = config.lookup("mixers");
+			mixers = (mixer_t *)calloc(mx.getLength(), sizeof(struct mixer_t));
+			if(!mixers) {
+				cerr<<"Cannot allocate memory for mixers\n";
+				error();
+			}
+			if((mixer_count = parse_mixers(mx)) > 0) {
+				mixers = (mixer_t *)realloc(mixers, mixer_count * sizeof(struct mixer_t));
+				if(!mixers) {
+					cerr<<"Cannot allocate memory for mixers\n";
+					error();
+				}
+			} else {
+				free(mixers);
+			}
+			log(LOG_DEBUG, "mixer_count=%d\n", mixer_count);
+			for(int z = 0; z < mixer_count; z++) {
+				mixer_t *m = &mixers[z];
+				log(LOG_DEBUG, "mixer[%d]: name=%s, input_count=%d, output_count=%d\n", z, m->name, m->input_count, m->channel.output_count);
+			}
+		} else {
+			mixer_count = 0;
+		}
 
 		int devs_enabled = parse_devices(devs);
 		if (devs_enabled < 1) {

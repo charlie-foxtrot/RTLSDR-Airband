@@ -22,13 +22,13 @@
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
-
+#include <syslog.h>
 #include <libconfig.h++>
 #include "rtl_airband.h"
 
 using namespace std;
 
-static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, int j) {
+static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, int j, bool parsing_mixers) {
 	int oo = 0;
 	for(int o = 0; o < channel->output_count; o++) {
 		if(outs[o].exists("disable") && (bool)outs[o]["disable"] == true) {
@@ -73,6 +73,10 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			fdata->append = (!outs[o].exists("append")) || (bool)(outs[o]["append"]);
 			channel->need_mp3 = 1;
 		} else if(!strncmp(outs[o]["type"], "mixer", 5)) {
+			if(parsing_mixers) {	// mixer outputs not allowed for mixers
+				cerr<<"Configuration error: mixers.["<<i<<"] outputs["<<o<<"]: mixer output is not allowed for mixers\n";
+				error();
+			}
 			channel->outputs[oo].data = malloc(sizeof(struct mixer_data));
 			if(channel->outputs[oo].data == NULL) {
 				cerr<<"Cannot allocate memory for outputs\n";
@@ -186,7 +190,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			cerr<<"Cannot allocate memory for outputs\n";
 			error();
 		}
-		int outputs_enabled = parse_outputs(outputs, channel, i, j);
+		int outputs_enabled = parse_outputs(outputs, channel, i, j, false);
 		if(outputs_enabled < 1) {
 			cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: no outputs defined\n";
 			error();
@@ -273,3 +277,44 @@ int parse_devices(libconfig::Setting &devs) {
 	return devcnt;
 }
 
+int parse_mixers(libconfig::Setting &mx) {
+	const char *name;
+	int mm = 0;
+	for(int i = 0; i < mx.getLength(); i++) {
+		if(mx[i].exists("disable") && (bool)mx[i]["disable"] == true) continue;
+		if((name = mx[i].getName()) == NULL) {
+			cerr<<"Configuration error: mixers.["<<i<<"]: undefined mixer name\n";
+			error();
+		}
+		mixer_t *mixer = &mixers[mm];
+		log(LOG_DEBUG, "parse_mixers: mm=%d name=%s\n", mm, name);
+		mixer->name = strdup(name);
+		channel_t *channel = &mixer->channel;
+		libconfig::Setting &outputs = mx[i]["outputs"];
+		channel->output_count = outputs.getLength();
+		if(channel->output_count < 1) {
+			cerr<<"Configuration error: mixers.["<<i<<"]: no outputs defined\n";
+			error();
+		}
+		channel->outputs = (output_t *)calloc(channel->output_count, sizeof(struct output_t));
+		if(channel->outputs == NULL) {
+			cerr<<"Cannot allocate memory for outputs\n";
+			error();
+		}
+		int outputs_enabled = parse_outputs(outputs, channel, i, 0, true);
+		if(outputs_enabled < 1) {
+			cerr<<"Configuration error: mixers.["<<i<<"]: no outputs defined\n";
+			error();
+		}
+		channel->outputs = (output_t *)realloc(channel->outputs, outputs_enabled * sizeof(struct output_t));
+		if(channel->outputs == NULL) {
+			cerr<<"Cannot allocate memory for outputs\n";
+			error();
+		}
+		channel->output_count = outputs_enabled;
+		mm++;
+	}
+	return mm;
+}
+
+// vim: ts=4

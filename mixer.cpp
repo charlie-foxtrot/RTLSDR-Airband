@@ -18,9 +18,27 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <stdio.h>
+
+#include <cstring>
+#include <cstdlib>
+#include <syslog.h>
 #include "rtl_airband.h"
 
-struct mixer_t *getmixerbyname(const char *name) {
+static char *err;
+
+static inline void mixer_set_err(const char *msg) {
+	err = strdup(msg);
+}
+
+mixer_t *getmixerbyname(const char *name) {
+	for(int i = 0; i < mixer_count; i++) {
+		if(!strcmp(mixers[i].name, name)) {
+			log(LOG_DEBUG, "getmixerbyname(): %s found at %d\n", name, i);
+			return &mixers[i];
+		}
+	}
+	log(LOG_DEBUG, "getmixerbyname(): %s not found\n", name);
 	return NULL;
 }
 

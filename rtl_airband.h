@@ -54,7 +54,6 @@
 #define MAX_SHOUT_QUEUELEN 32768
 #define TAG_QUEUE_LEN 16
 #define CHANNELS 8
-#define MIXERS 32
 #define MAX_MIXINPUTS 32
 #define FFT_SIZE_LOG 9
 #define LAMEBUF_SIZE 22000 //todo: calculate
@@ -188,9 +187,10 @@ struct mixinput_t {
 };
 
 struct mixer_t {
+	const char *name;
+	int input_count;
+	channel_t channel;
 	mixinput_t inputs[MAX_MIXINPUTS];
-	int num_inputs;
-	channel_t mixout;
 };
 
 // output.cpp
@@ -201,9 +201,11 @@ void *output_thread(void* params);
 
 // rtl_airband.cpp
 extern bool use_localtime;
-extern int device_count;
+extern int device_count, mixer_count;
 extern int shout_metadata_delay, do_syslog, foreground;
+extern float alpha;
 extern device_t *devices;
+extern mixer_t *mixers;
 extern volatile int do_exit;
 extern pthread_cond_t mp3_cond;
 extern pthread_mutex_t mp3_mutex;
@@ -221,8 +223,12 @@ void tag_queue_get(device_t *dev, struct freq_tag *tag);
 void tag_queue_advance(device_t *dev);
 
 // mixer.cpp
-struct mixer_t *getmixerbyname(const char *name);
+mixer_t *getmixerbyname(const char *name);
 void mixer_put(struct mixer_t *mixer, float *samples, size_t len);
+//const char *mixer_get_last_err();
 
 // config.cpp
 int parse_devices(libconfig::Setting &devs);
+int parse_mixers(libconfig::Setting &mx);
+
+// vim: ts=4

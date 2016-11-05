@@ -340,6 +340,14 @@ void* output_thread(void* params) {
 
 	while (!do_exit) {
 		pthread_cond_wait(&mp3_cond, &mp3_mutex);
+		for (int i = 0; i < mixer_count; i++) {
+			mixer_t *mixer = mixers + i;
+			channel_t *channel = &mixer->channel;
+			if(channel->ready == true) {
+				channel->ready = false;
+				process_outputs(channel, -1);
+			}
+		}
 		for (int i = 0; i < device_count; i++) {
 			device_t* dev = devices + i;
 			if (!dev->failed && dev->waveavail) {

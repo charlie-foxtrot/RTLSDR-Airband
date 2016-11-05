@@ -68,7 +68,7 @@ void mixer_put_samples(mixer_t *mixer, int input, float *samples, unsigned int l
 	assert(mixer);
 	assert(samples);
 	assert(input < mixer->input_count);
-	memcpy(mixer->inputs[input].wavein, samples, len);
+	memcpy(mixer->inputs[input].wavein, samples, len * sizeof(float));
 	mixer->inputs[input].ready = true;
 }
 
@@ -80,6 +80,7 @@ void *mixer_thread(void *params) {
 		if(do_exit) return 0;
 		for(int i = 0; i < mixer_count; i++) {
 			mixer_t *mixer = mixers + i;
+			if(mixer->input_count == 0) continue;
 			channel_t *channel = &mixer->channel;
 			memset(channel->waveout, 0, WAVE_BATCH * sizeof(float));
 			for(int j = 0; j < mixer->input_count; j++) {

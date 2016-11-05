@@ -38,11 +38,11 @@ const char *mixer_get_error() {
 mixer_t *getmixerbyname(const char *name) {
 	for(int i = 0; i < mixer_count; i++) {
 		if(!strcmp(mixers[i].name, name)) {
-			log(LOG_DEBUG, "getmixerbyname(): %s found at %d\n", name, i);
+			debug_print("%s found at %d\n", name, i);
 			return &mixers[i];
 		}
 	}
-	log(LOG_DEBUG, "getmixerbyname(): %s not found\n", name);
+	debug_print("%s not found\n", name);
 	return NULL;
 }
 
@@ -99,7 +99,7 @@ void *mixer_thread(void *params) {
 					}
 					input->ready = false;
 				} else {
-					log(LOG_DEBUG, "mixer[%d].input[%d] not ready\n", i, j);
+					debug_print("mixer[%d].input[%d] not ready\n", i, j);
 				}
 				pthread_mutex_unlock(&input->mutex);
 			}

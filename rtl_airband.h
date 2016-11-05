@@ -39,6 +39,9 @@
 #endif
 #define CFGFILE SYSCONFDIR "/rtl_airband.conf"
 #define PIDFILE "/run/rtl_airband.pid"
+#if DEBUG
+#define DEBUG_PATH "rtl_airband_debug.log"
+#endif
 
 #define BUF_SIZE 2560000
 #define SOURCE_RATE 2560000
@@ -223,6 +226,13 @@ void log(int priority, const char *format, ...);
 void tag_queue_put(device_t *dev, int freq, struct timeval tv);
 void tag_queue_get(device_t *dev, struct freq_tag *tag);
 void tag_queue_advance(device_t *dev);
+void init_debug (char *file);
+void close_debug();
+extern FILE *debugf;
+#define debug_print(fmt, ...) \
+	do { if (DEBUG) fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); fflush(debugf); } while (0)
+#define debug_bulk_print(fmt, ...) \
+	do { if (DEBUG) fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); } while (0)
 
 // mixer.cpp
 mixer_t *getmixerbyname(const char *name);

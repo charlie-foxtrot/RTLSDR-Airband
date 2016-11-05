@@ -4,8 +4,9 @@ PREFIX = /usr/local
 SYSCONFDIR = $(PREFIX)/etc
 CFG = rtl_airband.conf
 BINDIR = $(PREFIX)/bin
+export DEBUG ?= 0
 export CC = g++
-export CFLAGS = -O3 -g -Wall -DSYSCONFDIR=\"$(SYSCONFDIR)\"
+export CFLAGS = -O3 -g -Wall -DSYSCONFDIR=\"$(SYSCONFDIR)\" -DDEBUG=$(DEBUG)
 export CXXFLAGS = $(CFLAGS)
 LDLIBS = -lrt -lm -lvorbisenc -lmp3lame -lshout -lpthread -lrtlsdr -lconfig++
 

@@ -1,12 +1,4 @@
-# Libraries
-*.lib
-*.dll
-
-# Executables
-*.exe
-*.pdb
-*.opensdf
-*.sdf
 *.o
 *.a
 rtl_airband
+rtl_airband_debug.log

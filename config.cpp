@@ -95,7 +95,7 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 					"could not connect to mixer "<<name<<": "<<mixer_get_error()<<"\n";
 					error();
 			}
-			log(LOG_DEBUG, "dev[%d].chan[%d].out[%d] connected to mixer %s as input %d\n", i, j, o, name, mdata->input);
+			debug_print("dev[%d].chan[%d].out[%d] connected to mixer %s as input %d\n", i, j, o, name, mdata->input);
 		} else {
 			cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown output type\n";
 			error();
@@ -293,7 +293,7 @@ int parse_mixers(libconfig::Setting &mx) {
 			error();
 		}
 		mixer_t *mixer = &mixers[mm];
-		log(LOG_DEBUG, "parse_mixers: mm=%d name=%s\n", mm, name);
+		debug_print("mm=%d name=%s\n", mm, name);
 		mixer->name = strdup(name);
 		channel_t *channel = &mixer->channel;
 		libconfig::Setting &outputs = mx[i]["outputs"];

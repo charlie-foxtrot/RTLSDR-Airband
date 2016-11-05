@@ -86,6 +86,9 @@ enum fm_demod_algo {
 };
 enum fm_demod_algo fm_demod = FM_FAST_ATAN2;
 #endif
+#if DEBUG
+char *debug_path;
+#endif
 pthread_cond_t	mp3_cond = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t	mp3_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -589,6 +592,9 @@ void usage() {
 #ifdef NFM
 	cout<<"\t-Q\t\t\tUse quadri correlator for FM demodulation (default is atan2)\n";
 #endif
+#if DEBUG
+	cout<<"\t-d <file>\t\tLog debugging information to <file> (default is "<<DEBUG_PATH<<")\n";
+#endif
 	cout<<"\t-c <config_file_path>\tUse non-default configuration file\n\t\t\t\t(default: "<<CFGFILE<<")\n\
 \t-v\t\t\tDisplay version and exit\n";
 	exit(EXIT_SUCCESS);
@@ -600,16 +606,25 @@ int main(int argc, char* argv[]) {
 	char *pidfile = PIDFILE;
 #pragma GCC diagnostic warning "-Wwrite-strings"
 	int opt;
+	char optstring[16] = "fhvc:";
 
 #ifdef NFM
-	while((opt = getopt(argc, argv, "Qfhvc:")) != -1) {
-#else
-	while((opt = getopt(argc, argv, "fhvc:")) != -1) {
+	strcat(optstring, "Q");
 #endif
+#if DEBUG
+	strcat(optstring, "d:");
+#endif
+
+	while((opt = getopt(argc, argv, optstring)) != -1) {
 		switch(opt) {
 #ifdef NFM
 			case 'Q':
 				fm_demod = FM_QUADRI_DEMOD;
+				break;
+#endif
+#if DEBUG
+			case 'd':
+				debug_path = strdup(optarg);
 				break;
 #endif
 			case 'f':
@@ -627,7 +642,10 @@ int main(int argc, char* argv[]) {
 				break;
 		}
 	}
-
+#if DEBUG
+	if(!debug_path) debug_path = strdup(DEBUG_PATH);
+	init_debug(debug_path);
+#endif
 #ifndef __arm__
 #define cpuid(func,ax,bx,cx,dx)\
 	__asm__ __volatile__ ("cpuid":\
@@ -714,10 +732,10 @@ int main(int argc, char* argv[]) {
 			cerr<<"Configuration error: no devices defined\n";
 			error();
 		}
-		log(LOG_DEBUG, "mixer_count=%d\n", mixer_count);
+		debug_print("mixer_count=%d\n", mixer_count);
 		for(int z = 0; z < mixer_count; z++) {
 			mixer_t *m = &mixers[z];
-			log(LOG_DEBUG, "mixer[%d]: name=%s, input_count=%d, output_count=%d\n", z, m->name, m->input_count, m->channel.output_count);
+			debug_print("mixer[%d]: name=%s, input_count=%d, output_count=%d\n", z, m->name, m->input_count, m->channel.output_count);
 		}
 		int device_count2 = rtlsdr_get_device_count();
 		if (device_count2 < devs_enabled) {
@@ -869,6 +887,7 @@ int main(int argc, char* argv[]) {
 			pthread_join(devices[i].controller_thread, NULL);
 	}
 	log(LOG_INFO, "rtlsdr threads closed\n");
+	close_debug();
 	return 0;
 }
 // vim: ts=4

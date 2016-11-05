@@ -187,6 +187,7 @@ struct device_t {
 struct mixinput_t {
 	float *wavein;
 	bool ready;
+	pthread_mutex_t mutex;
 };
 
 struct mixer_t {
@@ -226,7 +227,7 @@ void tag_queue_advance(device_t *dev);
 // mixer.cpp
 mixer_t *getmixerbyname(const char *name);
 int mixer_connect_input(mixer_t *mixer);
-void mixer_put_samples(mixer_t *mixer, int input, float *samples, unsigned int len);
+void mixer_put_samples(mixer_t *mixer, int input_idx, float *samples, unsigned int len);
 void *mixer_thread(void *params);
 const char *mixer_get_error();
 

@@ -60,16 +60,23 @@ int mixer_connect_input(mixer_t *mixer) {
 		mixer_set_error("failed to allocate sample buffer");
 		return(-1);
 	}
+	if((pthread_mutex_init(&mixer->inputs[i].mutex, NULL)) != 0) {
+		mixer_set_error("failed to initialize input mutex");
+		return(-1);
+	}
 	mixer->inputs[i].ready = false;
 	return(mixer->input_count++);
 }
 
-void mixer_put_samples(mixer_t *mixer, int input, float *samples, unsigned int len) {
+void mixer_put_samples(mixer_t *mixer, int input_idx, float *samples, unsigned int len) {
 	assert(mixer);
 	assert(samples);
-	assert(input < mixer->input_count);
-	memcpy(mixer->inputs[input].wavein, samples, len * sizeof(float));
-	mixer->inputs[input].ready = true;
+	assert(input_idx < mixer->input_count);
+	mixinput_t *input = &mixer->inputs[input_idx];
+	pthread_mutex_lock(&input->mutex);
+	memcpy(input->wavein, samples, len * sizeof(float));
+	input->ready = true;
+	pthread_mutex_unlock(&input->mutex);
 }
 
 void *mixer_thread(void *params) {
@@ -85,6 +92,7 @@ void *mixer_thread(void *params) {
 			memset(channel->waveout, 0, WAVE_BATCH * sizeof(float));
 			for(int j = 0; j < mixer->input_count; j++) {
 				mixinput_t *input = mixer->inputs + j;
+				pthread_mutex_lock(&input->mutex);
 				if(input->ready) {
 					for(int s = 0; s < WAVE_BATCH; s++) {
 						channel->waveout[s] += input->wavein[s];
@@ -93,6 +101,7 @@ void *mixer_thread(void *params) {
 				} else {
 					log(LOG_DEBUG, "mixer[%d].input[%d] not ready\n", i, j);
 				}
+				pthread_mutex_unlock(&input->mutex);
 			}
 			channel->ready = true;
 		}

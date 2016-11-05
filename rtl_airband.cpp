@@ -855,6 +855,9 @@ int main(int argc, char* argv[]) {
 	pthread_create(&thread2, NULL, &icecast_check, NULL);
 	THREAD thread3;
 	pthread_create(&thread3, NULL, &output_thread, NULL);
+	THREAD thread4;
+	if(mixer_count > 0)
+		pthread_create(&thread4, NULL, &mixer_thread, NULL);
 
 	demodulate();
 

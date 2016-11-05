@@ -21,6 +21,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <cassert>
+#include <unistd.h>
 #include <syslog.h>
 #include "rtl_airband.h"
 
@@ -59,6 +60,7 @@ int mixer_connect_input(mixer_t *mixer) {
 		mixer_set_error("failed to allocate sample buffer");
 		return(-1);
 	}
+	mixer->inputs[i].ready = false;
 	return(mixer->input_count++);
 }
 
@@ -67,6 +69,35 @@ void mixer_put_samples(mixer_t *mixer, int input, float *samples, unsigned int l
 	assert(samples);
 	assert(input < mixer->input_count);
 	memcpy(mixer->inputs[input].wavein, samples, len);
+	mixer->inputs[input].ready = true;
+}
+
+void *mixer_thread(void *params) {
+	int interval_usec = 1e+6 * WAVE_BATCH / WAVE_RATE;
+	if(mixer_count <= 0) return 0;
+	while(!do_exit) {
+		usleep(interval_usec);
+		if(do_exit) return 0;
+		for(int i = 0; i < mixer_count; i++) {
+			mixer_t *mixer = mixers + i;
+			channel_t *channel = &mixer->channel;
+			memset(channel->waveout, 0, WAVE_BATCH * sizeof(float));
+			for(int j = 0; j < mixer->input_count; j++) {
+				mixinput_t *input = mixer->inputs + j;
+				if(input->ready) {
+					for(int s = 0; s < WAVE_BATCH; s++) {
+						channel->waveout[s] += input->wavein[s];
+					}
+					input->ready = false;
+				} else {
+					log(LOG_DEBUG, "mixer[%d].input[%d] not ready\n", i, j);
+				}
+			}
+			channel->ready = true;
+		}
+		// signal output_thread?
+	}
+	return 0;
 }
 
 // vim: ts=4

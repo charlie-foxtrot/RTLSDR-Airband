@@ -149,6 +149,7 @@ struct channel_t {
 	char **labels;
 	int output_count;
 	int need_mp3;
+	bool ready;					// mixer output readiness flag
 	output_t *outputs;
 	lame_t lame;
 };
@@ -185,6 +186,7 @@ struct device_t {
 
 struct mixinput_t {
 	float *wavein;
+	bool ready;
 };
 
 struct mixer_t {
@@ -225,6 +227,7 @@ void tag_queue_advance(device_t *dev);
 mixer_t *getmixerbyname(const char *name);
 int mixer_connect_input(mixer_t *mixer);
 void mixer_put_samples(mixer_t *mixer, int input, float *samples, unsigned int len);
+void *mixer_thread(void *params);
 const char *mixer_get_error();
 
 // config.cpp

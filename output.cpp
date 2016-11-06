@@ -345,9 +345,9 @@ void* output_thread(void* params) {
 		for (int i = 0; i < mixer_count; i++) {
 			mixer_t *mixer = mixers + i;
 			channel_t *channel = &mixer->channel;
-			if(channel->ready == true) {
-				channel->ready = false;
+			if(channel->state == CH_READY) {
 				process_outputs(channel, -1);
+				channel->state = CH_DIRTY;
 			}
 		}
 		if(DEBUG) {

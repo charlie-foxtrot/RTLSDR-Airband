@@ -66,6 +66,7 @@ int mixer_connect_input(mixer_t *mixer) {
 		return(-1);
 	}
 	mixer->inputs[i].ready = false;
+	SET_BIT(mixer->inputs_todo, i);
 	return(mixer->input_count++);
 }
 
@@ -76,13 +77,30 @@ void mixer_put_samples(mixer_t *mixer, int input_idx, float *samples, unsigned i
 	mixinput_t *input = &mixer->inputs[input_idx];
 	pthread_mutex_lock(&input->mutex);
 	memcpy(input->wavein, samples, len * sizeof(float));
+	if(DEBUG && input->ready == true)
+		debug_print("input %d overrun\n", input_idx);
 	input->ready = true;
 	pthread_mutex_unlock(&input->mutex);
 }
 
+/* Samples are delivered to mixer inputs in batches of WAVE_BATCH size (default 1000, ie. 1/8 secs
+ * of audio). mixer_thread emits mixed audio in batches of the same size, but the loop runs
+ * twice more often (MIX_DIVISOR = 2) in order to accomodate for any possible input jitter
+ * caused by irregular process scheduling, RTL clock instability, etc. For this purpose
+ * we allow each input batch to become delayed by 1/16 secs (max). This is accomplished by
+ * the mixer->interval counter, which counts from 2 to 0:
+ * - 2 - initial state after mixed audio output. We don't expect inputs to be ready yet,
+ *       but we check their readiness anyway.
+ * - 1 - here we expect most (if not all) inputs to be ready, so we mix them. If there are no
+ *       inputs left to handle in this WAVE_BATCH interval, we emit the mixed audio and reset
+ *       mixer->interval to the initial state (2).
+ * - 0 - here we expect to get output from all delayed inputs, which were not ready in the
+ *       interval. Any input which is still not ready, is skipped (filled with 0s), because
+ *       here we must emit the mixed audio to keep the desired audio bitrate.
+ */
 void *mixer_thread(void *params) {
 	struct timeval ts, te;
-	int interval_usec = 1e+6 * WAVE_BATCH / WAVE_RATE;
+	int interval_usec = 1e+6 * WAVE_BATCH / WAVE_RATE / MIX_DIVISOR;
 	if(mixer_count <= 0) return 0;
 	if(DEBUG) gettimeofday(&ts, NULL);
 	while(!do_exit) {
@@ -92,29 +110,50 @@ void *mixer_thread(void *params) {
 			mixer_t *mixer = mixers + i;
 			if(mixer->input_count == 0) continue;
 			channel_t *channel = &mixer->channel;
-			memset(channel->waveout, 0, WAVE_BATCH * sizeof(float));
+
+			if(channel->state == CH_READY) {		// previous output not yet handled by output thread
+				if(--mixer->interval > 0) {
+					continue;
+				} else {
+					debug_print("mixer[%d]: output channel overrun\n", i);
+				}
+			}
+
 			for(int j = 0; j < mixer->input_count; j++) {
 				mixinput_t *input = mixer->inputs + j;
 				pthread_mutex_lock(&input->mutex);
 				if(input->ready) {
+					if(channel->state == CH_DIRTY) {
+						memset(channel->waveout, 0, WAVE_BATCH * sizeof(float));
+						channel->state = CH_WORKING;
+					}
 					for(int s = 0; s < WAVE_BATCH; s++) {
 						channel->waveout[s] += input->wavein[s];
 					}
 					input->ready = false;
+					RESET_BIT(mixer->inputs_todo, j);
 				} else {
-					debug_print("mixer[%d].input[%d] not ready\n", i, j);
+					debug_bulk_print("mixer[%d].input[%d] not ready in interval %d\n", i, j, mixer->interval);
 				}
 				pthread_mutex_unlock(&input->mutex);
 			}
+
+			if(mixer->inputs_todo == 0 || mixer->interval == 0) {	// all inputs handled or last interval passed
 		        if(DEBUG) {
 		            gettimeofday(&te, NULL);
-		            debug_bulk_print("mixerinput: %lu.%lu %lu\n", te.tv_sec, te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec);
+		            debug_bulk_print("mixerinput: %lu.%lu %lu int=%d unhandled=0x%02x\n",
+						te.tv_sec, te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec, mixer->interval, mixer->inputs_todo);
 		            ts.tv_sec = te.tv_sec;
 	        	    ts.tv_usec = te.tv_usec;
 			    }
-			channel->ready = true;
+				channel->state = CH_READY;
+				pthread_cond_signal(&mp3_cond);
+				mixer->interval = MIX_DIVISOR;
+				mixer->inputs_todo = ONES(mixer->input_count);
+			} else {
+				mixer->interval--;
+			}
 		}
-		// signal output_thread?
 	}
 	return 0;
 }

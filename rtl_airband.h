@@ -60,6 +60,11 @@
 #define MAX_MIXINPUTS 32
 #define FFT_SIZE_LOG 9
 #define LAMEBUF_SIZE 22000 //todo: calculate
+#define MIX_DIVISOR 2
+
+#define ONES(x) ~(~0 << x)
+#define SET_BIT(a, x) a |= (1 << x)
+#define RESET_BIT(a, x) a &= ~(1 << x)
 
 #if defined USE_BCM_VC
 struct sample_fft_arg
@@ -123,6 +128,7 @@ enum modulations {
 #endif
 };
 
+enum ch_states { CH_DIRTY, CH_WORKING, CH_READY };
 struct channel_t {
 	float wavein[WAVE_LEN];		// FFT output waveform
 	float waveref[WAVE_LEN];	// for power level calculation
@@ -152,7 +158,7 @@ struct channel_t {
 	char **labels;
 	int output_count;
 	int need_mp3;
-	bool ready;					// mixer output readiness flag
+	enum ch_states state;		// mixer channel state flag
 	output_t *outputs;
 	lame_t lame;
 };
@@ -197,6 +203,8 @@ struct mixinput_t {
 struct mixer_t {
 	const char *name;
 	int input_count;
+	int interval;
+	unsigned int inputs_todo;
 	channel_t channel;
 	mixinput_t inputs[MAX_MIXINPUTS];
 };

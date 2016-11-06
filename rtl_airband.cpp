@@ -95,12 +95,19 @@ pthread_mutex_t	mp3_mutex = PTHREAD_MUTEX_INITIALIZER;
 void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx) {
 	if(do_exit) return;
 	device_t *dev = (device_t*)ctx;
+	struct timeval tv;
+	if(DEBUG) {
+		gettimeofday(&tv, NULL);
+		debug_bulk_print("buflen: %lu.%lu %u\n", tv.tv_sec, tv.tv_usec, len);
+	}
+	pthread_mutex_lock(&dev->buffer_lock);
 	memcpy(dev->buffer + dev->bufe, buf, len);
 	if (dev->bufe == 0) {
 		memcpy(dev->buffer + BUF_SIZE, buf, FFT_SIZE * 2);
 	}
 	dev->bufe = dev->bufe + len;
 	if (dev->bufe == BUF_SIZE) dev->bufe = 0;
+	pthread_mutex_unlock(&dev->buffer_lock);
 }
 
 void sighandler(int sig) {
@@ -368,10 +375,13 @@ void demodulate() {
 		}
 
 		device_t* dev = devices + device_num;
+		pthread_mutex_lock(&dev->buffer_lock);
 		int available = dev->bufe - dev->bufs;
-		if (dev->bufe < dev->bufs) {
-			available = (BUF_SIZE - dev->bufe) + dev->bufs;
+		if (available < 0) {
+			available += BUF_SIZE;
 		}
+		debug_bulk_print("bufs: %d bufe: %d\n", dev->bufs, dev->bufe);
+		pthread_mutex_unlock(&dev->buffer_lock);
 
 		if(atomic_get(&device_opened)==0) {
 			log(LOG_ERR, "All receivers failed, exiting\n");
@@ -831,6 +841,10 @@ int main(int argc, char* argv[]) {
 	}
 	for (int i = 0; i < device_count; i++) {
 		device_t* dev = devices + i;
+		if(pthread_mutex_init(&dev->buffer_lock, NULL) != 0) {
+			cerr<<"Failed to initialize buffer mutex for device "<<i<<" - aborting\n";
+			error();
+		}
 		for (int j = 0; j < dev->channel_count; j++) {
 			channel_t* channel = dev->channels + j;
 // FIXME: need_mp3

@@ -182,6 +182,7 @@ struct device_t {
 	int tq_head, tq_tail;
 	int last_frequency;
 	pthread_mutex_t tag_queue_lock;
+	pthread_mutex_t buffer_lock;
 	int row;
 	int failed;
 	enum rec_modes mode;

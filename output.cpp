@@ -337,7 +337,9 @@ void* output_thread(void* params) {
 	struct freq_tag tag;
 	struct timeval tv;
 	int new_freq = -1;
+	struct timeval ts, te;
 
+	if(DEBUG) gettimeofday(&ts, NULL);
 	while (!do_exit) {
 		pthread_cond_wait(&mp3_cond, &mp3_mutex);
 		for (int i = 0; i < mixer_count; i++) {
@@ -347,6 +349,12 @@ void* output_thread(void* params) {
 				channel->ready = false;
 				process_outputs(channel, -1);
 			}
+		}
+		if(DEBUG) {
+			gettimeofday(&te, NULL);
+			debug_bulk_print("mixeroutput: %lu.%lu %lu\n", te.tv_sec, te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec);
+			ts.tv_sec = te.tv_sec;
+			ts.tv_usec = te.tv_usec;
 		}
 		for (int i = 0; i < device_count; i++) {
 			device_t* dev = devices + i;

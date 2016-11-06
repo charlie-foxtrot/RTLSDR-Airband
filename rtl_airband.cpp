@@ -351,6 +351,9 @@ void demodulate() {
 		window[i * 2] = window[i * 2 + 1] = (float)x;
 	}
 
+	struct timeval ts, te;
+	if(DEBUG)
+		gettimeofday(&ts, NULL);
 	// speed2 = number of bytes per wave sample (x 2 for I and Q)
 	int speed2 = (SOURCE_RATE * 2) / WAVE_RATE;
 	int device_num = 0;
@@ -573,6 +576,12 @@ void demodulate() {
 			}
 			dev->waveavail = 1;
 			dev->waveend -= WAVE_BATCH;
+			if(DEBUG) {
+				gettimeofday(&te, NULL);
+				debug_bulk_print("waveavail %lu.%lu %lu\n", te.tv_sec, te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec);
+				ts.tv_sec = te.tv_sec;
+				ts.tv_usec = te.tv_usec;
+			}
 			dev->row++;
 			if (dev->row == 12) {
 				dev->row = 0;

@@ -410,8 +410,6 @@ void demodulate() {
 			_mm_store_ps(&fftin[i][0], a);
 		}
 #endif
-		// allow mp3 encoding thread to run while waiting for FFT to finish
-		pthread_cond_signal(&mp3_cond);
 #ifdef USE_BCM_VC
 		gpu_fft_execute(fft);
 #else
@@ -582,6 +580,7 @@ void demodulate() {
 				ts.tv_sec = te.tv_sec;
 				ts.tv_usec = te.tv_usec;
 			}
+			pthread_cond_signal(&mp3_cond);
 			dev->row++;
 			if (dev->row == 12) {
 				dev->row = 0;

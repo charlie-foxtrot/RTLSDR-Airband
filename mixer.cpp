@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <cassert>
 #include <unistd.h>
+#include <sys/time.h>
 #include <syslog.h>
 #include "rtl_airband.h"
 
@@ -80,8 +81,10 @@ void mixer_put_samples(mixer_t *mixer, int input_idx, float *samples, unsigned i
 }
 
 void *mixer_thread(void *params) {
+	struct timeval ts, te;
 	int interval_usec = 1e+6 * WAVE_BATCH / WAVE_RATE;
 	if(mixer_count <= 0) return 0;
+	if(DEBUG) gettimeofday(&ts, NULL);
 	while(!do_exit) {
 		usleep(interval_usec);
 		if(do_exit) return 0;
@@ -103,6 +106,12 @@ void *mixer_thread(void *params) {
 				}
 				pthread_mutex_unlock(&input->mutex);
 			}
+		        if(DEBUG) {
+		            gettimeofday(&te, NULL);
+		            debug_bulk_print("mixerinput: %lu.%lu %lu\n", te.tv_sec, te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec);
+		            ts.tv_sec = te.tv_sec;
+	        	    ts.tv_usec = te.tv_usec;
+			    }
 			channel->ready = true;
 		}
 		// signal output_thread?

@@ -394,10 +394,12 @@ void demodulate() {
 			continue;
 		} else if (available < speed2 * FFT_BATCH + FFT_SIZE * 2) {
 			// move to next device
+			debug_bulk_print("unavail: %d\n", available);
 			device_num = (device_num + 1) % device_count;
 			SLEEP(10);
 			continue;
 		}
+		debug_bulk_print("avail: %d\n", available);
 
 #if defined USE_BCM_VC
 		sample_fft_arg sfa = {FFT_SIZE / 4, fft->in};

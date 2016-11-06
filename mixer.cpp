@@ -132,8 +132,6 @@ void *mixer_thread(void *params) {
 					}
 					input->ready = false;
 					RESET_BIT(mixer->inputs_todo, j);
-				} else {
-					debug_bulk_print("mixer[%d].input[%d] not ready in interval %d\n", i, j, mixer->interval);
 				}
 				pthread_mutex_unlock(&input->mutex);
 			}

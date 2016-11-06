@@ -95,11 +95,6 @@ pthread_mutex_t	mp3_mutex = PTHREAD_MUTEX_INITIALIZER;
 void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx) {
 	if(do_exit) return;
 	device_t *dev = (device_t*)ctx;
-	struct timeval tv;
-	if(DEBUG) {
-		gettimeofday(&tv, NULL);
-		debug_bulk_print("buflen: %lu.%lu %u\n", tv.tv_sec, tv.tv_usec, len);
-	}
 	pthread_mutex_lock(&dev->buffer_lock);
 	memcpy(dev->buffer + dev->bufe, buf, len);
 	if (dev->bufe == 0) {
@@ -380,7 +375,6 @@ void demodulate() {
 		if (available < 0) {
 			available += BUF_SIZE;
 		}
-		debug_bulk_print("bufs: %d bufe: %d\n", dev->bufs, dev->bufe);
 		pthread_mutex_unlock(&dev->buffer_lock);
 
 		if(atomic_get(&device_opened)==0) {
@@ -394,12 +388,10 @@ void demodulate() {
 			continue;
 		} else if (available < speed2 * FFT_BATCH + FFT_SIZE * 2) {
 			// move to next device
-			debug_bulk_print("unavail: %d\n", available);
 			device_num = (device_num + 1) % device_count;
 			SLEEP(10);
 			continue;
 		}
-		debug_bulk_print("avail: %d\n", available);
 
 #if defined USE_BCM_VC
 		sample_fft_arg sfa = {FFT_SIZE / 4, fft->in};

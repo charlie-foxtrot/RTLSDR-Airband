@@ -343,8 +343,8 @@ void* output_thread(void* params) {
 	while (!do_exit) {
 		pthread_cond_wait(&mp3_cond, &mp3_mutex);
 		for (int i = 0; i < mixer_count; i++) {
-			mixer_t *mixer = mixers + i;
-			channel_t *channel = &mixer->channel;
+			if(mixers[i].enabled == false) continue;
+			channel_t *channel = &mixers[i].channel;
 			if(channel->state == CH_READY) {
 				process_outputs(channel, -1);
 				channel->state = CH_DIRTY;
@@ -415,6 +415,7 @@ void* icecast_check(void* params) {
 			}
 		}
 		for (int i = 0; i < mixer_count; i++) {
+			if(mixers[i].enabled == false) continue;
 			for (int k = 0; k < mixers[i].channel.output_count; k++) {
 				if(mixers[i].channel.outputs[k].enabled == false)
 					continue;

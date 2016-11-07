@@ -202,6 +202,7 @@ struct mixinput_t {
 
 struct mixer_t {
 	const char *name;
+	bool enabled;
 	int input_count;
 	int interval;
 	unsigned int inputs_todo;

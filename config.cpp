@@ -294,6 +294,7 @@ int parse_mixers(libconfig::Setting &mx) {
 		}
 		mixer_t *mixer = &mixers[mm];
 		debug_print("mm=%d name=%s\n", mm, name);
+		mixer->enabled = false;
 		mixer->name = strdup(name);
 		mixer->interval = MIX_DIVISOR;
 		channel_t *channel = &mixer->channel;

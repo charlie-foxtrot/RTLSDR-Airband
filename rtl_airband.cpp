@@ -822,7 +822,7 @@ int main(int argc, char* argv[]) {
 
 	log(LOG_INFO, "RTLSDR-Airband version %s starting\n", RTL_AIRBAND_VERSION);
 	for (int i = 0; i < mixer_count; i++) {
-		if(mixers[i].input_count == 0)
+		if(mixers[i].enabled == false)
 			continue;		// no inputs connected = no need to initialize output
 		channel_t *channel = &mixers[i].channel;
 // FIXME: need_mp3

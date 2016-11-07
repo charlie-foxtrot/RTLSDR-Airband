@@ -67,6 +67,7 @@ int mixer_connect_input(mixer_t *mixer) {
 	}
 	mixer->inputs[i].ready = false;
 	SET_BIT(mixer->inputs_todo, i);
+	mixer->enabled = true;
 	return(mixer->input_count++);
 }
 
@@ -108,7 +109,7 @@ void *mixer_thread(void *params) {
 		if(do_exit) return 0;
 		for(int i = 0; i < mixer_count; i++) {
 			mixer_t *mixer = mixers + i;
-			if(mixer->input_count == 0) continue;
+			if(mixer->enabled == false) continue;
 			channel_t *channel = &mixer->channel;
 
 			if(channel->state == CH_READY) {		// previous output not yet handled by output thread

@@ -126,10 +126,12 @@ void *mixer_thread(void *params) {
 				if(input->ready) {
 					if(channel->state == CH_DIRTY) {
 						memset(channel->waveout, 0, WAVE_BATCH * sizeof(float));
+						channel->axcindicate = ' ';
 						channel->state = CH_WORKING;
 					}
 					for(int s = 0; s < WAVE_BATCH; s++) {
 						channel->waveout[s] += input->wavein[s];
+						if(input->wavein[s] != 0) channel->axcindicate = '*';
 					}
 					input->ready = false;
 					RESET_BIT(mixer->inputs_todo, j);

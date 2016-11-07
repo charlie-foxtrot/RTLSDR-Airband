@@ -825,8 +825,8 @@ int main(int argc, char* argv[]) {
 		if(mixers[i].enabled == false)
 			continue;		// no inputs connected = no need to initialize output
 		channel_t *channel = &mixers[i].channel;
-// FIXME: need_mp3
-		channel->lame = airlame_init();
+		if(channel->need_mp3)
+			channel->lame = airlame_init();
 		for (int k = 0; k < channel->output_count; k++) {
 			output_t *output = channel->outputs + k;
 			if(output->type == O_ICECAST)
@@ -841,8 +841,9 @@ int main(int argc, char* argv[]) {
 		}
 		for (int j = 0; j < dev->channel_count; j++) {
 			channel_t* channel = dev->channels + j;
-// FIXME: need_mp3
-			channel->lame = airlame_init();
+
+			if(channel->need_mp3)
+				channel->lame = airlame_init();
 			for (int k = 0; k < channel->output_count; k++) {
 				output_t *output = channel->outputs + k;
 				if(output->type == O_ICECAST)

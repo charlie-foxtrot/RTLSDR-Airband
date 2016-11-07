@@ -414,6 +414,20 @@ void* icecast_check(void* params) {
 				}
 			}
 		}
+		for (int i = 0; i < mixer_count; i++) {
+			for (int k = 0; k < mixers[i].channel.output_count; k++) {
+				if(mixers[i].channel.outputs[k].enabled == false)
+					continue;
+				if(mixers[i].channel.outputs[k].type != O_ICECAST)
+					continue;
+				icecast_data *icecast = (icecast_data *)(mixers[i].channel.outputs[k].data);
+				if(icecast->shout == NULL) {
+					log(LOG_NOTICE, "Trying to reconnect to %s:%d/%s...\n",
+						icecast->hostname, icecast->port, icecast->mountpoint);
+					shout_setup(icecast);
+				}
+			}
+		}
 	}
 	return 0;
 }

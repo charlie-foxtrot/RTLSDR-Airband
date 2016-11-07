@@ -90,7 +90,9 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown mixer \""<<name<<"\"\n";
 				error();
 			}
-			if((mdata->input = mixer_connect_input(mdata->mixer)) < 0) {
+			float ampfactor = outs[o].exists("ampfactor") ?
+				(float)outs[o]["ampfactor"] : 1.0;
+			if((mdata->input = mixer_connect_input(mdata->mixer, ampfactor)) < 0) {
 				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: "\
 					"could not connect to mixer "<<name<<": "<<mixer_get_error()<<"\n";
 					error();

@@ -47,7 +47,7 @@ mixer_t *getmixerbyname(const char *name) {
 	return NULL;
 }
 
-int mixer_connect_input(mixer_t *mixer) {
+int mixer_connect_input(mixer_t *mixer, float ampfactor) {
 	if(!mixer) {
 		mixer_set_error("mixer is undefined");
 		return(-1);
@@ -65,6 +65,7 @@ int mixer_connect_input(mixer_t *mixer) {
 		mixer_set_error("failed to initialize input mutex");
 		return(-1);
 	}
+	mixer->inputs[i].ampfactor = ampfactor;
 	mixer->inputs[i].ready = false;
 	SET_BIT(mixer->inputs_todo, i);
 	mixer->enabled = true;
@@ -130,7 +131,7 @@ void *mixer_thread(void *params) {
 						channel->state = CH_WORKING;
 					}
 					for(int s = 0; s < WAVE_BATCH; s++) {
-						channel->waveout[s] += input->wavein[s];
+						channel->waveout[s] += input->wavein[s] * input->ampfactor;
 						if(input->wavein[s] != 0) channel->axcindicate = '*';
 					}
 					input->ready = false;

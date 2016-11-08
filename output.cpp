@@ -333,6 +333,19 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 	}
 }
 
+void disable_outputs(device_t *dev) {
+	for(int j = 0; j < dev->channel_count; j++) {
+		for (int k = 0; k < dev->channels[j].output_count; k++) {
+			output_t *output = dev->channels[j].outputs + k;
+			output->enabled = false;
+			if(output->type == O_MIXER) {
+				mixer_data *mdata = (mixer_data *)(output->data);
+				mixer_disable_input(mdata->mixer, mdata->input);
+			}
+		}
+	}
+}
+
 void* output_thread(void* params) {
 	struct freq_tag tag;
 	struct timeval tv;

@@ -67,9 +67,16 @@ int mixer_connect_input(mixer_t *mixer, float ampfactor) {
 	}
 	mixer->inputs[i].ampfactor = ampfactor;
 	mixer->inputs[i].ready = false;
+	SET_BIT(mixer->input_mask, i);
 	SET_BIT(mixer->inputs_todo, i);
 	mixer->enabled = true;
 	return(mixer->input_count++);
+}
+
+void mixer_disable_input(mixer_t *mixer, int input_idx) {
+	assert(mixer);
+	assert(input_idx < mixer->input_count);
+	RESET_BIT(mixer->input_mask, input_idx);
 }
 
 void mixer_put_samples(mixer_t *mixer, int input_idx, float *samples, unsigned int len) {
@@ -124,7 +131,7 @@ void *mixer_thread(void *params) {
 			for(int j = 0; j < mixer->input_count; j++) {
 				mixinput_t *input = mixer->inputs + j;
 				pthread_mutex_lock(&input->mutex);
-				if(input->ready) {
+				if(IS_SET(mixer->inputs_todo & mixer->input_mask, j) && input->ready) {
 					if(channel->state == CH_DIRTY) {
 						memset(channel->waveout, 0, WAVE_BATCH * sizeof(float));
 						channel->axcindicate = ' ';
@@ -140,11 +147,12 @@ void *mixer_thread(void *params) {
 				pthread_mutex_unlock(&input->mutex);
 			}
 
-			if(mixer->inputs_todo == 0 || mixer->interval == 0) {	// all inputs handled or last interval passed
+			if((mixer->inputs_todo & mixer->input_mask) == 0 || mixer->interval == 0) {	// all good inputs handled or last interval passed
 		        if(DEBUG) {
 		            gettimeofday(&te, NULL);
-		            debug_bulk_print("mixerinput: %lu.%lu %lu int=%d unhandled=0x%02x\n",
-						te.tv_sec, te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec, mixer->interval, mixer->inputs_todo);
+		            debug_bulk_print("mixerinput: %lu.%lu %lu int=%d inp_unhandled=0x%02x inp_mask=0x%02x\n",
+						te.tv_sec, te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec,
+						mixer->interval, mixer->inputs_todo, mixer->input_mask);
 		            ts.tv_sec = te.tv_sec;
 	        	    ts.tv_usec = te.tv_usec;
 			    }

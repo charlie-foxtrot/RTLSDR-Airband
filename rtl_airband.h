@@ -62,9 +62,10 @@
 #define LAMEBUF_SIZE 22000 //todo: calculate
 #define MIX_DIVISOR 2
 
-#define ONES(x) ~(~0 << x)
-#define SET_BIT(a, x) a |= (1 << x)
-#define RESET_BIT(a, x) a &= ~(1 << x)
+#define ONES(x) ~(~0 << (x))
+#define SET_BIT(a, x) (a) |= (1 << (x))
+#define RESET_BIT(a, x) (a) &= ~(1 << (x))
+#define IS_SET(a, x) (a) & (1 << (x))
 
 #if defined USE_BCM_VC
 struct sample_fft_arg
@@ -207,6 +208,7 @@ struct mixer_t {
 	int input_count;
 	int interval;
 	unsigned int inputs_todo;
+	unsigned int input_mask;
 	channel_t channel;
 	mixinput_t inputs[MAX_MIXINPUTS];
 };
@@ -214,6 +216,7 @@ struct mixer_t {
 // output.cpp
 lame_t airlame_init();
 void shout_setup(icecast_data *icecast);
+void disable_outputs(device_t *dev);
 void *icecast_check(void* params);
 void *output_thread(void* params);
 
@@ -248,6 +251,7 @@ extern FILE *debugf;
 // mixer.cpp
 mixer_t *getmixerbyname(const char *name);
 int mixer_connect_input(mixer_t *mixer, float ampfactor);
+void mixer_disable_input(mixer_t *mixer, int input_idx);
 void mixer_put_samples(mixer_t *mixer, int input_idx, float *samples, unsigned int len);
 void *mixer_thread(void *params);
 const char *mixer_get_error();

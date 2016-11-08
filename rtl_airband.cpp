@@ -145,6 +145,7 @@ void* rtlsdr_exec(void* params) {
 	if(rtlsdr_read_async(dev->rtlsdr, rtlsdr_callback, params, rtlsdr_buffers, 320000) < 0) {
 		log(LOG_WARNING, "Device #%d: async read failed, disabling\n", dev->device);
 		dev->failed = 1;
+		disable_outputs(dev);
 		atomic_dec(&device_opened);
 	}
 	return 0;

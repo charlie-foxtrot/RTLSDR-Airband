@@ -1,5 +1,5 @@
 /*
- * RTLSDR AM demodulator and streaming
+ * RTLSDR AM/NFM demodulator, mixer, streamer and recorder
  *
  * Copyright (c) 2014 Wong Man Hang <microtony@gmail.com>
  * Copyright (c) 2015-2016 Tomasz Lemiech <szpajder@gmail.com>
@@ -18,7 +18,6 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define RTL_AIRBAND_VERSION "2.2.0"
 #if defined USE_BCM_VC && !defined __arm__
 #error Broadcom VideoCore support can only be enabled on ARM builds
 #endif

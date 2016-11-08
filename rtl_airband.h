@@ -29,6 +29,7 @@
 #include "hello_fft/gpu_fft.h"
 #endif
 
+#define RTL_AIRBAND_VERSION "2.2.0rc1"
 #define ALIGN
 #define ALIGN2 __attribute__((aligned(32)))
 #define SLEEP(x) usleep(x * 1000)

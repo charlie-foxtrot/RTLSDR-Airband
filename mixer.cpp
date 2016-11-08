@@ -77,6 +77,10 @@ void mixer_disable_input(mixer_t *mixer, int input_idx) {
 	assert(mixer);
 	assert(input_idx < mixer->input_count);
 	RESET_BIT(mixer->input_mask, input_idx);
+	if(mixer->input_mask == 0) {
+		log(LOG_NOTICE, "Disabling mixer '%s' - all inputs died\n", mixer->name);
+		mixer->enabled = false;
+	}
 }
 
 void mixer_put_samples(mixer_t *mixer, int input_idx, float *samples, unsigned int len) {

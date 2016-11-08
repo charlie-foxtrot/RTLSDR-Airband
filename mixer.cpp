@@ -47,6 +47,11 @@ mixer_t *getmixerbyname(const char *name) {
 	return NULL;
 }
 
+void mixer_disable(mixer_t *mixer) {
+	mixer->enabled = false;
+	disable_channel_outputs(&mixer->channel);
+}
+
 int mixer_connect_input(mixer_t *mixer, float ampfactor) {
 	if(!mixer) {
 		mixer_set_error("mixer is undefined");
@@ -79,7 +84,7 @@ void mixer_disable_input(mixer_t *mixer, int input_idx) {
 	RESET_BIT(mixer->input_mask, input_idx);
 	if(mixer->input_mask == 0) {
 		log(LOG_NOTICE, "Disabling mixer '%s' - all inputs died\n", mixer->name);
-		mixer->enabled = false;
+		mixer_disable(mixer);
 	}
 }
 

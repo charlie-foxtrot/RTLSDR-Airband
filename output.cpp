@@ -333,16 +333,28 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 	}
 }
 
-void disable_outputs(device_t *dev) {
-	for(int j = 0; j < dev->channel_count; j++) {
-		for (int k = 0; k < dev->channels[j].output_count; k++) {
-			output_t *output = dev->channels[j].outputs + k;
-			output->enabled = false;
-			if(output->type == O_MIXER) {
-				mixer_data *mdata = (mixer_data *)(output->data);
-				mixer_disable_input(mdata->mixer, mdata->input);
-			}
+void disable_channel_outputs(channel_t *channel) {
+	for (int k = 0; k < channel->output_count; k++) {
+		output_t *output = channel->outputs + k;
+		output->enabled = false;
+		if(output->type == O_ICECAST) {
+			icecast_data *icecast = (icecast_data *)(channel->outputs[k].data);
+			if(icecast->shout == NULL) continue;
+			log(LOG_WARNING, "Closing connection to %s:%d/%s\n",
+				icecast->hostname, icecast->port, icecast->mountpoint);
+			shout_close(icecast->shout);
+			shout_free(icecast->shout);
+			icecast->shout = NULL;
+		} else if(output->type == O_MIXER) {
+			mixer_data *mdata = (mixer_data *)(output->data);
+			mixer_disable_input(mdata->mixer, mdata->input);
 		}
+	}
+}
+
+void disable_device_outputs(device_t *dev) {
+	for(int j = 0; j < dev->channel_count; j++) {
+		disable_channel_outputs(dev->channels + j);
 	}
 }
 

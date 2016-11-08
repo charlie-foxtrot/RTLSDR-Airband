@@ -216,7 +216,8 @@ struct mixer_t {
 // output.cpp
 lame_t airlame_init();
 void shout_setup(icecast_data *icecast);
-void disable_outputs(device_t *dev);
+void disable_device_outputs(device_t *dev);
+void disable_channel_outputs(channel_t *channel);
 void *icecast_check(void* params);
 void *output_thread(void* params);
 

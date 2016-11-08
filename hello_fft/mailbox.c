@@ -60,7 +60,7 @@ void *mapmem(unsigned base, unsigned size)
       MAP_SHARED/*|MAP_FIXED*/,
       mem_fd,
       base);
-#ifdef DEBUG
+#ifdef GPU_FFT_DEBUG
    printf("base=0x%x, mem=%p\n", base, mem);
 #endif
    if (mem == MAP_FAILED) {
@@ -92,7 +92,7 @@ static int mbox_property(int file_desc, void *buf)
       log(LOG_ERR, "mbox_property(): ioctl_set_msg failed: %s\n", strerror(errno));
    }
 
-#ifdef DEBUG
+#ifdef GPU_FFT_DEBUG
    unsigned *p = buf; int i; unsigned size = *(unsigned *)buf;
    for (i=0; i<size/4; i++)
       printf("%04x: 0x%08x\n", i*sizeof *p, p[i]);

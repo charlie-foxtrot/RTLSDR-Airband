@@ -4,8 +4,9 @@ PREFIX = /usr/local
 SYSCONFDIR = $(PREFIX)/etc
 CFG = rtl_airband.conf
 BINDIR = $(PREFIX)/bin
+export DEBUG ?= 0
 export CC = g++
-export CFLAGS = -O3 -g -Wall -DSYSCONFDIR=\"$(SYSCONFDIR)\"
+export CFLAGS = -O3 -g -Wall -DSYSCONFDIR=\"$(SYSCONFDIR)\" -DDEBUG=$(DEBUG)
 export CXXFLAGS = $(CFLAGS)
 LDLIBS = -lrt -lm -lvorbisenc -lmp3lame -lshout -lpthread -lrtlsdr -lconfig++
 
@@ -13,7 +14,7 @@ SUBDIRS = hello_fft
 CLEANDIRS = $(SUBDIRS:%=clean-%)
 
 BIN = rtl_airband
-OBJ = rtl_airband.o output.o util.o
+OBJ = rtl_airband.o output.o config.o util.o mixer.o
 FFT = hello_fft/hello_fft.a
 
 .PHONY: all clean install $(SUBDIRS) $(CLEANDIRS)
@@ -62,6 +63,10 @@ ifndef DEPS
 endif
 
 $(FFT):	hello_fft ;
+
+config.o: rtl_airband.h
+
+mixer.o: rtl_airband.h
 
 rtl_airband.o: rtl_airband.h
 

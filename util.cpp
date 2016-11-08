@@ -20,13 +20,19 @@
 
 #include <unistd.h>
 #include <syslog.h>
+#include <iostream>
 #include <cstdarg>
 #include <cstring>
+#include <cerrno>
 #include <shout/shout.h>
 #include <lame/lame.h>
 #include "rtl_airband.h"
 
+
+FILE *debugf;
+
 void error() {
+	close_debug();
 	_exit(1);
 }
 
@@ -53,6 +59,23 @@ void log(int priority, const char *format, ...) {
 	else if(foreground)
 		vprintf(format, args);
 	va_end(args);
+}
+
+void init_debug (char *file) {
+	if(DEBUG) {
+		if(!file) return;
+		if((debugf = fopen(file, "a")) == NULL) {
+			std::cerr<<"Could not open debug file "<<file<<": "<<strerror(errno)<<"\n";
+			error();
+		}
+	}
+}
+
+void close_debug() {
+	if(DEBUG) {
+		if(!debugf) return;
+		fclose(debugf);
+	}
 }
 
 void tag_queue_put(device_t *dev, int freq, struct timeval tv) {
@@ -88,3 +111,5 @@ void tag_queue_advance(device_t *dev) {
 	dev->tq_tail++; dev->tq_tail %= TAG_QUEUE_LEN;
 	pthread_mutex_unlock(&dev->tag_queue_lock);
 }
+
+// vim: ts=4

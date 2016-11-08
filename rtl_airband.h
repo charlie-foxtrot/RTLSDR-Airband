@@ -23,11 +23,13 @@
 #include <sys/time.h>
 #include <shout/shout.h>
 #include <lame/lame.h>
+#include <libconfig.h++>
 #include <rtl-sdr.h>
 #ifdef USE_BCM_VC
 #include "hello_fft/gpu_fft.h"
 #endif
 
+#define RTL_AIRBAND_VERSION "2.2.0rc1"
 #define ALIGN
 #define ALIGN2 __attribute__((aligned(32)))
 #define SLEEP(x) usleep(x * 1000)
@@ -38,6 +40,9 @@
 #endif
 #define CFGFILE SYSCONFDIR "/rtl_airband.conf"
 #define PIDFILE "/run/rtl_airband.pid"
+#if DEBUG
+#define DEBUG_PATH "rtl_airband_debug.log"
+#endif
 
 #define BUF_SIZE 2560000
 #define SOURCE_RATE 2560000
@@ -53,8 +58,15 @@
 #define MAX_SHOUT_QUEUELEN 32768
 #define TAG_QUEUE_LEN 16
 #define CHANNELS 8
+#define MAX_MIXINPUTS 32
 #define FFT_SIZE_LOG 9
 #define LAMEBUF_SIZE 22000 //todo: calculate
+#define MIX_DIVISOR 2
+
+#define ONES(x) ~(~0 << (x))
+#define SET_BIT(a, x) (a) |= (1 << (x))
+#define RESET_BIT(a, x) (a) &= ~(1 << (x))
+#define IS_SET(a, x) (a) & (1 << (x))
 
 #if defined USE_BCM_VC
 struct sample_fft_arg
@@ -93,7 +105,12 @@ struct file_data {
 	FILE *f;
 };
 
-enum output_type { O_ICECAST, O_FILE };
+struct mixer_data {
+	struct mixer_t *mixer;
+	int input;
+};
+
+enum output_type { O_ICECAST, O_FILE, O_MIXER };
 struct output_t {
 	enum output_type type;
 	bool enabled;
@@ -113,6 +130,7 @@ enum modulations {
 #endif
 };
 
+enum ch_states { CH_DIRTY, CH_WORKING, CH_READY };
 struct channel_t {
 	float wavein[WAVE_LEN];		// FFT output waveform
 	float waveref[WAVE_LEN];	// for power level calculation
@@ -141,6 +159,8 @@ struct channel_t {
 	int *freqlist;
 	char **labels;
 	int output_count;
+	int need_mp3;
+	enum ch_states state;		// mixer channel state flag
 	output_t *outputs;
 	lame_t lame;
 };
@@ -170,27 +190,48 @@ struct device_t {
 	int tq_head, tq_tail;
 	int last_frequency;
 	pthread_mutex_t tag_queue_lock;
+	pthread_mutex_t buffer_lock;
 	int row;
 	int failed;
 	enum rec_modes mode;
 };
 
+struct mixinput_t {
+	float *wavein;
+	float ampfactor;
+	bool ready;
+	pthread_mutex_t mutex;
+};
+
+struct mixer_t {
+	const char *name;
+	bool enabled;
+	int input_count;
+	int interval;
+	unsigned int inputs_todo;
+	unsigned int input_mask;
+	channel_t channel;
+	mixinput_t inputs[MAX_MIXINPUTS];
+};
+
 // output.cpp
 lame_t airlame_init();
 void shout_setup(icecast_data *icecast);
+void disable_device_outputs(device_t *dev);
+void disable_channel_outputs(channel_t *channel);
 void *icecast_check(void* params);
 void *output_thread(void* params);
 
 // rtl_airband.cpp
 extern bool use_localtime;
-extern int device_count;
+extern int device_count, mixer_count;
 extern int shout_metadata_delay, do_syslog, foreground;
-extern device_t *devices;
 extern volatile int do_exit;
+extern float alpha;
+extern device_t *devices;
+extern mixer_t *mixers;
 extern pthread_cond_t mp3_cond;
 extern pthread_mutex_t mp3_mutex;
-void tag_queue_get(device_t *dev, struct freq_tag *tag);
-void tag_queue_advance(device_t *dev);
 
 // util.cpp
 void error();
@@ -201,4 +242,24 @@ void log(int priority, const char *format, ...);
 void tag_queue_put(device_t *dev, int freq, struct timeval tv);
 void tag_queue_get(device_t *dev, struct freq_tag *tag);
 void tag_queue_advance(device_t *dev);
+void init_debug (char *file);
+void close_debug();
+extern FILE *debugf;
+#define debug_print(fmt, ...) \
+	do { if (DEBUG) fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); fflush(debugf); } while (0)
+#define debug_bulk_print(fmt, ...) \
+	do { if (DEBUG) fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); } while (0)
 
+// mixer.cpp
+mixer_t *getmixerbyname(const char *name);
+int mixer_connect_input(mixer_t *mixer, float ampfactor);
+void mixer_disable_input(mixer_t *mixer, int input_idx);
+void mixer_put_samples(mixer_t *mixer, int input_idx, float *samples, unsigned int len);
+void *mixer_thread(void *params);
+const char *mixer_get_error();
+
+// config.cpp
+int parse_devices(libconfig::Setting &devs);
+int parse_mixers(libconfig::Setting &mx);
+
+// vim: ts=4

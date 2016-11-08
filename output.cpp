@@ -236,18 +236,21 @@ static int fdata_open(file_data *fdata, const char *filename) {
 
 unsigned char lamebuf[LAMEBUF_SIZE];
 void process_outputs(channel_t *channel, int cur_scan_freq) {
-	int bytes = lame_encode_buffer_ieee_float(channel->lame, channel->waveout, NULL, WAVE_BATCH, lamebuf, LAMEBUF_SIZE);
-	if (bytes < 0) {
-		log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n", bytes);
-		return;
-	} else if (bytes == 0)
-		return;
+	int mp3_bytes;
+	if(channel->need_mp3) {
+		mp3_bytes = lame_encode_buffer_ieee_float(channel->lame, channel->waveout, NULL, WAVE_BATCH, lamebuf, LAMEBUF_SIZE);
+		if (mp3_bytes < 0) {
+			log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n", mp3_bytes);
+			return;
+		} else if (mp3_bytes == 0)
+			return;
+	}
 	for (int k = 0; k < channel->output_count; k++) {
 		if(channel->outputs[k].enabled == false) continue;
 		if(channel->outputs[k].type == O_ICECAST) {
 			icecast_data *icecast = (icecast_data *)(channel->outputs[k].data);
 			if(icecast->shout == NULL) continue;
-			int ret = shout_send(icecast->shout, lamebuf, bytes);
+			int ret = shout_send(icecast->shout, lamebuf, mp3_bytes);
 			if (ret != SHOUTERR_SUCCESS || shout_queuelen(icecast->shout) > MAX_SHOUT_QUEUELEN) {
 				if (shout_queuelen(icecast->shout) > MAX_SHOUT_QUEUELEN)
 					log(LOG_WARNING, "Exceeded max backlog for %s:%d/%s, disconnecting\n",
@@ -307,10 +310,10 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 					continue;
 				}
 			}
-// bytes is signed, but we've checked for negative values earlier
+// mp3_bytes is signed, but we've checked for negative values earlier
 // so it's save to ignore the warning here
 #pragma GCC diagnostic ignored "-Wsign-compare"
-			if(fwrite(lamebuf, 1, bytes, fdata->f) < bytes) {
+			if(fwrite(lamebuf, 1, mp3_bytes, fdata->f) < mp3_bytes) {
 #pragma GCC diagnostic warning "-Wsign-compare"
 				if(ferror(fdata->f))
 					log(LOG_WARNING, "Cannot write to %s/%s%s (%s), output disabled\n",
@@ -323,7 +326,35 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 				channel->outputs[k].enabled = false;
 			}
 			channel->outputs[k].active = (channel->axcindicate != ' ');
+		} else if(channel->outputs[k].type == O_MIXER) {
+			mixer_data *mdata = (mixer_data *)(channel->outputs[k].data);
+			mixer_put_samples(mdata->mixer, mdata->input, channel->waveout, WAVE_BATCH);
 		}
+	}
+}
+
+void disable_channel_outputs(channel_t *channel) {
+	for (int k = 0; k < channel->output_count; k++) {
+		output_t *output = channel->outputs + k;
+		output->enabled = false;
+		if(output->type == O_ICECAST) {
+			icecast_data *icecast = (icecast_data *)(channel->outputs[k].data);
+			if(icecast->shout == NULL) continue;
+			log(LOG_WARNING, "Closing connection to %s:%d/%s\n",
+				icecast->hostname, icecast->port, icecast->mountpoint);
+			shout_close(icecast->shout);
+			shout_free(icecast->shout);
+			icecast->shout = NULL;
+		} else if(output->type == O_MIXER) {
+			mixer_data *mdata = (mixer_data *)(output->data);
+			mixer_disable_input(mdata->mixer, mdata->input);
+		}
+	}
+}
+
+void disable_device_outputs(device_t *dev) {
+	for(int j = 0; j < dev->channel_count; j++) {
+		disable_channel_outputs(dev->channels + j);
 	}
 }
 
@@ -331,9 +362,25 @@ void* output_thread(void* params) {
 	struct freq_tag tag;
 	struct timeval tv;
 	int new_freq = -1;
+	struct timeval ts, te;
 
+	if(DEBUG) gettimeofday(&ts, NULL);
 	while (!do_exit) {
 		pthread_cond_wait(&mp3_cond, &mp3_mutex);
+		for (int i = 0; i < mixer_count; i++) {
+			if(mixers[i].enabled == false) continue;
+			channel_t *channel = &mixers[i].channel;
+			if(channel->state == CH_READY) {
+				process_outputs(channel, -1);
+				channel->state = CH_DIRTY;
+			}
+		}
+		if(DEBUG) {
+			gettimeofday(&te, NULL);
+			debug_bulk_print("mixeroutput: %lu.%lu %lu\n", te.tv_sec, te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec);
+			ts.tv_sec = te.tv_sec;
+			ts.tv_usec = te.tv_usec;
+		}
 		for (int i = 0; i < device_count; i++) {
 			device_t* dev = devices + i;
 			if (!dev->failed && dev->waveavail) {
@@ -389,6 +436,21 @@ void* icecast_check(void* params) {
 							shout_setup(icecast);
 						}
 					}
+				}
+			}
+		}
+		for (int i = 0; i < mixer_count; i++) {
+			if(mixers[i].enabled == false) continue;
+			for (int k = 0; k < mixers[i].channel.output_count; k++) {
+				if(mixers[i].channel.outputs[k].enabled == false)
+					continue;
+				if(mixers[i].channel.outputs[k].type != O_ICECAST)
+					continue;
+				icecast_data *icecast = (icecast_data *)(mixers[i].channel.outputs[k].data);
+				if(icecast->shout == NULL) {
+					log(LOG_NOTICE, "Trying to reconnect to %s:%d/%s...\n",
+						icecast->hostname, icecast->port, icecast->mountpoint);
+					shout_setup(icecast);
 				}
 			}
 		}

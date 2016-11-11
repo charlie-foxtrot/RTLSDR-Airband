@@ -107,6 +107,16 @@ void mixer_put_samples(mixer_t *mixer, int input_idx, float *samples, unsigned i
 	pthread_mutex_unlock(&input->mutex);
 }
 
+static bool mix_waveforms(float *sum, float *in, float mult, int size) {
+	if(mult == 0.0f) return false;
+	bool squelch_open = false;
+	for(int s = 0; s < size; s++) {
+		sum[s] += in[s] * mult;
+		if(in[s] != 0.0f) squelch_open = true;
+	}
+	return squelch_open;
+}
+
 /* Samples are delivered to mixer inputs in batches of WAVE_BATCH size (default 1000, ie. 1/8 secs
  * of audio). mixer_thread emits mixed audio in batches of the same size, but the loop runs
  * twice more often (MIX_DIVISOR = 2) in order to accomodate for any possible input jitter
@@ -155,11 +165,13 @@ void *mixer_thread(void *params) {
 						channel->state = CH_WORKING;
 					}
 					debug_bulk_print("mixer[%d]: ampleft=%.1f ampright=%.1f\n", i, input->ampfactor * input->ampl, input->ampfactor * input->ampr);
-					for(int s = 0; s < WAVE_BATCH; s++) {
-						channel->waveout[s] += input->wavein[s] * input->ampfactor * input->ampl;
-						if(channel->mode == MM_STEREO)
-							channel->waveout_r[s] += input->wavein[s] * input->ampfactor * input->ampr;
-						if(input->wavein[s] != 0) channel->axcindicate = '*';
+					/* left channel */
+					if(mix_waveforms(channel->waveout, input->wavein, input->ampfactor * input->ampl, WAVE_BATCH))
+						channel->axcindicate = '*';
+					/* right channel */
+					if(channel->mode == MM_STEREO) {
+						if(mix_waveforms(channel->waveout_r, input->wavein, input->ampfactor * input->ampr, WAVE_BATCH))
+							channel->axcindicate = '*';
 					}
 					input->ready = false;
 					RESET_BIT(mixer->inputs_todo, j);

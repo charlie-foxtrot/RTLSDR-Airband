@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <cassert>
 #include <unistd.h>
+#include <math.h>
 #include <sys/time.h>
 #include <syslog.h>
 #include "rtl_airband.h"
@@ -52,7 +53,7 @@ void mixer_disable(mixer_t *mixer) {
 	disable_channel_outputs(&mixer->channel);
 }
 
-int mixer_connect_input(mixer_t *mixer, float ampfactor) {
+int mixer_connect_input(mixer_t *mixer, float ampfactor, float balance) {
 	if(!mixer) {
 		mixer_set_error("mixer is undefined");
 		return(-1);
@@ -71,10 +72,15 @@ int mixer_connect_input(mixer_t *mixer, float ampfactor) {
 		return(-1);
 	}
 	mixer->inputs[i].ampfactor = ampfactor;
+	mixer->inputs[i].ampl = fminf(1.0f, 1.0f - balance);
+	mixer->inputs[i].ampr = fminf(1.0f, 1.0f + balance);
+	if(balance != 0.0f)
+		mixer->channel.mode = MM_STEREO;
 	mixer->inputs[i].ready = false;
 	SET_BIT(mixer->input_mask, i);
 	SET_BIT(mixer->inputs_todo, i);
 	mixer->enabled = true;
+	debug_print("ampfactor=%.1f ampl=%.1f ampr=%.1f\n", mixer->inputs[i].ampfactor, mixer->inputs[i].ampl, mixer->inputs[i].ampr);
 	return(mixer->input_count++);
 }
 
@@ -99,6 +105,16 @@ void mixer_put_samples(mixer_t *mixer, int input_idx, float *samples, unsigned i
 		debug_print("input %d overrun\n", input_idx);
 	input->ready = true;
 	pthread_mutex_unlock(&input->mutex);
+}
+
+static bool mix_waveforms(float *sum, float *in, float mult, int size) {
+	if(mult == 0.0f) return false;
+	bool squelch_open = false;
+	for(int s = 0; s < size; s++) {
+		sum[s] += in[s] * mult;
+		if(in[s] != 0.0f) squelch_open = true;
+	}
+	return squelch_open;
 }
 
 /* Samples are delivered to mixer inputs in batches of WAVE_BATCH size (default 1000, ie. 1/8 secs
@@ -143,12 +159,19 @@ void *mixer_thread(void *params) {
 				if(IS_SET(mixer->inputs_todo & mixer->input_mask, j) && input->ready) {
 					if(channel->state == CH_DIRTY) {
 						memset(channel->waveout, 0, WAVE_BATCH * sizeof(float));
+						if(channel->mode == MM_STEREO)
+							memset(channel->waveout_r, 0, WAVE_BATCH * sizeof(float));
 						channel->axcindicate = ' ';
 						channel->state = CH_WORKING;
 					}
-					for(int s = 0; s < WAVE_BATCH; s++) {
-						channel->waveout[s] += input->wavein[s] * input->ampfactor;
-						if(input->wavein[s] != 0) channel->axcindicate = '*';
+					debug_bulk_print("mixer[%d]: ampleft=%.1f ampright=%.1f\n", i, input->ampfactor * input->ampl, input->ampfactor * input->ampr);
+					/* left channel */
+					if(mix_waveforms(channel->waveout, input->wavein, input->ampfactor * input->ampl, WAVE_BATCH))
+						channel->axcindicate = '*';
+					/* right channel */
+					if(channel->mode == MM_STEREO) {
+						if(mix_waveforms(channel->waveout_r, input->wavein, input->ampfactor * input->ampr, WAVE_BATCH))
+							channel->axcindicate = '*';
 					}
 					input->ready = false;
 					RESET_BIT(mixer->inputs_todo, j);

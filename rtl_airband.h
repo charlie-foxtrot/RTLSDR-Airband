@@ -29,7 +29,7 @@
 #include "hello_fft/gpu_fft.h"
 #endif
 
-#define RTL_AIRBAND_VERSION "2.2.0rc1"
+#define RTL_AIRBAND_VERSION "2.3.0rc2"
 #define ALIGN
 #define ALIGN2 __attribute__((aligned(32)))
 #define SLEEP(x) usleep(x * 1000)
@@ -131,10 +131,12 @@ enum modulations {
 };
 
 enum ch_states { CH_DIRTY, CH_WORKING, CH_READY };
+enum mix_modes { MM_MONO, MM_STEREO };
 struct channel_t {
 	float wavein[WAVE_LEN];		// FFT output waveform
 	float waveref[WAVE_LEN];	// for power level calculation
-	float waveout[WAVE_LEN];	// waveform after squelch + AGC
+	float waveout[WAVE_LEN];	// waveform after squelch + AGC (left/center channel mixer output)
+	float waveout_r[WAVE_LEN];	// right channel mixer output
 #ifdef NFM
 	float complex_samples[2*WAVE_LEN];	// raw samples for NFM demod
 	float timeref_nsin[WAVE_RATE];
@@ -146,6 +148,7 @@ struct channel_t {
 	float alpha;
 #endif
 	enum modulations modulation;
+	enum mix_modes mode;		// mono or stereo
 	int agcsq;					// squelch status, 0 = signal, 1 = suppressed
 	float agcavgfast;			// average power, for AGC
 	float agcavgslow;			// average power, for squelch level detection
@@ -199,6 +202,7 @@ struct device_t {
 struct mixinput_t {
 	float *wavein;
 	float ampfactor;
+	float ampl, ampr;
 	bool ready;
 	pthread_mutex_t mutex;
 };
@@ -215,8 +219,8 @@ struct mixer_t {
 };
 
 // output.cpp
-lame_t airlame_init();
-void shout_setup(icecast_data *icecast);
+lame_t airlame_init(mix_modes mixmode);
+void shout_setup(icecast_data *icecast, mix_modes mixmode);
 void disable_device_outputs(device_t *dev);
 void disable_channel_outputs(channel_t *channel);
 void *icecast_check(void* params);
@@ -252,7 +256,7 @@ extern FILE *debugf;
 
 // mixer.cpp
 mixer_t *getmixerbyname(const char *name);
-int mixer_connect_input(mixer_t *mixer, float ampfactor);
+int mixer_connect_input(mixer_t *mixer, float ampfactor, float balance);
 void mixer_disable_input(mixer_t *mixer, int input_idx);
 void mixer_put_samples(mixer_t *mixer, int input_idx, float *samples, unsigned int len);
 void *mixer_thread(void *params);

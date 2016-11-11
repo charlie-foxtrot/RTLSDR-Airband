@@ -35,7 +35,7 @@
 #include <cerrno>
 #include "rtl_airband.h"
 
-void shout_setup(icecast_data *icecast) {
+void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 	int ret;
 	shout_t * shouttemp = shout_new();
 	if (shouttemp == NULL) {
@@ -73,7 +73,7 @@ void shout_setup(icecast_data *icecast) {
 	char samplerates[20];
 	sprintf(samplerates, "%d", MP3_RATE);
 	shout_set_audio_info(shouttemp, SHOUT_AI_SAMPLERATE, samplerates);
-	shout_set_audio_info(shouttemp, SHOUT_AI_CHANNELS, "1");
+	shout_set_audio_info(shouttemp, SHOUT_AI_CHANNELS, (mixmode == MM_STEREO ? "2" : "1"));
 
 	if (shout_set_nonblocking(shouttemp, 1) != SHOUTERR_SUCCESS) {
 		log(LOG_ERR, "Error setting non-blocking mode: %s\n", shout_get_error(shouttemp));
@@ -105,7 +105,7 @@ void shout_setup(icecast_data *icecast) {
 	}
 }
 
-lame_t airlame_init() {
+lame_t airlame_init(mix_modes mixmode) {
 	lame_t lame = lame_init();
 	if (!lame) {
 		log(LOG_WARNING, "lame_init failed\n");
@@ -117,8 +117,14 @@ lame_t airlame_init() {
 	lame_set_brate(lame, 16);
 	lame_set_quality(lame, 7);
 	lame_set_out_samplerate(lame, MP3_RATE);
-	lame_set_num_channels(lame, 1);
-	lame_set_mode(lame, MONO);
+	if(mixmode == MM_STEREO) {
+		lame_set_num_channels(lame, 2);
+		lame_set_mode(lame, JOINT_STEREO);
+	} else {
+		lame_set_num_channels(lame, 1);
+		lame_set_mode(lame, MONO);
+	}
+	debug_print("mixmode=%s\n", mixmode == MM_STEREO ? "MM_STEREO" : "MM_MONO");
 	lame_init_params(lame);
 	return lame;
 }
@@ -129,7 +135,7 @@ class LameTone
 	int _bytes;
 
 public:
-	LameTone(int msec, unsigned int hz = 0) : _data(NULL), _bytes(0) {
+	LameTone(mix_modes mixmode, int msec, unsigned int hz = 0) : _data(NULL), _bytes(0) {
 		_data = (unsigned char *)malloc(LAMEBUF_SIZE);
 		if (!_data) {
 			log(LOG_WARNING, "LameTone: can't alloc %u bytes\n", LAMEBUF_SIZE);
@@ -152,10 +158,9 @@ public:
 			}
 		} else
 			memset(buf, 0, samples * sizeof(float));
-
-		lame_t lame = airlame_init();
+		lame_t lame = airlame_init(mixmode);
 		if (lame) {
-			_bytes = lame_encode_buffer_ieee_float(lame, buf, NULL, samples, _data, LAMEBUF_SIZE);
+			_bytes = lame_encode_buffer_ieee_float(lame, buf, (mixmode == MM_STEREO ? buf : NULL), samples, _data, LAMEBUF_SIZE);
 			if (_bytes > 0) {
 				int flush_ofs = _bytes;
 				if (flush_ofs&0x1f)
@@ -193,7 +198,7 @@ public:
 	}
 };
 
-static int fdata_open(file_data *fdata, const char *filename) {
+static int fdata_open(file_data *fdata, const char *filename, mix_modes mixmode) {
 	fdata->f = fopen(filename, fdata->append ? "a+" : "w");
 	if(fdata->f == NULL)
 		return -1;
@@ -206,9 +211,9 @@ static int fdata_open(file_data *fdata, const char *filename) {
 	log(LOG_INFO, "Appending from pos %llu to %s\n", (unsigned long long)st.st_size, filename);
 
 	//fill missing space with marker tones
-	LameTone lt_a(120, 2222);
-	LameTone lt_b(120, 1111);
-	LameTone lt_c(120, 555);
+	LameTone lt_a(mixmode, 120, 2222);
+	LameTone lt_b(mixmode, 120, 1111);
+	LameTone lt_c(mixmode, 120, 555);
 
 	int r = lt_a.write(fdata->f);
 	if (r==0) r = lt_b.write(fdata->f);
@@ -221,7 +226,7 @@ static int fdata_open(file_data *fdata, const char *filename) {
 				log(LOG_WARNING, "Too big time difference: %llu sec, limiting to one hour\n", (unsigned long long)delta);
 				delta = 3600;
 			}
-			LameTone lt_silence(1000);
+			LameTone lt_silence(mixmode, 1000);
 			for (; (r==0 && delta > 1); --delta)
 				r = lt_silence.write(fdata->f);
 		}
@@ -238,7 +243,15 @@ unsigned char lamebuf[LAMEBUF_SIZE];
 void process_outputs(channel_t *channel, int cur_scan_freq) {
 	int mp3_bytes;
 	if(channel->need_mp3) {
-		mp3_bytes = lame_encode_buffer_ieee_float(channel->lame, channel->waveout, NULL, WAVE_BATCH, lamebuf, LAMEBUF_SIZE);
+		debug_bulk_print("channel->mode=%s\n", channel->mode == MM_STEREO ? "MM_STEREO" : "MM_MONO");
+		mp3_bytes = lame_encode_buffer_ieee_float(
+			channel->lame,
+			channel->waveout,
+			(channel->mode == MM_STEREO ? channel->waveout_r : NULL),
+			WAVE_BATCH,
+			lamebuf,
+			LAMEBUF_SIZE
+		);
 		if (mp3_bytes < 0) {
 			log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n", mp3_bytes);
 			return;
@@ -302,7 +315,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 					fclose(fdata->f);
 					fdata->f = NULL;
 				}
-				int r = fdata_open(fdata, filename);
+				int r = fdata_open(fdata, filename, channel->mode);
 				free(filename);
 				if (r<0) {
 					log(LOG_WARNING, "Cannot open output file %s (%s), output disabled\n", filename, strerror(errno));
@@ -433,7 +446,7 @@ void* icecast_check(void* params) {
 						if (icecast->shout == NULL){
 							log(LOG_NOTICE, "Trying to reconnect to %s:%d/%s...\n",
 								icecast->hostname, icecast->port, icecast->mountpoint);
-							shout_setup(icecast);
+							shout_setup(icecast, dev->channels[j].mode);
 						}
 					}
 				}
@@ -450,7 +463,7 @@ void* icecast_check(void* params) {
 				if(icecast->shout == NULL) {
 					log(LOG_NOTICE, "Trying to reconnect to %s:%d/%s...\n",
 						icecast->hostname, icecast->port, icecast->mountpoint);
-					shout_setup(icecast);
+					shout_setup(icecast, mixers[i].channel.mode);
 				}
 			}
 		}

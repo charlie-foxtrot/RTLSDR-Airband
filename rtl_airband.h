@@ -219,8 +219,8 @@ struct mixer_t {
 };
 
 // output.cpp
-lame_t airlame_init();
-void shout_setup(icecast_data *icecast);
+lame_t airlame_init(mix_modes mixmode);
+void shout_setup(icecast_data *icecast, mix_modes mixmode);
 void disable_device_outputs(device_t *dev);
 void disable_channel_outputs(channel_t *channel);
 void *icecast_check(void* params);

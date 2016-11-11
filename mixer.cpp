@@ -72,14 +72,15 @@ int mixer_connect_input(mixer_t *mixer, float ampfactor, float balance) {
 		return(-1);
 	}
 	mixer->inputs[i].ampfactor = ampfactor;
-	mixer->inputs[i].ampl = fmaxf(1.0f, 1.0f - balance);
-	mixer->inputs[i].ampr = fmaxf(1.0f, 1.0f + balance);
+	mixer->inputs[i].ampl = fminf(1.0f, 1.0f - balance);
+	mixer->inputs[i].ampr = fminf(1.0f, 1.0f + balance);
 	if(balance != 0.0f)
 		mixer->channel.mode = MM_STEREO;
 	mixer->inputs[i].ready = false;
 	SET_BIT(mixer->input_mask, i);
 	SET_BIT(mixer->inputs_todo, i);
 	mixer->enabled = true;
+	debug_print("ampfactor=%.1f ampl=%.1f ampr=%.1f\n", mixer->inputs[i].ampfactor, mixer->inputs[i].ampl, mixer->inputs[i].ampr);
 	return(mixer->input_count++);
 }
 
@@ -148,9 +149,12 @@ void *mixer_thread(void *params) {
 				if(IS_SET(mixer->inputs_todo & mixer->input_mask, j) && input->ready) {
 					if(channel->state == CH_DIRTY) {
 						memset(channel->waveout, 0, WAVE_BATCH * sizeof(float));
+						if(channel->mode == MM_STEREO)
+							memset(channel->waveout_r, 0, WAVE_BATCH * sizeof(float));
 						channel->axcindicate = ' ';
 						channel->state = CH_WORKING;
 					}
+					debug_bulk_print("mixer[%d]: ampleft=%.1f ampright=%.1f\n", i, input->ampfactor * input->ampl, input->ampfactor * input->ampr);
 					for(int s = 0; s < WAVE_BATCH; s++) {
 						channel->waveout[s] += input->wavein[s] * input->ampfactor * input->ampl;
 						if(channel->mode == MM_STEREO)

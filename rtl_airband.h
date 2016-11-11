@@ -131,6 +131,7 @@ enum modulations {
 };
 
 enum ch_states { CH_DIRTY, CH_WORKING, CH_READY };
+enum mix_modes { MM_MONO, MM_STEREO };
 struct channel_t {
 	float wavein[WAVE_LEN];		// FFT output waveform
 	float waveref[WAVE_LEN];	// for power level calculation
@@ -147,6 +148,7 @@ struct channel_t {
 	float alpha;
 #endif
 	enum modulations modulation;
+	enum mix_modes mode;		// mono or stereo
 	int agcsq;					// squelch status, 0 = signal, 1 = suppressed
 	float agcavgfast;			// average power, for AGC
 	float agcavgslow;			// average power, for squelch level detection
@@ -205,11 +207,9 @@ struct mixinput_t {
 	pthread_mutex_t mutex;
 };
 
-enum mix_modes { MM_MONO, MM_STEREO };
 struct mixer_t {
 	const char *name;
 	bool enabled;
-	enum mix_modes mode;
 	int input_count;
 	int interval;
 	unsigned int inputs_todo;

@@ -135,6 +135,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		channel->agclow = 0;
 		channel->sqlevel = -1.0f;
 		channel->modulation = MOD_AM;
+		channel->mode = MM_MONO;
 		channel->need_mp3 = 0;
 		if(chans[j].exists("modulation")) {
 #ifdef NFM
@@ -307,6 +308,7 @@ int parse_mixers(libconfig::Setting &mx) {
 		mixer->name = strdup(name);
 		mixer->interval = MIX_DIVISOR;
 		channel_t *channel = &mixer->channel;
+		channel->mode = MM_MONO;
 		libconfig::Setting &outputs = mx[i]["outputs"];
 		channel->output_count = outputs.getLength();
 		if(channel->output_count < 1) {

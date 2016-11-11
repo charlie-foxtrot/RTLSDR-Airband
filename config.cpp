@@ -91,13 +91,20 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				error();
 			}
 			float ampfactor = outs[o].exists("ampfactor") ?
-				(float)outs[o]["ampfactor"] : 1.0;
-			if((mdata->input = mixer_connect_input(mdata->mixer, ampfactor)) < 0) {
+				(float)outs[o]["ampfactor"] : 1.0f;
+			float balance = outs[o].exists("balance") ?
+				(float)outs[o]["balance"] : 0.0f;
+			if(balance < -1.0f || balance > 1.0f) {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: balance out of allowed range <-1.0;1.0>\n";
+				error();
+			}
+			if((mdata->input = mixer_connect_input(mdata->mixer, ampfactor, balance)) < 0) {
 				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: "\
 					"could not connect to mixer "<<name<<": "<<mixer_get_error()<<"\n";
 					error();
 			}
-			debug_print("dev[%d].chan[%d].out[%d] connected to mixer %s as input %d\n", i, j, o, name, mdata->input);
+			debug_print("dev[%d].chan[%d].out[%d] connected to mixer %s as input %d (ampfactor=%.1f balance=%.1f)\n",
+				i, j, o, name, mdata->input, ampfactor, balance);
 		} else {
 			cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown output type\n";
 			error();

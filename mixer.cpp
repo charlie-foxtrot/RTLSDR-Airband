@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <cassert>
 #include <unistd.h>
+#include <math.h>
 #include <sys/time.h>
 #include <syslog.h>
 #include "rtl_airband.h"
@@ -52,7 +53,7 @@ void mixer_disable(mixer_t *mixer) {
 	disable_channel_outputs(&mixer->channel);
 }
 
-int mixer_connect_input(mixer_t *mixer, float ampfactor) {
+int mixer_connect_input(mixer_t *mixer, float ampfactor, float balance) {
 	if(!mixer) {
 		mixer_set_error("mixer is undefined");
 		return(-1);
@@ -71,6 +72,9 @@ int mixer_connect_input(mixer_t *mixer, float ampfactor) {
 		return(-1);
 	}
 	mixer->inputs[i].ampfactor = ampfactor;
+	mixer->inputs[i].ampl = fmaxf(1.0f, 1.0f - balance);
+	mixer->inputs[i].ampr = fmaxf(1.0f, 1.0f + balance);
+	mixer->mode = (balance == 0.0f ? MM_MONO : MM_STEREO);
 	mixer->inputs[i].ready = false;
 	SET_BIT(mixer->input_mask, i);
 	SET_BIT(mixer->inputs_todo, i);
@@ -147,7 +151,9 @@ void *mixer_thread(void *params) {
 						channel->state = CH_WORKING;
 					}
 					for(int s = 0; s < WAVE_BATCH; s++) {
-						channel->waveout[s] += input->wavein[s] * input->ampfactor;
+						channel->waveout[s] += input->wavein[s] * input->ampfactor * input->ampl;
+						if(mixer->mode == MM_STEREO)
+							channel->waveout_r[s] += input->wavein[s] * input->ampfactor * input->ampr;
 						if(input->wavein[s] != 0) channel->axcindicate = '*';
 					}
 					input->ready = false;

@@ -112,7 +112,12 @@ static bool mix_waveforms(float *sum, float *in, float mult, int size) {
 	bool squelch_open = false;
 	for(int s = 0; s < size; s++) {
 		sum[s] += in[s] * mult;
-		if(in[s] != 0.0f) squelch_open = true;
+	}
+	for(int s = 0; s < size; s++) {
+		if(in[s] != 0.0f) {
+			squelch_open = true;
+			break;
+		}
 	}
 	return squelch_open;
 }

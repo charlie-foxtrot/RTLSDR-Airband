@@ -358,6 +358,12 @@ void disable_channel_outputs(channel_t *channel) {
 			shout_close(icecast->shout);
 			shout_free(icecast->shout);
 			icecast->shout = NULL;
+		} else if(output->type == O_FILE) {
+			file_data *fdata = (file_data *)(channel->outputs[k].data);
+			if(fdata->f == NULL) continue;
+			//todo: finalize file stream with lame_encode_flush_nogap
+			fclose(fdata->f);
+			fdata->f = NULL;
 		} else if(output->type == O_MIXER) {
 			mixer_data *mdata = (mixer_data *)(output->data);
 			mixer_disable_input(mdata->mixer, mdata->input);

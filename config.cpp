@@ -122,6 +122,10 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		if(chans[j].exists("disable") && (bool)chans[j]["disable"] == true) {
 			continue;
 		}
+		if(jj == CHANNELS) {
+			cerr<<"Configuration error: devices.["<<i<<"]: too many channels (max "<<CHANNELS<<" allowed)\n";
+			error();
+		}
 		channel_t* channel = dev->channels + jj;
 		for (int k = 0; k < AGC_EXTRA; k++) {
 			channel->wavein[k] = 20;

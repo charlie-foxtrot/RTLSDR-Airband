@@ -182,9 +182,9 @@ struct device_t {
 	float alpha;
 #endif
 	int channel_count;
-	int base_bins[8];
-	int bins[8];
-	channel_t channels[8];
+	int base_bins[CHANNELS];
+	int bins[CHANNELS];
+	channel_t channels[CHANNELS];
 	int waveend;
 	int waveavail;
 	THREAD rtl_thread;

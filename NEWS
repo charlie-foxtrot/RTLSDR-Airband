@@ -1,5 +1,24 @@
 NEWS:
 
+Version 2.3.0:
+ * Added support for mixers. It is now possible to produce audio streams
+   combined from several input channels. Both mono and stereo mixing is
+   supported. Usage example is provided in config/mixers.conf. All
+   mixer-related parameters are documented in config/reference.conf.
+ * Added build options for 64-bit ARM architectures, like Odroid C2.
+   Please use PLATFORM=armv8-generic when compiling.
+ * Fixed a long-standing bug in RTL sample processing, which caused some
+   samples to be processed twice. If you were annoyed by these regular
+   clicks in NFM audio every 125 ms, they are now gone.
+ * Reduced CPU usage on x86
+ * Some code restructuring and cleanups
+ * Added several configuration file examples for typical real-life
+   scenarios. They are placed in config/ subdirectory. rtl_airband.conf.example
+   file has been moved to config/reference.conf. It is meant to be a reference
+   for all supported config knobs together with their description. This is
+   still an interim solution before some more readable and understandable
+   documentation gets written.
+
 Version 2.2.0:
  * Support for Icecast stream metadata updates in scanning mode. When enabled,
    every time the scanner stops on a channel, current frequency is written into

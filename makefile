@@ -2,6 +2,7 @@
 PREFIX = /usr/local
 
 SYSCONFDIR = $(PREFIX)/etc
+DEFCONFIG = config/basic_multichannel.conf
 CFG = rtl_airband.conf
 BINDIR = $(PREFIX)/bin
 export DEBUG ?= 0
@@ -89,7 +90,7 @@ install: $(BIN)
 	install -d -o root -g root $(BINDIR)
 	install -o root -g root -m 755 $(BIN) $(BINDIR)
 	install -d -o root -g root $(SYSCONFDIR)
-	test -f $(SYSCONFDIR)/$(CFG) || install -o root -g root -m 600 rtl_airband.conf.example $(SYSCONFDIR)/$(CFG)
+	test -f $(SYSCONFDIR)/$(CFG) || install -o root -g root -m 600 $(DEFCONFIG) $(SYSCONFDIR)/$(CFG)
 	@printf "\n *** Done. If this is a new install, edit $(SYSCONFDIR)/$(CFG) to suit your needs.\n\n"
 
 $(CLEANDIRS):

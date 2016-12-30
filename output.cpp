@@ -316,12 +316,13 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 					fdata->f = NULL;
 				}
 				int r = fdata_open(fdata, filename, channel->mode);
-				free(filename);
 				if (r<0) {
 					log(LOG_WARNING, "Cannot open output file %s (%s), output disabled\n", filename, strerror(errno));
 					channel->outputs[k].enabled = false;
+					free(filename);
 					continue;
 				}
+				free(filename);
 			}
 // mp3_bytes is signed, but we've checked for negative values earlier
 // so it's save to ignore the warning here

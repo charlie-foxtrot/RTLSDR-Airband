@@ -37,6 +37,10 @@ else ifeq ($(PLATFORM), armv7-generic)
   CFLAGS += -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -ffast-math 
   LDLIBS += -lfftw3f
   DEPS = $(OBJ)
+else ifeq ($(PLATFORM), armv8-generic)
+  CFLAGS += -march=armv8-a+crc -mtune=cortex-a53 -ffast-math
+  LDLIBS += -lfftw3f
+  DEPS = $(OBJ)
 else ifeq ($(PLATFORM), x86)
   CFLAGS += -march=native
   LDLIBS += -lfftw3f
@@ -54,6 +58,7 @@ ifndef DEPS
 	\tPLATFORM=rpiv1 make\t\tRaspberry Pi V1 (VFP FPU, use BCM VideoCore for FFT)\n \
 	\tPLATFORM=rpiv2 make\t\tRaspberry Pi V2 (NEON FPU, use BCM VideoCore for FFT)\n \
 	\tPLATFORM=armv7-generic make\tOther ARMv7 platforms, like Cubieboard (NEON FPU, use main CPU for FFT)\n \
+	\tPLATFORM=armv8-generic make\t64-bit ARM platforms, like Odroid C2 (use main CPU for FFT)\n \
 	\tPLATFORM=x86 make\t\tbuild binary for x86\n\n \
 	Additional options:\n \
 	\tNFM=1\t\t\t\tInclude support for Narrow FM demodulation\n \

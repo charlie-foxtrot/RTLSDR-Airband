@@ -24,7 +24,7 @@
 
 // From this point we may safely assume that USE_BCM_VC implies __arm__
 
-#ifdef __arm__
+#if defined (__arm__) || defined (__arch64__)
 
 #ifdef USE_BCM_VC
 #include "hello_fft/mailbox.h"
@@ -399,7 +399,7 @@ void demodulate() {
 			samplefft(&sfa, dev->buffer + dev->bufs + i * speed2, window, levels);
 			sfa.dest+= fft->step;
 		}
-#elif defined __arm__
+#elif defined (__arm__) || defined (__arch64__)
 		for (int i = 0; i < FFT_SIZE; i++) {
 			unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
 			fftin[i][0] = levels[*(buf2)] * window[i*2];
@@ -463,7 +463,7 @@ void demodulate() {
 			for (int i = 0; i < dev->channel_count; i++) {
 				AFC afc(dev, i);
 				channel_t* channel = dev->channels + i;
-#if defined __arm__
+#if defined (__arm__) || defined (__arch64__)
 				float agcmin2 = channel->agcmin * 4.5f;
 				for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j++) {
 					channel->waveref[j] = min(channel->wavein[j], agcmin2);
@@ -658,7 +658,7 @@ int main(int argc, char* argv[]) {
 	if(!debug_path) debug_path = strdup(DEBUG_PATH);
 	init_debug(debug_path);
 #endif
-#ifndef __arm__
+#if !defined (__arm__) && !defined (__arch64__)
 #define cpuid(func,ax,bx,cx,dx)\
 	__asm__ __volatile__ ("cpuid":\
 		"=a" (ax), "=b" (bx), "=c" (cx), "=d" (dx) : "a" (func));

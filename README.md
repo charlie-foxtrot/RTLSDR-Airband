@@ -99,11 +99,12 @@ Building
 
         PLATFORM=rpiv2 NFM=1 make
 
-   Building for other ARMv7-based platforms without VideoCore GPU, eg. Cubieboard (FFTW3
+   Building for other ARM-based platforms without VideoCore GPU (FFTW3
    library is needed in this case), NFM disabled:
 
         sudo apt-get install libfftw3-dev
-        PLATFORM=armv7-generic make
+        PLATFORM=armv7-generic make		# for ARMv7 platforms, like Cubieboard
+	PLATFORM=armv8-generic make		# for 64-bit ARM platforms, like Odroid C2
 
    Building for generic x86 CPU (FFTW3 library is needed in this case), NFM enabled:
 

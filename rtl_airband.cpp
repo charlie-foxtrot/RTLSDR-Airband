@@ -1,5 +1,5 @@
 /*
- * RTLSDR AM demodulator and streaming
+ * RTLSDR AM/NFM demodulator, mixer, streamer and recorder
  *
  * Copyright (c) 2014 Wong Man Hang <microtony@gmail.com>
  * Copyright (c) 2015-2016 Tomasz Lemiech <szpajder@gmail.com>
@@ -18,14 +18,13 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define RTL_AIRBAND_VERSION "2.2.0"
 #if defined USE_BCM_VC && !defined __arm__
 #error Broadcom VideoCore support can only be enabled on ARM builds
 #endif
 
 // From this point we may safely assume that USE_BCM_VC implies __arm__
 
-#ifdef __arm__
+#if defined (__arm__) || defined (__aarch64__)
 
 #ifdef USE_BCM_VC
 #include "hello_fft/mailbox.h"
@@ -40,16 +39,6 @@
 
 #endif	/* x86 */
 
-#define ALIGN
-#define ALIGN2 __attribute__((aligned(32)))
-#define SLEEP(x) usleep(x * 1000)
-#define THREAD pthread_t
-#define GOTOXY(x, y) printf("%c[%d;%df",0x1B,y,x)
-#ifndef SYSCONFDIR
-#define SYSCONFDIR "/usr/local/etc"
-#endif
-#define CFGFILE SYSCONFDIR "/rtl_airband.conf"
-#define PIDFILE "/run/rtl_airband.pid"
 #include <unistd.h>
 #include <pthread.h>
 #include <syslog.h>
@@ -75,150 +64,18 @@
 #include <shout/shout.h>
 #include <lame/lame.h>
 #include <rtl-sdr.h>
-
-#define BUF_SIZE 2560000
-#define SOURCE_RATE 2560000
-#ifdef NFM
-#define WAVE_RATE 16000
-#else
-#define WAVE_RATE 8000
-#endif
-#define WAVE_BATCH WAVE_RATE / 8
-#define AGC_EXTRA WAVE_RATE / 160
-#define WAVE_LEN 2 * WAVE_BATCH + AGC_EXTRA
-#define MP3_RATE 8000
-#define MAX_SHOUT_QUEUELEN 32768
-#define TAG_QUEUE_LEN 16
-#define CHANNELS 8
-#define FFT_SIZE_LOG 9
-#define LAMEBUF_SIZE 22000 //todo: calculate
-#if defined USE_BCM_VC
-struct sample_fft_arg
-{
-	int fft_size_by4;
-	GPU_FFT_COMPLEX* dest;
-};
-extern "C" void samplefft(sample_fft_arg *a, unsigned char* buffer, float* window, float* levels);
-
-# define FFT_BATCH 250
-#else
-# define FFT_BATCH 1
-#endif
-#define FFT_SIZE (2<<(FFT_SIZE_LOG - 1))
-
-//#define AFC_LOGGING
+#include "rtl_airband.h"
 
 using namespace std;
 using namespace libconfig;
 
-enum output_type { O_ICECAST, O_FILE };
-struct output_t {
-	enum output_type type;
-	bool enabled;
-	bool active;
-	void *data;
-};
-
-struct icecast_data {
-	const char *hostname;
-	int port;
-	const char *username;
-	const char *password;
-	const char *mountpoint;
-	const char *name;
-	const char *genre;
-	bool send_scan_freq_tags;
-	shout_t *shout;
-};
-
-struct file_data {
-	const char *dir;
-	const char *prefix;
-	char *suffix;
-	bool continuous;
-	bool append;
-	FILE *f;
-};
-
-struct freq_tag {
-	int freq;
-	struct timeval tv;
-};
-
-enum modulations {
-	MOD_AM
-#ifdef NFM
-	, MOD_NFM
-#endif
-};
-struct channel_t {
-	float wavein[WAVE_LEN];		// FFT output waveform
-	float waveref[WAVE_LEN];	// for power level calculation
-	float waveout[WAVE_LEN];	// waveform after squelch + AGC
-#ifdef NFM
-	float complex_samples[2*WAVE_LEN];	// raw samples for NFM demod
-	float timeref_nsin[WAVE_RATE];
-	float timeref_cos[WAVE_RATE];
-	int wavecnt;				// sample counter for timeref shift
-// FIXME: get this from complex_samples?
-	float pr;					// previous sample - real part
-	float pj;					// previous sample - imaginary part
-	float alpha;
-#endif
-	enum modulations modulation;
-	int agcsq;					// squelch status, 0 = signal, 1 = suppressed
-	float agcavgfast;			// average power, for AGC
-	float agcavgslow;			// average power, for squelch level detection
-	float agcmin;				// noise level
-	int sqlevel;				// manually configured squelch level
-	int agclow;					// low level sample count
-	char axcindicate;			// squelch/AFC status indicator: ' ' - no signal; '*' - has signal; '>', '<' - signal tuned by AFC
-	unsigned char afc;			//0 - AFC disabled; 1 - minimal AFC; 2 - more aggressive AFC and so on to 255
-	int frequency;
-	int freq_count;
-	int *freqlist;
-	char **labels;
-	int output_count;
-	output_t *outputs;
-	lame_t lame;
-};
-
-enum rec_modes { R_MULTICHANNEL, R_SCAN };
-struct device_t {
-	unsigned char buffer[BUF_SIZE + FFT_SIZE * 2 + 48];
-	int bufs;
-	int bufe;
-	rtlsdr_dev_t* rtlsdr;
-	int device;
-	int centerfreq;
-	int correction;
-	int gain;
-#ifdef NFM
-	float alpha;
-#endif
-	int channel_count;
-	int base_bins[8];
-	int bins[8];
-	channel_t channels[8];
-	int waveend;
-	int waveavail;
-	THREAD rtl_thread;
-	THREAD controller_thread;
-	struct freq_tag tag_queue[TAG_QUEUE_LEN];
-	int tq_head, tq_tail;
-	int last_frequency;
-	pthread_mutex_t tag_queue_lock;
-	int row;
-	int failed;
-	enum rec_modes mode;
-};
-
 device_t* devices;
-int device_count;
+mixer_t* mixers;
+int device_count, mixer_count;
 volatile int device_opened = 0;
 int rtlsdr_buffers = 10;
 int foreground = 0, do_syslog = 1, shout_metadata_delay = 3;
-static volatile int do_exit = 0;
+volatile int do_exit = 0;
 bool use_localtime = false;
 #ifdef NFM
 float alpha = exp(-1.0f/(WAVE_RATE * 2e-4));
@@ -228,46 +85,23 @@ enum fm_demod_algo {
 };
 enum fm_demod_algo fm_demod = FM_FAST_ATAN2;
 #endif
-
-void error() {
-	exit(1);
-}
-
-
-int atomic_inc(volatile int *pv)
-{
-	return __sync_fetch_and_add(pv, 1);
-}
-
-int atomic_dec(volatile int *pv)
-{
-	return __sync_fetch_and_sub(pv, 1);
-}
-
-int atomic_get(volatile int *pv)
-{
-	return __sync_fetch_and_add(pv, 0);
-}
-
-void log(int priority, const char *format, ...) {
-	va_list args;
-	va_start(args, format);
-	if(do_syslog)
-		vsyslog(priority, format, args);
-	else if(foreground)
-		vprintf(format, args);
-	va_end(args);
-}
+#if DEBUG
+char *debug_path;
+#endif
+pthread_cond_t	mp3_cond = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t	mp3_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx) {
 	if(do_exit) return;
 	device_t *dev = (device_t*)ctx;
+	pthread_mutex_lock(&dev->buffer_lock);
 	memcpy(dev->buffer + dev->bufe, buf, len);
 	if (dev->bufe == 0) {
 		memcpy(dev->buffer + BUF_SIZE, buf, FFT_SIZE * 2);
 	}
 	dev->bufe = dev->bufe + len;
 	if (dev->bufe == BUF_SIZE) dev->bufe = 0;
+	pthread_mutex_unlock(&dev->buffer_lock);
 }
 
 void sighandler(int sig) {
@@ -310,371 +144,8 @@ void* rtlsdr_exec(void* params) {
 	if(rtlsdr_read_async(dev->rtlsdr, rtlsdr_callback, params, rtlsdr_buffers, 320000) < 0) {
 		log(LOG_WARNING, "Device #%d: async read failed, disabling\n", dev->device);
 		dev->failed = 1;
+		disable_device_outputs(dev);
 		atomic_dec(&device_opened);
-	}
-	return 0;
-}
-
-void shout_setup(icecast_data *icecast) {
-	int ret;
-	shout_t * shouttemp = shout_new();
-	if (shouttemp == NULL) {
-		printf("cannot allocate\n");
-	}
-	if (shout_set_host(shouttemp, icecast->hostname) != SHOUTERR_SUCCESS) {
-		shout_free(shouttemp); return;
-	}
-	if (shout_set_protocol(shouttemp, SHOUT_PROTOCOL_HTTP) != SHOUTERR_SUCCESS) {
-		shout_free(shouttemp); return;
-	}
-	if (shout_set_port(shouttemp, icecast->port) != SHOUTERR_SUCCESS) {
-		shout_free(shouttemp); return;
-	}
-	char mp[100];
-	sprintf(mp, "/%s", icecast->mountpoint);
-	if (shout_set_mount(shouttemp, mp) != SHOUTERR_SUCCESS) {
-		shout_free(shouttemp); return;
-	}
-	if (shout_set_user(shouttemp, icecast->username) != SHOUTERR_SUCCESS) {
-		shout_free(shouttemp); return;
-	}
-	if (shout_set_password(shouttemp, icecast->password) != SHOUTERR_SUCCESS) {
-		shout_free(shouttemp); return;
-	}
-	if (shout_set_format(shouttemp, SHOUT_FORMAT_MP3) != SHOUTERR_SUCCESS){
-		shout_free(shouttemp); return;
-	}
-	if(icecast->name && shout_set_name(shouttemp, icecast->name) != SHOUTERR_SUCCESS) {
-		shout_free(shouttemp); return;
-	}
-	if(icecast->genre && shout_set_genre(shouttemp, icecast->genre) != SHOUTERR_SUCCESS) {
-		shout_free(shouttemp); return;
-	}
-	char samplerates[20];
-	sprintf(samplerates, "%d", MP3_RATE);
-	shout_set_audio_info(shouttemp, SHOUT_AI_SAMPLERATE, samplerates);
-	shout_set_audio_info(shouttemp, SHOUT_AI_CHANNELS, "1");
-
-	if (shout_set_nonblocking(shouttemp, 1) != SHOUTERR_SUCCESS) {
-		log(LOG_ERR, "Error setting non-blocking mode: %s\n", shout_get_error(shouttemp));
-		return;
-	}
-	ret = shout_open(shouttemp);
-	if (ret == SHOUTERR_SUCCESS)
-		ret = SHOUTERR_CONNECTED;
-
-	if (ret == SHOUTERR_BUSY)
-		log(LOG_NOTICE, "Connecting to %s:%d/%s...\n",
-			icecast->hostname, icecast->port, icecast->mountpoint);
-
-	while (ret == SHOUTERR_BUSY) {
-		usleep(10000);
-		ret = shout_get_connected(shouttemp);
-	}
-
-	if (ret == SHOUTERR_CONNECTED) {
-		log(LOG_NOTICE, "Connected to %s:%d/%s\n",
-			icecast->hostname, icecast->port, icecast->mountpoint);
-		SLEEP(100);
-		icecast->shout = shouttemp;
-	} else {
-		log(LOG_WARNING, "Could not connect to %s:%d/%s\n",
-			icecast->hostname, icecast->port, icecast->mountpoint);
-		shout_free(shouttemp);
-		return;
-	}
-}
-
-lame_t airlame_init() {
-	lame_t lame = lame_init();
-	if (!lame) {
-		log(LOG_WARNING, "lame_init failed\n");
-		return NULL;
-	}
-
-	lame_set_in_samplerate(lame, WAVE_RATE);
-	lame_set_VBR(lame, vbr_mtrh);
-	lame_set_brate(lame, 16);
-	lame_set_quality(lame, 7);
-	lame_set_out_samplerate(lame, MP3_RATE);
-	lame_set_num_channels(lame, 1);
-	lame_set_mode(lame, MONO);
-	lame_init_params(lame);
-	return lame;
-}
-
-class LameTone
-{
-	unsigned char* _data;
-	int _bytes;
-
-public:
-	LameTone(int msec, unsigned int hz = 0) : _data(NULL), _bytes(0) {
-		_data = (unsigned char *)malloc(LAMEBUF_SIZE);
-		if (!_data) {
-			log(LOG_WARNING, "LameTone: can't alloc %u bytes\n", LAMEBUF_SIZE);
-			return;
-		}
-
-		int samples = (msec * WAVE_RATE) / 1000;
-		float *buf = (float *)malloc(samples * sizeof(float));
-		if (!buf) {
-			log(LOG_WARNING, "LameTone: can't alloc %u samples\n", samples);
-			return;
-		}
-
-		if (hz > 0) {
-			const float period = 1.0 / (float)hz;
-			const float sample_time = 1.0 / (float)WAVE_RATE;
-			float t = 0;
-			for (int i = 0; i < samples; ++i, t+= sample_time) {
-				buf[i] = 0.9 * sinf(t * 2.0 * M_PI / period);
-			}
-		} else
-			memset(buf, 0, samples * sizeof(float));
-
-		lame_t lame = airlame_init();
-		if (lame) {
-			_bytes = lame_encode_buffer_ieee_float(lame, buf, NULL, samples, _data, LAMEBUF_SIZE);
-			if (_bytes > 0) {
-				int flush_ofs = _bytes;
-				if (flush_ofs&0x1f)
-					flush_ofs+= 0x20 - (flush_ofs&0x1f);
-				if (flush_ofs < LAMEBUF_SIZE) {
-					int flush_bytes = lame_encode_flush(lame, _data + flush_ofs, LAMEBUF_SIZE - flush_ofs);
-					if (flush_bytes > 0) {
-						memmove(_data + _bytes, _data + flush_ofs, flush_bytes);
-						_bytes+= flush_bytes;
-					}
-				}
-			}
-			else
-				log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n", _bytes);
-			lame_close(lame);
-		}
-		free(buf);
-	}
-
-	~LameTone() {
-		if (_data)
-			free(_data);
-	}
-
-	int write(FILE *f) {
-		if (!_data || _bytes<=0)
-			return 1;
-
-		if(fwrite(_data, 1, _bytes, f) != (unsigned int)_bytes) {
-			log(LOG_WARNING, "LameTone: failed to write %d bytes\n", _bytes);
-			return -1;
-		}
-
-		return 0;
-	}
-};
-
-static int fdata_open(file_data *fdata, const char *filename) {
-	fdata->f = fopen(filename, fdata->append ? "a+" : "w");
-	if(fdata->f == NULL)
-		return -1;
-
-	struct stat st = {0};
-	if (!fdata->append || fstat(fileno(fdata->f), &st)!=0 || st.st_size == 0) {
-		log(LOG_INFO, "Writing to %s\n", filename);
-		return 0;
-	}
-	log(LOG_INFO, "Appending from pos %llu to %s\n", (unsigned long long)st.st_size, filename);
-
-	//fill missing space with marker tones
-	LameTone lt_a(120, 2222);
-	LameTone lt_b(120, 1111);
-	LameTone lt_c(120, 555);
-
-	int r = lt_a.write(fdata->f);
-	if (r==0) r = lt_b.write(fdata->f);
-	if (r==0) r = lt_c.write(fdata->f);
-	if (fdata->continuous) {
-		time_t now = time(NULL);
-		if (now > st.st_mtime ) {
-			time_t delta = now - st.st_mtime;
-			if (delta > 3600) {
-				log(LOG_WARNING, "Too big time difference: %llu sec, limiting to one hour\n", (unsigned long long)delta);
-				delta = 3600;
-			}
-			LameTone lt_silence(1000);
-			for (; (r==0 && delta > 1); --delta)
-				r = lt_silence.write(fdata->f);
-		}
-	}
-	if (r==0) r = lt_c.write(fdata->f);
-	if (r==0) r = lt_b.write(fdata->f);
-	if (r==0) r = lt_a.write(fdata->f);
-
-	if (r<0) fseek(fdata->f, st.st_size, SEEK_SET);
-	return 0;
-}
-
-unsigned char lamebuf[LAMEBUF_SIZE];
-void process_outputs(channel_t *channel, int cur_scan_freq) {
-	int bytes = lame_encode_buffer_ieee_float(channel->lame, channel->waveout, NULL, WAVE_BATCH, lamebuf, LAMEBUF_SIZE);
-	if (bytes < 0) {
-		log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n", bytes);
-		return;
-	} else if (bytes == 0)
-		return;
-	for (int k = 0; k < channel->output_count; k++) {
-		if(channel->outputs[k].enabled == false) continue;
-		if(channel->outputs[k].type == O_ICECAST) {
-			icecast_data *icecast = (icecast_data *)(channel->outputs[k].data);
-			if(icecast->shout == NULL) continue;
-			int ret = shout_send(icecast->shout, lamebuf, bytes);
-			if (ret != SHOUTERR_SUCCESS || shout_queuelen(icecast->shout) > MAX_SHOUT_QUEUELEN) {
-				if (shout_queuelen(icecast->shout) > MAX_SHOUT_QUEUELEN)
-					log(LOG_WARNING, "Exceeded max backlog for %s:%d/%s, disconnecting\n",
-						icecast->hostname, icecast->port, icecast->mountpoint);
-				// reset connection
-				log(LOG_WARNING, "Lost connection to %s:%d/%s\n",
-					icecast->hostname, icecast->port, icecast->mountpoint);
-				shout_close(icecast->shout);
-				shout_free(icecast->shout);
-				icecast->shout = NULL;
-			} else if(icecast->send_scan_freq_tags && cur_scan_freq >= 0) {
-				shout_metadata_t *meta = shout_metadata_new();
-				char description[32];
-				if(channel->labels[cur_scan_freq] != NULL)
-					shout_metadata_add(meta, "song", channel->labels[cur_scan_freq]);
-				else {
-					snprintf(description, sizeof(description), "%.3f MHz", channel->freqlist[cur_scan_freq] / 1000000.0);
-					shout_metadata_add(meta, "song", description);
-				}
-				shout_set_metadata(icecast->shout, meta);
-				shout_metadata_free(meta);
-			}
-		} else if(channel->outputs[k].type == O_FILE) {
-			file_data *fdata = (file_data *)(channel->outputs[k].data);
-			if(fdata->continuous == false && channel->axcindicate == ' ' && channel->outputs[k].active == false) continue;
-			time_t t = time(NULL);
-			struct tm *tmp;
-			if(use_localtime)
-				tmp = localtime(&t);
-			else
-				tmp = gmtime(&t);
-
-			char suffix[32];
-			if(strftime(suffix, sizeof(suffix), "_%Y%m%d_%H.mp3", tmp) == 0) {
-				log(LOG_NOTICE, "strftime returned 0\n");
-				continue;
-			}
-			if(fdata->suffix == NULL || strcmp(suffix, fdata->suffix)) {	// need to open new file
-				fdata->suffix = strdup(suffix);
-				char *filename = (char *)malloc(strlen(fdata->dir) + strlen(fdata->prefix) + strlen(fdata->suffix) + 2);
-				if(filename == NULL) {
-					log(LOG_WARNING, "process_outputs: cannot allocate memory, output disabled\n");
-					channel->outputs[k].enabled = false;
-					continue;
-				}
-				sprintf(filename, "%s/%s%s", fdata->dir, fdata->prefix, fdata->suffix);
-				if(fdata->f != NULL) {
-					//todo: finalize file stream with lame_encode_flush_nogap
-					fclose(fdata->f);
-					fdata->f = NULL;
-				}
-				int r = fdata_open(fdata, filename);
-				free(filename);
-				if (r<0) {
-					log(LOG_WARNING, "Cannot open output file %s (%s), output disabled\n", filename, strerror(errno));
-					channel->outputs[k].enabled = false;
-					continue;
-				}
-			}
-// bytes is signed, but we've checked for negative values earlier
-// so it's save to ignore the warning here
-#pragma GCC diagnostic ignored "-Wsign-compare"
-			if(fwrite(lamebuf, 1, bytes, fdata->f) < bytes) {
-#pragma GCC diagnostic warning "-Wsign-compare"
-				if(ferror(fdata->f))
-					log(LOG_WARNING, "Cannot write to %s/%s%s (%s), output disabled\n",
-						fdata->dir, fdata->prefix, fdata->suffix, strerror(errno));
-				else
-					log(LOG_WARNING, "Short write on %s/%s%s, output disabled\n",
-						fdata->dir, fdata->prefix, fdata->suffix);
-				fclose(fdata->f);
-				fdata->f = NULL;
-				channel->outputs[k].enabled = false;
-			}
-			channel->outputs[k].active = (channel->axcindicate != ' ');
-		}
-	}
-}
-
-void tag_queue_put(device_t *dev, int freq, struct timeval tv) {
-	pthread_mutex_lock(&dev->tag_queue_lock);
-	dev->tq_head++; dev->tq_head %= TAG_QUEUE_LEN;
-	if(dev->tq_head == dev->tq_tail) {
-		log(LOG_WARNING, "tag_queue_put: queue overrun");
-		dev->tq_tail++;
-	}
-	dev->tag_queue[dev->tq_head].freq = freq;
-	memcpy(&dev->tag_queue[dev->tq_head].tv, &tv, sizeof(struct timeval));
-	pthread_mutex_unlock(&dev->tag_queue_lock);
-}
-
-void tag_queue_get(device_t *dev, struct freq_tag *tag) {
-	int i;
-
-	if(!tag) return;
-	pthread_mutex_lock(&dev->tag_queue_lock);
-	if(dev->tq_head == dev->tq_tail) {	/* empty queue */
-		tag->freq = -1;
-	} else {
-// read queue entry at pos tq_tail+1 without dequeueing it
-		i = dev->tq_tail+1; i %= TAG_QUEUE_LEN;
-		tag->freq = dev->tag_queue[i].freq;
-		memcpy(&tag->tv, &dev->tag_queue[i].tv, sizeof(struct timeval));
-	}
-	pthread_mutex_unlock(&dev->tag_queue_lock);
-}
-
-void tag_queue_advance(device_t *dev) {
-	pthread_mutex_lock(&dev->tag_queue_lock);
-	dev->tq_tail++; dev->tq_tail %= TAG_QUEUE_LEN;
-	pthread_mutex_unlock(&dev->tag_queue_lock);
-}
-
-pthread_cond_t	mp3_cond = PTHREAD_COND_INITIALIZER;
-pthread_mutex_t	mp3_mutex = PTHREAD_MUTEX_INITIALIZER;
-void* output_thread(void* params) {
-	struct freq_tag tag;
-	struct timeval tv;
-	int new_freq = -1;
-
-	while (!do_exit) {
-		pthread_cond_wait(&mp3_cond, &mp3_mutex);
-		for (int i = 0; i < device_count; i++) {
-			device_t* dev = devices + i;
-			if (!dev->failed && dev->waveavail) {
-				dev->waveavail = 0;
-				if(dev->mode == R_SCAN) {
-					tag_queue_get(dev, &tag);
-					if(tag.freq >= 0) {
-						tag.tv.tv_sec += shout_metadata_delay;
-						gettimeofday(&tv, NULL);
-						if(tag.tv.tv_sec < tv.tv_sec || (tag.tv.tv_sec == tv.tv_sec && tag.tv.tv_usec <= tv.tv_usec)) {
-							new_freq = tag.freq;
-							tag_queue_advance(dev);
-						}
-					}
-				}
-				for (int j = 0; j < dev->channel_count; j++) {
-					channel_t* channel = devices[i].channels + j;
-					process_outputs(channel, new_freq);
-					memcpy(channel->waveout, channel->waveout + WAVE_BATCH, AGC_EXTRA * 4);
-				}
-			}
-// make sure we don't carry new_freq value to the next receiver which might be working
-// in multichannel mode
-			new_freq = -1;
-		}
 	}
 	return 0;
 }
@@ -707,39 +178,6 @@ void* controller_thread(void* params) {
 				}
 			}
 			consecutive_squelch_off = 0;
-		}
-	}
-	return 0;
-}
-
-// reconnect as required
-void* icecast_check(void* params) {
-	while (!do_exit) {
-		SLEEP(10000);
-		for (int i = 0; i < device_count; i++) {
-			device_t* dev = devices + i;
-			for (int j = 0; j < dev->channel_count; j++) {
-				for (int k = 0; k < dev->channels[j].output_count; k++) {
-					if(dev->channels[j].outputs[k].type != O_ICECAST)
-						continue;
-					icecast_data *icecast = (icecast_data *)(dev->channels[j].outputs[k].data);
-					if(dev->failed) {
-						if(icecast->shout) {
-							log(LOG_WARNING, "Device #%d failed, disconnecting stream %s:%d/%s\n",
-								i, icecast->hostname, icecast->port, icecast->mountpoint);
-							shout_close(icecast->shout);
-							shout_free(icecast->shout);
-							icecast->shout = NULL;
-						}
-					} else {
-						if (icecast->shout == NULL){
-							log(LOG_NOTICE, "Trying to reconnect to %s:%d/%s...\n",
-								icecast->hostname, icecast->port, icecast->mountpoint);
-							shout_setup(icecast);
-						}
-					}
-				}
-			}
 		}
 	}
 	return 0;
@@ -915,6 +353,9 @@ void demodulate() {
 		window[i * 2] = window[i * 2 + 1] = (float)x;
 	}
 
+	struct timeval ts, te;
+	if(DEBUG)
+		gettimeofday(&ts, NULL);
 	// speed2 = number of bytes per wave sample (x 2 for I and Q)
 	int speed2 = (SOURCE_RATE * 2) / WAVE_RATE;
 	int device_num = 0;
@@ -929,10 +370,12 @@ void demodulate() {
 		}
 
 		device_t* dev = devices + device_num;
+		pthread_mutex_lock(&dev->buffer_lock);
 		int available = dev->bufe - dev->bufs;
-		if (dev->bufe < dev->bufs) {
-			available = (BUF_SIZE - dev->bufe) + dev->bufs;
+		if (available < 0) {
+			available += BUF_SIZE;
 		}
+		pthread_mutex_unlock(&dev->buffer_lock);
 
 		if(atomic_get(&device_opened)==0) {
 			log(LOG_ERR, "All receivers failed, exiting\n");
@@ -956,7 +399,7 @@ void demodulate() {
 			samplefft(&sfa, dev->buffer + dev->bufs + i * speed2, window, levels);
 			sfa.dest+= fft->step;
 		}
-#elif defined __arm__
+#elif defined (__arm__) || defined (__aarch64__)
 		for (int i = 0; i < FFT_SIZE; i++) {
 			unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
 			fftin[i][0] = levels[*(buf2)] * window[i*2];
@@ -971,8 +414,6 @@ void demodulate() {
 			_mm_store_ps(&fftin[i][0], a);
 		}
 #endif
-		// allow mp3 encoding thread to run while waiting for FFT to finish
-		pthread_cond_signal(&mp3_cond);
 #ifdef USE_BCM_VC
 		gpu_fft_execute(fft);
 #else
@@ -1022,7 +463,7 @@ void demodulate() {
 			for (int i = 0; i < dev->channel_count; i++) {
 				AFC afc(dev, i);
 				channel_t* channel = dev->channels + i;
-#if defined __arm__
+#if defined (__arm__) || defined (__aarch64__)
 				float agcmin2 = channel->agcmin * 4.5f;
 				for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j++) {
 					channel->waveref[j] = min(channel->wavein[j], agcmin2);
@@ -1137,6 +578,13 @@ void demodulate() {
 			}
 			dev->waveavail = 1;
 			dev->waveend -= WAVE_BATCH;
+			if(DEBUG) {
+				gettimeofday(&te, NULL);
+				debug_bulk_print("waveavail %lu.%lu %lu\n", te.tv_sec, te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec);
+				ts.tv_sec = te.tv_sec;
+				ts.tv_usec = te.tv_usec;
+			}
+			pthread_cond_signal(&mp3_cond);
 			dev->row++;
 			if (dev->row == 12) {
 				dev->row = 0;
@@ -1156,6 +604,9 @@ void usage() {
 #ifdef NFM
 	cout<<"\t-Q\t\t\tUse quadri correlator for FM demodulation (default is atan2)\n";
 #endif
+#if DEBUG
+	cout<<"\t-d <file>\t\tLog debugging information to <file> (default is "<<DEBUG_PATH<<")\n";
+#endif
 	cout<<"\t-c <config_file_path>\tUse non-default configuration file\n\t\t\t\t(default: "<<CFGFILE<<")\n\
 \t-v\t\t\tDisplay version and exit\n";
 	exit(EXIT_SUCCESS);
@@ -1167,16 +618,25 @@ int main(int argc, char* argv[]) {
 	char *pidfile = PIDFILE;
 #pragma GCC diagnostic warning "-Wwrite-strings"
 	int opt;
+	char optstring[16] = "fhvc:";
 
 #ifdef NFM
-	while((opt = getopt(argc, argv, "Qfhvc:")) != -1) {
-#else
-	while((opt = getopt(argc, argv, "fhvc:")) != -1) {
+	strcat(optstring, "Q");
 #endif
+#if DEBUG
+	strcat(optstring, "d:");
+#endif
+
+	while((opt = getopt(argc, argv, optstring)) != -1) {
 		switch(opt) {
 #ifdef NFM
 			case 'Q':
 				fm_demod = FM_QUADRI_DEMOD;
+				break;
+#endif
+#if DEBUG
+			case 'd':
+				debug_path = strdup(optarg);
 				break;
 #endif
 			case 'f':
@@ -1194,8 +654,11 @@ int main(int argc, char* argv[]) {
 				break;
 		}
 	}
-
-#ifndef __arm__
+#if DEBUG
+	if(!debug_path) debug_path = strdup(DEBUG_PATH);
+	init_debug(debug_path);
+#endif
+#if !defined (__arm__) && !defined (__aarch64__)
 #define cpuid(func,ax,bx,cx,dx)\
 	__asm__ __volatile__ ("cpuid":\
 		"=a" (ax), "=b" (bx), "=c" (cx), "=d" (dx) : "a" (func));
@@ -1256,234 +719,49 @@ int main(int argc, char* argv[]) {
 		shout_init();
 		if(do_syslog) openlog("rtl_airband", LOG_PID, LOG_DAEMON);
 
-		int ii = 0;
-		for (int i = 0; i < devs.getLength(); i++) {
-			if(devs[i].exists("disable") && (bool)devs[i]["disable"] == true) continue;
-			device_t* dev = devices + ii;
-			if(!devs[i].exists("correction")) devs[i].add("correction", Setting::TypeInt);
-			dev->device = (int)devs[i]["index"];
-			dev->channel_count = 0;
-			if(devs[i].exists("gain"))
-				dev->gain = (int)devs[i]["gain"] * 10;
-			else {
-				cerr<<"Configuration error: devices.["<<i<<"]: gain is not configured\n";
+		if(root.exists("mixers")) {
+			Setting &mx = config.lookup("mixers");
+			mixers = (mixer_t *)calloc(mx.getLength(), sizeof(struct mixer_t));
+			if(!mixers) {
+				cerr<<"Cannot allocate memory for mixers\n";
 				error();
 			}
-			if(devs[i].exists("mode")) {
-				if(!strncmp(devs[i]["mode"], "multichannel", 12)) {
-					dev->mode = R_MULTICHANNEL;
-				} else if(!strncmp(devs[i]["mode"], "scan", 4)) {
-					dev->mode = R_SCAN;
-				} else {
-					cerr<<"Configuration error: devices.["<<i<<"]: invalid mode (must be one of: \"scan\", \"multichannel\")\n";
+			if((mixer_count = parse_mixers(mx)) > 0) {
+				mixers = (mixer_t *)realloc(mixers, mixer_count * sizeof(struct mixer_t));
+				if(!mixers) {
+					cerr<<"Cannot allocate memory for mixers\n";
 					error();
 				}
 			} else {
-				dev->mode = R_MULTICHANNEL;
+				free(mixers);
 			}
-			if(dev->mode == R_MULTICHANNEL) dev->centerfreq = (int)devs[i]["centerfreq"];
-#ifdef NFM
-			if(devs[i].exists("tau")) {
-				dev->alpha = ((int)devs[i]["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)devs[i]["tau"])));
-			} else {
-				dev->alpha = alpha;
-			}
-#endif
-			dev->correction = (int)devs[i]["correction"];
-			memset(dev->bins, 0, sizeof(dev->bins));
-			memset(dev->base_bins, 0, sizeof(dev->base_bins));
-			dev->bufs = dev->bufe = dev->waveend = dev->waveavail = dev->row = dev->tq_head = dev->tq_tail = 0;
-			dev->last_frequency = -1;
-			int jj = 0;
-			for (int j = 0; j < devs[i]["channels"].getLength(); j++) {
-				if(devs[i]["channels"][j].exists("disable") && (bool)devs[i]["channels"][j]["disable"] == true) {
-					continue;
-				}
-				channel_t* channel = dev->channels + jj;
-				for (int k = 0; k < AGC_EXTRA; k++) {
-					channel->wavein[k] = 20;
-					channel->waveout[k] = 0.5;
-				}
-				channel->agcsq = 1;
-				channel->axcindicate = ' ';
-				channel->agcavgfast = 0.5f;
-				channel->agcavgslow = 0.5f;
-				channel->agcmin = 100.0f;
-				channel->agclow = 0;
-				channel->sqlevel = -1.0f;
-				channel->modulation = MOD_AM;
-				if(devs[i]["channels"][j].exists("modulation")) {
-#ifdef NFM
-					if(!strncmp(devs[i]["channels"][j]["modulation"], "nfm", 3)) {
-						channel->modulation = MOD_NFM;
-					} else
-#endif
-					if(!strncmp(devs[i]["channels"][j]["modulation"], "am", 2)) {
-						channel->modulation = MOD_AM;
-					} else {
-						cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: unknown modulation\n";
-						error();
-					}
-				}
-				if(devs[i]["channels"][j].exists("squelch")) {
-					channel->sqlevel = (int)devs[i]["channels"][j]["squelch"];
-					if(channel->sqlevel <= 0) {
-						cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch must be greater than 0\n";
-						error();
-					}
-				}
-				channel->afc = devs[i]["channels"][j].exists("afc") ? (unsigned char) (unsigned int)devs[i]["channels"][j]["afc"] : 0;
-				if(dev->mode == R_MULTICHANNEL) {
-					channel->frequency = devs[i]["channels"][j]["freq"];
-				} else { /* R_SCAN */
-					channel->freq_count = devs[i]["channels"][j]["freqs"].getLength();
-					if(channel->freq_count < 1) {
-						cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: freqs should be a list with at least one element\n";
-						error();
-					}
-					if(devs[i]["channels"][j].exists("labels") && devs[i]["channels"][j]["labels"].getLength() < channel->freq_count) {
-						cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: labels should be a list with at least "
-							<<channel->freq_count<<" elements\n";
-						error();
-					}
-					channel->freqlist = (int *)malloc(channel->freq_count * sizeof(int));
-					channel->labels = (char **)malloc(channel->freq_count * sizeof(char *));
-					memset(channel->labels, 0, channel->freq_count * sizeof(char *));
-					if(channel->freqlist == NULL || channel->labels == NULL) {
-						cerr<<"Cannot allocate memory for freqlist\n";
-						error();
-					}
-					for(int f = 0; f<channel->freq_count; f++) {
-						channel->freqlist[f] = (int)(devs[i]["channels"][j]["freqs"][f]);
-						if(devs[i]["channels"][j].exists("labels"))
-							channel->labels[f] = strdup(devs[i]["channels"][j]["labels"][f]);
-					}
-// Set initial frequency for scanning
-// We tune 2 FFT bins higher to avoid DC spike
-					channel->frequency = channel->freqlist[0];
-					dev->centerfreq = channel->freqlist[0] + 2 * (double)(SOURCE_RATE / FFT_SIZE);
-				}
-#ifdef NFM
-				if(devs[i]["channels"][j].exists("tau")) {
-					channel->alpha = ((int)devs[i]["channels"][j]["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)devs[i]["channels"][j]["tau"])));
-				} else {
-					channel->alpha = dev->alpha;
-				}
-#endif
-				channel->output_count = devs[i]["channels"][j]["outputs"].getLength();
-				if(channel->output_count < 1) {
-					cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: no outputs defined\n";
-					error();
-				}
-				channel->outputs = (output_t *)malloc(channel->output_count * sizeof(struct output_t));
-				if(channel->outputs == NULL) {
-					cerr<<"Cannot allocate memory for outputs\n";
-					error();
-				}
-				int oo = 0;
-				for(int o = 0; o < channel->output_count; o++) {
-					if(devs[i]["channels"][j]["outputs"][o].exists("disable") && (bool)devs[i]["channels"][j]["outputs"][o]["disable"] == true) {
-						continue;
-					}
-					if(!strncmp(devs[i]["channels"][j]["outputs"][o]["type"], "icecast", 7)) {
-						channel->outputs[oo].data = malloc(sizeof(struct icecast_data));
-						if(channel->outputs[oo].data == NULL) {
-							cerr<<"Cannot allocate memory for outputs\n";
-							error();
-						}
-						memset(channel->outputs[oo].data, 0, sizeof(struct icecast_data));
-						channel->outputs[oo].type = O_ICECAST;
-						icecast_data *idata = (icecast_data *)(channel->outputs[oo].data);
-						idata->hostname = strdup(devs[i]["channels"][j]["outputs"][o]["server"]);
-						idata->port = devs[i]["channels"][j]["outputs"][o]["port"];
-						idata->mountpoint = strdup(devs[i]["channels"][j]["outputs"][o]["mountpoint"]);
-						idata->username = strdup(devs[i]["channels"][j]["outputs"][o]["username"]);
-						idata->password = strdup(devs[i]["channels"][j]["outputs"][o]["password"]);
-						if(devs[i]["channels"][j]["outputs"][o].exists("name"))
-							idata->name = strdup(devs[i]["channels"][j]["outputs"][o]["name"]);
-						if(devs[i]["channels"][j]["outputs"][o].exists("genre"))
-							idata->genre = strdup(devs[i]["channels"][j]["outputs"][o]["genre"]);
-						if(devs[i]["channels"][j]["outputs"][o].exists("send_scan_freq_tags"))
-							idata->send_scan_freq_tags = (bool)devs[i]["channels"][j]["outputs"][o]["send_scan_freq_tags"];
-						else
-							idata->send_scan_freq_tags = 0;
-					} else if(!strncmp(devs[i]["channels"][j]["outputs"][o]["type"], "file", 4)) {
-						channel->outputs[oo].data = malloc(sizeof(struct file_data));
-						if(channel->outputs[oo].data == NULL) {
-							cerr<<"Cannot allocate memory for outputs\n";
-							error();
-						}
-						memset(channel->outputs[oo].data, 0, sizeof(struct file_data));
-						channel->outputs[oo].type = O_FILE;
-						file_data *fdata = (file_data *)(channel->outputs[oo].data);
-						fdata->dir = strdup(devs[i]["channels"][j]["outputs"][o]["directory"]);
-						fdata->prefix = strdup(devs[i]["channels"][j]["outputs"][o]["filename_template"]);
-						fdata->continuous = devs[i]["channels"][j]["outputs"][o].exists("continuous") ?
-							(bool)(devs[i]["channels"][j]["outputs"][o]["continuous"]) : false;
-						fdata->append = (!devs[i]["channels"][j]["outputs"][o].exists("append")) || (bool)(devs[i]["channels"][j]["outputs"][o]["append"]);
-					} else {
-						cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown output type\n";
-						error();
-					}
-					channel->outputs[oo].enabled = true;
-					channel->outputs[oo].active = false;
-					oo++;
-				}
-				if(oo < 1) {
-					cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: no outputs defined\n";
-					error();
-				}
-				channel->outputs = (output_t *)realloc(channel->outputs, oo * sizeof(struct output_t));
-				if(channel->outputs == NULL) {
-					cerr<<"Cannot allocate memory for outputs\n";
-					error();
-				}
-				channel->output_count = oo;
-
-				dev->base_bins[jj] = dev->bins[jj] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
-#ifdef NFM
-				if(channel->modulation == MOD_NFM) {
-// Calculate mixing frequency needed for NFM to remove linear phase shift caused by FFT sliding window
-// This equals bin_width_Hz * (distance_from_DC_bin)
-					float timeref_freq = 2.0f * M_PI * (float)(SOURCE_RATE / FFT_SIZE) *
-					(float)(dev->bins[jj] < (FFT_SIZE >> 1) ? dev->bins[jj] + 1 : dev->bins[jj] - FFT_SIZE + 1) / (float)WAVE_RATE;
-// Pre-generate the waveform for better performance
-					for(int k = 0; k < WAVE_RATE; k++) {
-						channel->timeref_cos[k] = cosf(timeref_freq * k);
-						channel->timeref_nsin[k] = -sinf(timeref_freq * k);
-					}
-				}
-#endif
-				jj++;
-			}
-			if(jj < 1 || jj > 8) {
-				cerr<<"Configuration error: devices.["<<i<<"]: invalid channel count (min 1, max 8)\n";
-				error();
-			}
-			if(dev->mode == R_SCAN && jj > 1) {
-				cerr<<"Configuration error: devices.["<<i<<"]: only one channel section is allowed in scan mode\n";
-				error();
-			}
-			dev->channel_count = jj;
-			ii++;
+		} else {
+			mixer_count = 0;
 		}
-		if (ii < 1) {
+
+		int devs_enabled = parse_devices(devs);
+		if (devs_enabled < 1) {
 			cerr<<"Configuration error: no devices defined\n";
 			error();
 		}
+		debug_print("mixer_count=%d\n", mixer_count);
+		for(int z = 0; z < mixer_count; z++) {
+			mixer_t *m = &mixers[z];
+			debug_print("mixer[%d]: name=%s, input_count=%d, output_count=%d\n", z, m->name, m->input_count, m->channel.output_count);
+		}
 		int device_count2 = rtlsdr_get_device_count();
-		if (device_count2 < ii) {
-			cerr<<"Not enough devices ("<<ii<<" configured, "<<device_count2<<" detected)\n";
+		if (device_count2 < devs_enabled) {
+			cerr<<"Not enough devices ("<<devs_enabled<<" configured, "<<device_count2<<" detected)\n";
 			error();
 		}
-		for(int i = 0; i < ii; i++) {
+		for(int i = 0; i < devs_enabled; i++) {
 			device_t* dev = devices + i;
 			if(dev->device >= device_count2) {
 				cerr<<"Specified device id "<<(int)dev->device<<" is greater or equal than number of devices ("<<device_count2<<")\n";
 				error();
 			}
 		}
-		device_count = ii;
+		device_count = devs_enabled;
 	} catch(FileIOException e) {
 			cerr<<"Cannot read configuration file "<<cfgfile<<"\n";
 			error();
@@ -1543,15 +821,33 @@ int main(int argc, char* argv[]) {
 	}
 
 	log(LOG_INFO, "RTLSDR-Airband version %s starting\n", RTL_AIRBAND_VERSION);
+	for (int i = 0; i < mixer_count; i++) {
+		if(mixers[i].enabled == false)
+			continue;		// no inputs connected = no need to initialize output
+		channel_t *channel = &mixers[i].channel;
+		if(channel->need_mp3)
+			channel->lame = airlame_init(mixers[i].channel.mode);
+		for (int k = 0; k < channel->output_count; k++) {
+			output_t *output = channel->outputs + k;
+			if(output->type == O_ICECAST)
+				shout_setup((icecast_data *)(output->data), channel->mode);
+		}
+	}
 	for (int i = 0; i < device_count; i++) {
 		device_t* dev = devices + i;
+		if(pthread_mutex_init(&dev->buffer_lock, NULL) != 0) {
+			cerr<<"Failed to initialize buffer mutex for device "<<i<<" - aborting\n";
+			error();
+		}
 		for (int j = 0; j < dev->channel_count; j++) {
 			channel_t* channel = dev->channels + j;
-			channel->lame = airlame_init();
+
+			if(channel->need_mp3)
+				channel->lame = airlame_init(channel->mode);
 			for (int k = 0; k < channel->output_count; k++) {
 				output_t *output = channel->outputs + k;
 				if(output->type == O_ICECAST)
-					shout_setup((icecast_data *)(output->data));
+					shout_setup((icecast_data *)(output->data), channel->mode);
 			}
 		}
 		pthread_create(&dev->rtl_thread, NULL, &rtlsdr_exec, dev);
@@ -1594,6 +890,9 @@ int main(int argc, char* argv[]) {
 	pthread_create(&thread2, NULL, &icecast_check, NULL);
 	THREAD thread3;
 	pthread_create(&thread3, NULL, &output_thread, NULL);
+	THREAD thread4;
+	if(mixer_count > 0)
+		pthread_create(&thread4, NULL, &mixer_thread, NULL);
 
 	demodulate();
 
@@ -1605,6 +904,7 @@ int main(int argc, char* argv[]) {
 			pthread_join(devices[i].controller_thread, NULL);
 	}
 	log(LOG_INFO, "rtlsdr threads closed\n");
+	close_debug();
 	return 0;
 }
 // vim: ts=4

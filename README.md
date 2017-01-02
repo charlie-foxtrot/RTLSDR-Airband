@@ -8,12 +8,13 @@ Features
  * Multichannel mode - decode up to eight AM or NFM channels per dongle (within bandwidth frequency range)
  * Scanner mode - decode unlimited number of AM and/or NFM channels with frequency hopping in a round-robin
    fashion (no frequency range limitations)
- * Decode multiple dongles simutaneously
+ * Decode multiple dongles simultaneously
  * Auto squelch and Automatic Gain Control
  * MP3 encoding
  * Stream to Icecast or SHOUTcast server
  * Record to local MP3 files (continuously or skipping silence periods)
  * Multiple streaming/recording destinations per channel
+ * Mixing several channels into a single audio stream (both mono and stereo mixing is supported)
 
 Performance
 ---------------------
@@ -66,11 +67,17 @@ Building
         tar xvfz RTLSDR-Airband-1.0.0.tar.gz
         cd RTLSDR-Airband-1.0.0
 
-   Alternatively you can pull the latest code from git (but please be aware that it might
-   be experimental, buggy, or at least, untested):
+   Alternatively you can pull the latest code from git:
 
         git clone https://github.com/szpajder/RTLSDR-Airband.git
         cd RTLSDR-Airband/
+
+   If you want cutting-edge features which didn't make it into a release yet, checkout
+   the unstable branch:
+
+        git checkout unstable
+
+   Be aware that it might be experimental, buggy, or at least, untested.
 
  * Install necessary dependencies:
 
@@ -99,11 +106,12 @@ Building
 
         PLATFORM=rpiv2 NFM=1 make
 
-   Building for other ARMv7-based platforms without VideoCore GPU, eg. Cubieboard (FFTW3
+   Building for other ARM-based platforms without VideoCore GPU (FFTW3
    library is needed in this case), NFM disabled:
 
         sudo apt-get install libfftw3-dev
-        PLATFORM=armv7-generic make
+        PLATFORM=armv7-generic make		# for ARMv7 platforms, like Cubieboard
+	PLATFORM=armv8-generic make		# for 64-bit ARM platforms, like Odroid C2
 
    Building for generic x86 CPU (FFTW3 library is needed in this case), NFM enabled:
 
@@ -136,21 +144,22 @@ Building
 Configuring
 --------------------
 By default, the configuration is read from `/usr/local/etc/rtl_airband.conf`.
-Refer to `rtl_airband.conf.example` for the description of the format. You can
-copy this file to `/usr/local/etc/rtl_airband.conf` and edit it to suit your needs
-(`make install` does this, unless you already have your own config file installed).
+Refer to example configuration files in the config/ subdirectory. basic_multichannel.conf
+is a good starting point. When you do `make install`, this file will get copied to
+`/usr/local/etc/rtl_airband.conf` (unless you already have your own config file installed).
+All available config parameters are mentioned and documented in config/reference.conf.
 
 Command line options
 --------------------
 rtl_airband accepts the following command line options:
 
-    -h                      Display this help text
+    -h                      Display this help text and exit
+    -v                      Display version and exit
     -f                      Run in foreground, display textual waterfalls
     -c <config_file_path>   Use non-default configuration file
-
-Additional options are avalable when rtl_airband is compiled with NFM support:
-
     -Q                      Use quadri correlator for FM demodulation (default is atan2)
+                            (this option is available only if rtl_airband was compiled
+			    with NFM support enabled)
 
 Troubleshooting
 --------------------

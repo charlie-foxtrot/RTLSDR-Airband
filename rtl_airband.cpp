@@ -672,6 +672,17 @@ int main(int argc, char* argv[]) {
 	}
 #endif /* !__arm__ */
 
+	// If executing other than as root, GPU memory gets alloc'd and the
+	// 'permission denied' message on /dev/mem kills rtl_airband without
+	// releasing GPU memory.
+#ifdef USE_BCM_VC
+	// XXX should probably do this check in other circumstances also.
+	if(0 != getuid()) {
+		cerr<<"FFT library requires that rtl_airband be executed as root\n";
+		exit(1);
+	}
+#endif
+
 	// read config
 	try {
 		Config config;

@@ -327,7 +327,9 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 // mp3_bytes is signed, but we've checked for negative values earlier
 // so it's save to ignore the warning here
 #pragma GCC diagnostic ignored "-Wsign-compare"
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 			if(fwrite(lamebuf, 1, mp3_bytes, fdata->f) < mp3_bytes) {
+#pragma GCC diagnostic warning "-Wmaybe-uninitialized"
 #pragma GCC diagnostic warning "-Wsign-compare"
 				if(ferror(fdata->f))
 					log(LOG_WARNING, "Cannot write to %s/%s%s (%s), output disabled\n",

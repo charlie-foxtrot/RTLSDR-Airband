@@ -116,6 +116,29 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 	return oo;
 }
 
+static struct freq_t *mk_freqlist( int n )
+{
+	if(n < 1) {
+		cerr<<"mk_freqlist: invalid list length " << n << "\n";
+		error();
+	}
+	struct freq_t *fl = (struct freq_t *)malloc(n * sizeof(struct freq_t));
+	if(NULL == fl) {
+		cerr<<"Cannot allocate memory for freqlist\n";
+		error();
+	}
+	for(int i = 0; i < n; i++) {
+		fl[i].frequency = 0;
+		fl[i].label = NULL;
+		fl[i].agcavgfast = 0.5f;
+		fl[i].agcavgslow = 0.5f;
+		fl[i].agcmin = 100.0f;
+		fl[i].agclow = 0;
+		fl[i].sqlevel = -1;
+	}
+	return fl;
+}
+
 static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 	int jj = 0;
 	for (int j = 0; j < chans.getLength(); j++) {
@@ -133,14 +156,11 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		}
 		channel->agcsq = 1;
 		channel->axcindicate = ' ';
-		channel->agcavgfast = 0.5f;
-		channel->agcavgslow = 0.5f;
-		channel->agcmin = 100.0f;
-		channel->agclow = 0;
-		channel->sqlevel = -1.0f;
 		channel->modulation = MOD_AM;
 		channel->mode = MM_MONO;
 		channel->need_mp3 = 0;
+		channel->freq_count = 1;
+		channel->freq_idx = 0;
 		if(chans[j].exists("modulation")) {
 #ifdef NFM
 			if(!strncmp(chans[j]["modulation"], "nfm", 3)) {
@@ -154,43 +174,59 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				error();
 			}
 		}
-		if(chans[j].exists("squelch")) {
-			channel->sqlevel = (int)chans[j]["squelch"];
-			if(channel->sqlevel <= 0) {
-				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch must be greater than 0\n";
-				error();
-			}
-		}
 		channel->afc = chans[j].exists("afc") ? (unsigned char) (unsigned int)chans[j]["afc"] : 0;
 		if(dev->mode == R_MULTICHANNEL) {
-			channel->frequency = chans[j]["freq"];
+			channel->freqlist = mk_freqlist( 1 );
+			channel->freqlist[0].frequency = chans[j]["freq"];
 		} else { /* R_SCAN */
 			channel->freq_count = chans[j]["freqs"].getLength();
 			if(channel->freq_count < 1) {
 				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: freqs should be a list with at least one element\n";
 				error();
 			}
+			channel->freqlist = mk_freqlist( channel->freq_count );
 			if(chans[j].exists("labels") && chans[j]["labels"].getLength() < channel->freq_count) {
 				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: labels should be a list with at least "
 					<<channel->freq_count<<" elements\n";
 				error();
 			}
-			channel->freqlist = (int *)malloc(channel->freq_count * sizeof(int));
-			channel->labels = (char **)malloc(channel->freq_count * sizeof(char *));
-			memset(channel->labels, 0, channel->freq_count * sizeof(char *));
-			if(channel->freqlist == NULL || channel->labels == NULL) {
-				cerr<<"Cannot allocate memory for freqlist\n";
+			if(chans[j].exists("squelch") && libconfig::Setting::TypeList == chans[j]["squelch"].getType() && chans[j]["squelch"].getLength() < channel->freq_count) {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch should be an int or a list with at least "
+					<<channel->freq_count<<" elements\n";
 				error();
 			}
 			for(int f = 0; f<channel->freq_count; f++) {
-				channel->freqlist[f] = (int)(chans[j]["freqs"][f]);
-				if(chans[j].exists("labels"))
-					channel->labels[f] = strdup(chans[j]["labels"][f]);
+				channel->freqlist[f].frequency = (int)(chans[j]["freqs"][f]);
+				if(chans[j].exists("labels")) {
+					channel->freqlist[f].label = strdup(chans[j]["labels"][f]);
+				}
 			}
 // Set initial frequency for scanning
 // We tune 2 FFT bins higher to avoid DC spike
-			channel->frequency = channel->freqlist[0];
-			dev->centerfreq = channel->freqlist[0] + 2 * (double)(SOURCE_RATE / FFT_SIZE);
+			dev->centerfreq = channel->freqlist[0].frequency + 2 * (double)(SOURCE_RATE / FFT_SIZE);
+		}
+		if(chans[j].exists("squelch")) {
+			if(libconfig::Setting::TypeList == chans[j]["squelch"].getType()) {
+				// New-style array of per-frequency squelch settings
+				for(int f = 0; f<channel->freq_count; f++) {
+					channel->freqlist[f].sqlevel = (int)chans[j]["squelch"][f];
+				}
+				// NB: no value check; -1 allows AGC for some frequencies and
+				//     not others.
+			} else if(libconfig::Setting::TypeInt == chans[j]["squelch"].getType()) {
+				// Legacy (single squelch for all frequencies)
+				int sqlevel = (int)chans[j]["squelch"];
+				if(sqlevel <= 0) {
+					cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch must be greater than 0\n";
+					error();
+				}
+				for(int f = 0; f<channel->freq_count; f++) {
+					channel->freqlist[f].sqlevel = sqlevel;
+				}
+			} else {
+				cerr<<"Invalid value for squelch (should be int or list - use parentheses)\n";
+				error();
+			}
 		}
 #ifdef NFM
 		if(chans[j].exists("tau")) {
@@ -222,7 +258,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		}
 		channel->output_count = outputs_enabled;
 
-		dev->base_bins[jj] = dev->bins[jj] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
+		dev->base_bins[jj] = dev->bins[jj] = (int)ceil((channel->freqlist[0].frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
 #ifdef NFM
 		if(channel->modulation == MOD_NFM) {
 // Calculate mixing frequency needed for NFM to remove linear phase shift caused by FFT sliding window

@@ -164,8 +164,8 @@ void* controller_thread(void* params) {
 				consecutive_squelch_off++;
 			} else {
 				i++; i %= dev->channels[0].freq_count;
-				dev->channels[0].frequency = dev->channels[0].freqlist[i];
-				dev->centerfreq = dev->channels[0].freqlist[i] + 2 * (double)(SOURCE_RATE / FFT_SIZE);
+				dev->channels[0].freq_idx = i;
+				dev->centerfreq = dev->channels[0].freqlist[i].frequency + 2 * (double)(SOURCE_RATE / FFT_SIZE);
 				rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);
 			}
 		} else {
@@ -464,7 +464,7 @@ void demodulate() {
 				AFC afc(dev, i);
 				channel_t* channel = dev->channels + i;
 #if defined (__arm__) || defined (__aarch64__)
-				float agcmin2 = channel->agcmin * 4.5f;
+				float agcmin2 = channel->freqlist[channel->freq_idx].agcmin * 4.5f;
 				for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j++) {
 					channel->waveref[j] = min(channel->wavein[j], agcmin2);
 				}
@@ -477,24 +477,24 @@ void demodulate() {
 #endif
 				for (int j = AGC_EXTRA; j < WAVE_BATCH + AGC_EXTRA; j++) {
 					// auto noise floor
-					if (channel->sqlevel < 0 && j % 16 == 0) {
-						channel->agcmin = channel->agcmin * 0.97f + min(channel->agcavgslow, channel->agcmin) * 0.03f + 0.0001f;
+					if (channel->freqlist[channel->freq_idx].sqlevel < 0 && j % 16 == 0) {
+						channel->freqlist[channel->freq_idx].agcmin = channel->freqlist[channel->freq_idx].agcmin * 0.97f + min(channel->freqlist[channel->freq_idx].agcavgslow, channel->freqlist[channel->freq_idx].agcmin) * 0.03f + 0.0001f;
 					}
 
 					// average power
-					channel->agcavgslow = channel->agcavgslow * 0.99f + channel->waveref[j] * 0.01f;
+					channel->freqlist[channel->freq_idx].agcavgslow = channel->freqlist[channel->freq_idx].agcavgslow * 0.99f + channel->waveref[j] * 0.01f;
 
-					float sqlevel = channel->sqlevel > 0 ? (float)channel->sqlevel : 3.0f * channel->agcmin;
+					float sqlevel = channel->freqlist[channel->freq_idx].sqlevel > 0 ? (float)channel->freqlist[channel->freq_idx].sqlevel : 3.0f * channel->freqlist[channel->freq_idx].agcmin;
 					if (channel->agcsq > 0) {
 						channel->agcsq = max(channel->agcsq - 1, 1);
-						if (channel->agcsq == 1 && channel->agcavgslow > sqlevel) {
+						if (channel->agcsq == 1 && channel->freqlist[channel->freq_idx].agcavgslow > sqlevel) {
 							channel->agcsq = -AGC_EXTRA * 2;
 							channel->axcindicate = '*';
 							if(channel->modulation == MOD_AM) {
 							// fade in
 								for (int k = j - AGC_EXTRA; k < j; k++) {
 									if (channel->wavein[k] > sqlevel) {
-										channel->agcavgfast = channel->agcavgfast * 0.9f + channel->wavein[k] * 0.1f;
+										channel->freqlist[channel->freq_idx].agcavgfast = channel->freqlist[channel->freq_idx].agcavgfast * 0.9f + channel->wavein[k] * 0.1f;
 									}
 								}
 							}
@@ -502,13 +502,13 @@ void demodulate() {
 					} else {
 						if (channel->wavein[j] > sqlevel) {
 							if(channel->modulation == MOD_AM)
-								channel->agcavgfast = channel->agcavgfast * 0.995f + channel->wavein[j] * 0.005f;
-							channel->agclow = 0;
+								channel->freqlist[channel->freq_idx].agcavgfast = channel->freqlist[channel->freq_idx].agcavgfast * 0.995f + channel->wavein[j] * 0.005f;
+							channel->freqlist[channel->freq_idx].agclow = 0;
 						} else {
-							channel->agclow++;
+							channel->freqlist[channel->freq_idx].agclow++;
 						}
 						channel->agcsq = min(channel->agcsq + 1, -1);
-						if (channel->agclow == AGC_EXTRA - 12) {
+						if (channel->freqlist[channel->freq_idx].agclow == AGC_EXTRA - 12) {
 							channel->agcsq = AGC_EXTRA * 2;
 							channel->axcindicate = ' ';
 							if(channel->modulation == MOD_AM) {
@@ -523,10 +523,10 @@ void demodulate() {
 						channel->waveout[j] = 0;
 					} else {
 						if(channel->modulation == MOD_AM) {
-							channel->waveout[j] = (channel->wavein[j - AGC_EXTRA] - channel->agcavgfast) / (channel->agcavgfast * 1.5f);
+							channel->waveout[j] = (channel->wavein[j - AGC_EXTRA] - channel->freqlist[channel->freq_idx].agcavgfast) / (channel->freqlist[channel->freq_idx].agcavgfast * 1.5f);
 							if (abs(channel->waveout[j]) > 0.8f) {
 								channel->waveout[j] *= 0.85f;
-								channel->agcavgfast *= 1.15f;
+								channel->freqlist[channel->freq_idx].agcavgfast *= 1.15f;
 							}
 						}
 #ifdef NFM
@@ -545,8 +545,8 @@ void demodulate() {
 							channel->pr = rotated_r;
 							channel->pj = rotated_j;
 // de-emphasis IIR + DC blocking
-							channel->agcavgfast = channel->agcavgfast * 0.995f + channel->waveout[j] * 0.005f;
-							channel->waveout[j] -= channel->agcavgfast;
+							channel->freqlist[channel->freq_idx].agcavgfast = channel->freqlist[channel->freq_idx].agcavgfast * 0.995f + channel->waveout[j] * 0.005f;
+							channel->waveout[j] -= channel->freqlist[channel->freq_idx].agcavgfast;
 							channel->waveout[j] = channel->waveout[j] * (1.0f - channel->alpha) + channel->waveout[j-1] * channel->alpha;
 						}
 #endif // NFM
@@ -570,9 +570,9 @@ void demodulate() {
 
 				if (foreground) {
 					if(dev->mode == R_SCAN)
-						printf("%4.0f/%3.0f%c %7.3f", channel->agcavgslow, channel->agcmin, channel->axcindicate, (dev->channels[0].frequency / 1000000.0));
+						printf("%4.0f/%3.0f%c %7.3f", channel->freqlist[channel->freq_idx].agcavgslow, channel->freqlist[channel->freq_idx].agcmin, channel->axcindicate, (dev->channels[0].freqlist[channel->freq_idx].frequency / 1000000.0));
 					else
-						printf("%4.0f/%3.0f%c", channel->agcavgslow, channel->agcmin, channel->axcindicate);
+						printf("%4.0f/%3.0f%c", channel->freqlist[channel->freq_idx].agcavgslow, channel->freqlist[channel->freq_idx].agcmin, channel->axcindicate);
 					fflush(stdout);
 				}
 			}
@@ -889,7 +889,7 @@ int main(int argc, char* argv[]) {
 		for (int i = 0; i < device_count; i++) {
 			GOTOXY(0, i * 17 + 1);
 			for (int j = 0; j < devices[i].channel_count; j++) {
-				printf(" %7.3f  ", devices[i].channels[j].frequency / 1000000.0);
+				printf(" %7.3f  ", devices[i].channels[j].freqlist[devices[i].channels[j].freq_idx].frequency / 1000000.0);
 			}
 			if (i != device_count - 1) {
 				GOTOXY(0, i * 17 + 16);

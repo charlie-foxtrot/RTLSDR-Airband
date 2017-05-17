@@ -241,7 +241,7 @@ static int fdata_open(file_data *fdata, const char *filename, mix_modes mixmode)
 
 unsigned char lamebuf[LAMEBUF_SIZE];
 void process_outputs(channel_t *channel, int cur_scan_freq) {
-	int mp3_bytes;
+	int mp3_bytes = 0;
 	if(channel->need_mp3) {
 		debug_bulk_print("channel->mode=%s\n", channel->mode == MM_STEREO ? "MM_STEREO" : "MM_MONO");
 		mp3_bytes = lame_encode_buffer_ieee_float(
@@ -327,9 +327,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 // mp3_bytes is signed, but we've checked for negative values earlier
 // so it's save to ignore the warning here
 #pragma GCC diagnostic ignored "-Wsign-compare"
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 			if(fwrite(lamebuf, 1, mp3_bytes, fdata->f) < mp3_bytes) {
-#pragma GCC diagnostic warning "-Wmaybe-uninitialized"
 #pragma GCC diagnostic warning "-Wsign-compare"
 				if(ferror(fdata->f))
 					log(LOG_WARNING, "Cannot write to %s/%s%s (%s), output disabled\n",

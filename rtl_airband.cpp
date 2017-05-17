@@ -470,7 +470,7 @@ void demodulate() {
 					channel->waveref[j] = min(channel->wavein[j], agcmin2);
 				}
 #else
-				__m128 agccap = _mm_set1_ps(channel->agcmin * 4.5f);
+				__m128 agccap = _mm_set1_ps(fparms->agcmin * 4.5f);
 				for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j += 4) {
 					__m128 t = _mm_loadu_ps(channel->wavein + j);
 					_mm_storeu_ps(channel->waveref + j, _mm_min_ps(t, agccap));

@@ -211,8 +211,8 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				for(int f = 0; f<channel->freq_count; f++) {
 					channel->freqlist[f].sqlevel = (int)chans[j]["squelch"][f];
 				}
-				// NB: no value check; -1 allows AGC for some frequencies and
-				//     not others.
+				// NB: no value check; -1 allows auto-squelch for
+				//     some frequencies and not others.
 			} else if(libconfig::Setting::TypeInt == chans[j]["squelch"].getType()) {
 				// Legacy (single squelch for all frequencies)
 				int sqlevel = (int)chans[j]["squelch"];

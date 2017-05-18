@@ -571,9 +571,16 @@ void demodulate() {
 
 				if (foreground) {
 					if(dev->mode == R_SCAN)
-						printf("%4.0f/%3.0f%c %7.3f", fparms->agcavgslow, fparms->agcmin, channel->axcindicate, (dev->channels[0].freqlist[channel->freq_idx].frequency / 1000000.0));
+						printf("%4.0f/%3.0f%c %7.3f",
+							fparms->agcavgslow,
+							(fparms->sqlevel > 0 ? fparms->sqlevel : fparms->agcmin),
+							channel->axcindicate,
+							(dev->channels[0].freqlist[channel->freq_idx].frequency / 1000000.0));
 					else
-						printf("%4.0f/%3.0f%c", fparms->agcavgslow, fparms->agcmin, channel->axcindicate);
+						printf("%4.0f/%3.0f%c",
+							fparms->agcavgslow,
+							(fparms->sqlevel > 0 ? fparms->sqlevel : fparms->agcmin),
+							channel->axcindicate);
 					fflush(stdout);
 				}
 			}

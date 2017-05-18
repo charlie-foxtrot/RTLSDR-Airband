@@ -8,6 +8,10 @@ BINDIR = $(PREFIX)/bin
 export DEBUG ?= 0
 export CC = g++
 export CFLAGS = -O3 -g -Wall -DSYSCONFDIR=\"$(SYSCONFDIR)\" -DDEBUG=$(DEBUG)
+RTL_AIRBAND_VERSION:=\"$(shell git describe --always --tags --dirty)\"
+ifneq ($(RTL_AIRBAND_VERSION), \"\")
+  CFLAGS+=-DRTL_AIRBAND_VERSION=$(RTL_AIRBAND_VERSION)
+endif
 export CXXFLAGS = $(CFLAGS)
 LDLIBS = -lrt -lm -lvorbisenc -lmp3lame -lshout -lpthread -lrtlsdr -lconfig++
 

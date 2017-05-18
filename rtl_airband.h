@@ -132,6 +132,15 @@ enum modulations {
 
 enum ch_states { CH_DIRTY, CH_WORKING, CH_READY };
 enum mix_modes { MM_MONO, MM_STEREO };
+struct freq_t {
+	int frequency;				// scan frequency
+	char *label;				// frequency label
+	float agcavgfast;			// average power, for AGC
+	float agcavgslow;			// average power, for squelch level detection
+	float agcmin;				// noise level
+	int sqlevel;				// manually configured squelch level
+	int agclow;				// low level sample count
+};
 struct channel_t {
 	float wavein[WAVE_LEN];		// FFT output waveform
 	float waveref[WAVE_LEN];	// for power level calculation
@@ -150,17 +159,11 @@ struct channel_t {
 	enum modulations modulation;
 	enum mix_modes mode;		// mono or stereo
 	int agcsq;					// squelch status, 0 = signal, 1 = suppressed
-	float agcavgfast;			// average power, for AGC
-	float agcavgslow;			// average power, for squelch level detection
-	float agcmin;				// noise level
-	int sqlevel;				// manually configured squelch level
-	int agclow;					// low level sample count
 	char axcindicate;			// squelch/AFC status indicator: ' ' - no signal; '*' - has signal; '>', '<' - signal tuned by AFC
 	unsigned char afc;			//0 - AFC disabled; 1 - minimal AFC; 2 - more aggressive AFC and so on to 255
-	int frequency;
+	struct freq_t *freqlist;
 	int freq_count;
-	int *freqlist;
-	char **labels;
+	int freq_idx;
 	int output_count;
 	int need_mp3;
 	enum ch_states state;		// mixer channel state flag

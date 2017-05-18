@@ -241,7 +241,7 @@ static int fdata_open(file_data *fdata, const char *filename, mix_modes mixmode)
 
 unsigned char lamebuf[LAMEBUF_SIZE];
 void process_outputs(channel_t *channel, int cur_scan_freq) {
-	int mp3_bytes;
+	int mp3_bytes = 0;
 	if(channel->need_mp3) {
 		debug_bulk_print("channel->mode=%s\n", channel->mode == MM_STEREO ? "MM_STEREO" : "MM_MONO");
 		mp3_bytes = lame_encode_buffer_ieee_float(
@@ -277,10 +277,10 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 			} else if(icecast->send_scan_freq_tags && cur_scan_freq >= 0) {
 				shout_metadata_t *meta = shout_metadata_new();
 				char description[32];
-				if(channel->labels[cur_scan_freq] != NULL)
-					shout_metadata_add(meta, "song", channel->labels[cur_scan_freq]);
+				if(channel->freqlist[channel->freq_idx].label != NULL)
+					shout_metadata_add(meta, "song", channel->freqlist[channel->freq_idx].label);
 				else {
-					snprintf(description, sizeof(description), "%.3f MHz", channel->freqlist[cur_scan_freq] / 1000000.0);
+					snprintf(description, sizeof(description), "%.3f MHz", channel->freqlist[channel->freq_idx].frequency / 1000000.0);
 					shout_metadata_add(meta, "song", description);
 				}
 				shout_set_metadata(icecast->shout, meta);

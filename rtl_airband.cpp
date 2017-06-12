@@ -134,6 +134,22 @@ static int nearest_gain(rtlsdr_dev_t *dev, int target_gain) {
 	return nearest;
 }
 
+uint32_t rtl_find_device_by_serial(const char *s) {
+	uint32_t device_count, device;
+	char vendor[256] = {0}, product[256] = {0}, serial[256] = {0};
+	device_count = rtlsdr_get_device_count();
+	if(device_count < 1)
+		return RTL_DEV_INVALID;
+	for(uint32_t i = 0; i < device_count; i++) {
+		rtlsdr_get_device_usb_strings(i, vendor, product, serial);
+		if (strcmp(s, serial) != 0)
+			continue;
+		device = i;
+		return device;
+	}
+	return RTL_DEV_INVALID;
+}
+
 void* rtlsdr_exec(void* params) {
 	int r;
 	device_t *dev = (device_t*)params;
@@ -782,7 +798,7 @@ int main(int argc, char* argv[]) {
 			mixer_count = 0;
 		}
 
-		int devs_enabled = parse_devices(devs);
+		uint32_t devs_enabled = parse_devices(devs);
 		if (devs_enabled < 1) {
 			cerr<<"Configuration error: no devices defined\n";
 			error();
@@ -792,14 +808,19 @@ int main(int argc, char* argv[]) {
 			mixer_t *m = &mixers[z];
 			debug_print("mixer[%d]: name=%s, input_count=%d, output_count=%d\n", z, m->name, m->input_count, m->channel.output_count);
 		}
-		int device_count2 = rtlsdr_get_device_count();
+		uint32_t device_count2 = rtlsdr_get_device_count();
 		if (device_count2 < devs_enabled) {
 			cerr<<"Not enough devices ("<<devs_enabled<<" configured, "<<device_count2<<" detected)\n";
 			error();
 		}
-		for(int i = 0; i < devs_enabled; i++) {
+		for(uint32_t i = 0; i < devs_enabled; i++) {
 			device_t* dev = devices + i;
-			if(dev->device >= device_count2) {
+			if(dev->serial != NULL) {
+				if((dev->device = rtl_find_device_by_serial(dev->serial)) == RTL_DEV_INVALID) {
+					cerr<<"Device with serial number "<<dev->serial<<" not found\n";
+					error();
+				}
+			} else if(dev->device >= device_count2) {
 				cerr<<"Specified device id "<<(int)dev->device<<" is greater or equal than number of devices ("<<device_count2<<")\n";
 				error();
 			}

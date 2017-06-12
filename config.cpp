@@ -256,7 +256,14 @@ int parse_devices(libconfig::Setting &devs) {
 		if(devs[i].exists("disable") && (bool)devs[i]["disable"] == true) continue;
 		device_t* dev = devices + devcnt;
 		if(!devs[i].exists("correction")) devs[i].add("correction", libconfig::Setting::TypeInt);
-		dev->device = (int)devs[i]["index"];
+		if(devs[i].exists("serial")) {
+			dev->serial = strdup(devs[i]["serial"]);
+		} else if(devs[i].exists("index")) {
+			dev->device = (int)devs[i]["index"];
+		} else {
+			cerr<<"Configuration error: devices.["<<i<<"]: no index and no serial number given\n";
+			error();
+		}
 		dev->channel_count = 0;
 		if(devs[i].exists("gain"))
 			dev->gain = (int)devs[i]["gain"] * 10;

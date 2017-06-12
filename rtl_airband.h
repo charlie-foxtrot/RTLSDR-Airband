@@ -64,6 +64,7 @@
 #define FFT_SIZE_LOG 9
 #define LAMEBUF_SIZE 22000 //todo: calculate
 #define MIX_DIVISOR 2
+#define RTL_DEV_INVALID 0xFFFFFFFF
 
 #define ONES(x) ~(~0 << (x))
 #define SET_BIT(a, x) (a) |= (1 << (x))
@@ -179,7 +180,8 @@ struct device_t {
 	int bufs;
 	int bufe;
 	rtlsdr_dev_t* rtlsdr;
-	int device;
+	char *serial;
+	uint32_t device;
 	int centerfreq;
 	int correction;
 	int gain;

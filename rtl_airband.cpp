@@ -109,6 +109,31 @@ void sighandler(int sig) {
 	do_exit = 1;
 }
 
+/* taken from librtlsdr-keenerd, (c) Kyle Keen */
+static int nearest_gain(rtlsdr_dev_t *dev, int target_gain) {
+	int i, r, err1, err2, count, nearest;
+	int *gains;
+	r = rtlsdr_set_tuner_gain_mode(dev, 1);
+	if (r < 0)
+		return r;
+	count = rtlsdr_get_tuner_gains(dev, NULL);
+	if (count <= 0) {
+		return -1;
+	}
+	gains = (int *)XCALLOC(count, sizeof(int));
+	count = rtlsdr_get_tuner_gains(dev, gains);
+	nearest = gains[0];
+	for (i = 0; i < count; i++) {
+		err1 = abs(target_gain - nearest);
+		err2 = abs(target_gain - gains[i]);
+		if (err2 < err1) {
+			nearest = gains[i];
+		}
+	}
+	free(gains);
+	return nearest;
+}
+
 void* rtlsdr_exec(void* params) {
 	int r;
 	device_t *dev = (device_t*)params;
@@ -128,12 +153,19 @@ void* rtlsdr_exec(void* params) {
 	r = rtlsdr_set_freq_correction(dev->rtlsdr, dev->correction);
 	if (r < 0 && r != -2 ) log(LOG_ERR, "Failed to set freq correction for device #%d. Error %d.\n", dev->device, r);
 
+	int ngain = nearest_gain(dev->rtlsdr, dev->gain);
+	if(ngain < 0) {
+		log(LOG_ERR, "Failed to read supported gain list for device #%d: error %d\n", dev->device, ngain);
+		_exit(1);
+	}
 	r = rtlsdr_set_tuner_gain_mode(dev->rtlsdr, 1);
-	r |= rtlsdr_set_tuner_gain(dev->rtlsdr, dev->gain);
+	r |= rtlsdr_set_tuner_gain(dev->rtlsdr, ngain);
 	if (r < 0)
-		log(LOG_ERR, "Failed to set gain to %0.2f for device #%d. Error %d.\n", (float)rtlsdr_get_tuner_gain(dev->rtlsdr) / 10.0, dev->device, r);
+		log(LOG_ERR, "Failed to set gain to %0.2f for device #%d: error %d\n",
+			(float)ngain / 10.f, dev->device, r);
 	else
-		log(LOG_INFO, "Device #%d: gain set to %0.2f dB\n", dev->device, (float)rtlsdr_get_tuner_gain(dev->rtlsdr) / 10.0);
+		log(LOG_INFO, "Device #%d: gain set to %0.2f dB\n", dev->device,
+			(float)rtlsdr_get_tuner_gain(dev->rtlsdr) / 10.f);
 
 	r = rtlsdr_set_agc_mode(dev->rtlsdr, 0);
 	if (r < 0) log(LOG_ERR, "Failed to disable AGC for device #%d. Error %d.\n", dev->device, r);

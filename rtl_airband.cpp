@@ -732,7 +732,7 @@ int main(int argc, char* argv[]) {
 		sigaction(SIGQUIT, &sigact, NULL);
 		sigaction(SIGTERM, &sigact, NULL);
 
-		uintptr_t tempptr = (uintptr_t)malloc(device_count * sizeof(device_t)+31);
+		uintptr_t tempptr = (uintptr_t)XCALLOC(1, device_count * sizeof(device_t)+31);
 		tempptr &= ~0x0F;
 		devices = (device_t *)tempptr;
 		shout_init();
@@ -740,17 +740,9 @@ int main(int argc, char* argv[]) {
 
 		if(root.exists("mixers")) {
 			Setting &mx = config.lookup("mixers");
-			mixers = (mixer_t *)calloc(mx.getLength(), sizeof(struct mixer_t));
-			if(!mixers) {
-				cerr<<"Cannot allocate memory for mixers\n";
-				error();
-			}
+			mixers = (mixer_t *)XCALLOC(mx.getLength(), sizeof(struct mixer_t));
 			if((mixer_count = parse_mixers(mx)) > 0) {
-				mixers = (mixer_t *)realloc(mixers, mixer_count * sizeof(struct mixer_t));
-				if(!mixers) {
-					cerr<<"Cannot allocate memory for mixers\n";
-					error();
-				}
+				mixers = (mixer_t *)XREALLOC(mixers, mixer_count * sizeof(struct mixer_t));
 			} else {
 				free(mixers);
 			}

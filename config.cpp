@@ -35,12 +35,7 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			continue;
 		}
 		if(!strncmp(outs[o]["type"], "icecast", 7)) {
-			channel->outputs[oo].data = malloc(sizeof(struct icecast_data));
-			if(channel->outputs[oo].data == NULL) {
-				cerr<<"Cannot allocate memory for outputs\n";
-				error();
-			}
-			memset(channel->outputs[oo].data, 0, sizeof(struct icecast_data));
+			channel->outputs[oo].data = XCALLOC(1, sizeof(struct icecast_data));
 			channel->outputs[oo].type = O_ICECAST;
 			icecast_data *idata = (icecast_data *)(channel->outputs[oo].data);
 			idata->hostname = strdup(outs[o]["server"]);
@@ -58,12 +53,7 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				idata->send_scan_freq_tags = 0;
 			channel->need_mp3 = 1;
 		} else if(!strncmp(outs[o]["type"], "file", 4)) {
-			channel->outputs[oo].data = malloc(sizeof(struct file_data));
-			if(channel->outputs[oo].data == NULL) {
-				cerr<<"Cannot allocate memory for outputs\n";
-				error();
-			}
-			memset(channel->outputs[oo].data, 0, sizeof(struct file_data));
+			channel->outputs[oo].data = XCALLOC(1, sizeof(struct file_data));
 			channel->outputs[oo].type = O_FILE;
 			file_data *fdata = (file_data *)(channel->outputs[oo].data);
 			fdata->dir = strdup(outs[o]["directory"]);
@@ -77,12 +67,7 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				cerr<<"Configuration error: mixers.["<<i<<"] outputs["<<o<<"]: mixer output is not allowed for mixers\n";
 				error();
 			}
-			channel->outputs[oo].data = malloc(sizeof(struct mixer_data));
-			if(channel->outputs[oo].data == NULL) {
-				cerr<<"Cannot allocate memory for outputs\n";
-				error();
-			}
-			memset(channel->outputs[oo].data, 0, sizeof(struct mixer_data));
+			channel->outputs[oo].data = XCALLOC(1, sizeof(struct mixer_data));
 			channel->outputs[oo].type = O_MIXER;
 			mixer_data *mdata = (mixer_data *)(channel->outputs[oo].data);
 			const char *name = (const char *)outs[o]["name"];
@@ -122,11 +107,7 @@ static struct freq_t *mk_freqlist( int n )
 		cerr<<"mk_freqlist: invalid list length " << n << "\n";
 		error();
 	}
-	struct freq_t *fl = (struct freq_t *)malloc(n * sizeof(struct freq_t));
-	if(NULL == fl) {
-		cerr<<"Cannot allocate memory for freqlist\n";
-		error();
-	}
+	struct freq_t *fl = (struct freq_t *)XCALLOC(n, sizeof(struct freq_t));
 	for(int i = 0; i < n; i++) {
 		fl[i].frequency = 0;
 		fl[i].label = NULL;
@@ -241,21 +222,13 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: no outputs defined\n";
 			error();
 		}
-		channel->outputs = (output_t *)malloc(channel->output_count * sizeof(struct output_t));
-		if(channel->outputs == NULL) {
-			cerr<<"Cannot allocate memory for outputs\n";
-			error();
-		}
+		channel->outputs = (output_t *)XCALLOC(channel->output_count, sizeof(struct output_t));
 		int outputs_enabled = parse_outputs(outputs, channel, i, j, false);
 		if(outputs_enabled < 1) {
 			cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: no outputs defined\n";
 			error();
 		}
-		channel->outputs = (output_t *)realloc(channel->outputs, outputs_enabled * sizeof(struct output_t));
-		if(channel->outputs == NULL) {
-			cerr<<"Cannot allocate memory for outputs\n";
-			error();
-		}
+		channel->outputs = (output_t *)XREALLOC(channel->outputs, outputs_enabled * sizeof(struct output_t));
 		channel->output_count = outputs_enabled;
 
 		dev->base_bins[jj] = dev->bins[jj] = (int)ceil((channel->freqlist[0].frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
@@ -355,21 +328,13 @@ int parse_mixers(libconfig::Setting &mx) {
 			cerr<<"Configuration error: mixers.["<<i<<"]: no outputs defined\n";
 			error();
 		}
-		channel->outputs = (output_t *)calloc(channel->output_count, sizeof(struct output_t));
-		if(channel->outputs == NULL) {
-			cerr<<"Cannot allocate memory for outputs\n";
-			error();
-		}
+		channel->outputs = (output_t *)XCALLOC(channel->output_count, sizeof(struct output_t));
 		int outputs_enabled = parse_outputs(outputs, channel, i, 0, true);
 		if(outputs_enabled < 1) {
 			cerr<<"Configuration error: mixers.["<<i<<"]: no outputs defined\n";
 			error();
 		}
-		channel->outputs = (output_t *)realloc(channel->outputs, outputs_enabled * sizeof(struct output_t));
-		if(channel->outputs == NULL) {
-			cerr<<"Cannot allocate memory for outputs\n";
-			error();
-		}
+		channel->outputs = (output_t *)XREALLOC(channel->outputs, outputs_enabled * sizeof(struct output_t));
 		channel->output_count = outputs_enabled;
 		mm++;
 	}

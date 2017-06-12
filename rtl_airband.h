@@ -251,6 +251,8 @@ void log(int priority, const char *format, ...);
 void tag_queue_put(device_t *dev, int freq, struct timeval tv);
 void tag_queue_get(device_t *dev, struct freq_tag *tag);
 void tag_queue_advance(device_t *dev);
+void *xcalloc(size_t nmemb, size_t size, const char *file, const int line, const char *func);
+void *xrealloc(void *ptr, size_t size, const char *file, const int line, const char *func);
 void init_debug (char *file);
 void close_debug();
 extern FILE *debugf;
@@ -258,6 +260,8 @@ extern FILE *debugf;
 	do { if (DEBUG) fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); fflush(debugf); } while (0)
 #define debug_bulk_print(fmt, ...) \
 	do { if (DEBUG) fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); } while (0)
+#define XCALLOC(nmemb, size) xcalloc((nmemb), (size), __FILE__, __LINE__, __func__)
+#define XREALLOC(ptr, size) xrealloc((ptr), (size), __FILE__, __LINE__, __func__)
 
 // mixer.cpp
 mixer_t *getmixerbyname(const char *name);

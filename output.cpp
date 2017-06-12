@@ -136,18 +136,10 @@ class LameTone
 
 public:
 	LameTone(mix_modes mixmode, int msec, unsigned int hz = 0) : _data(NULL), _bytes(0) {
-		_data = (unsigned char *)malloc(LAMEBUF_SIZE);
-		if (!_data) {
-			log(LOG_WARNING, "LameTone: can't alloc %u bytes\n", LAMEBUF_SIZE);
-			return;
-		}
+		_data = (unsigned char *)XCALLOC(1, LAMEBUF_SIZE);
 
 		int samples = (msec * WAVE_RATE) / 1000;
-		float *buf = (float *)malloc(samples * sizeof(float));
-		if (!buf) {
-			log(LOG_WARNING, "LameTone: can't alloc %u samples\n", samples);
-			return;
-		}
+		float *buf = (float *)XCALLOC(samples, sizeof(float));
 
 		if (hz > 0) {
 			const float period = 1.0 / (float)hz;
@@ -303,12 +295,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 			}
 			if(fdata->suffix == NULL || strcmp(suffix, fdata->suffix)) {	// need to open new file
 				fdata->suffix = strdup(suffix);
-				char *filename = (char *)malloc(strlen(fdata->dir) + strlen(fdata->prefix) + strlen(fdata->suffix) + 2);
-				if(filename == NULL) {
-					log(LOG_WARNING, "process_outputs: cannot allocate memory, output disabled\n");
-					channel->outputs[k].enabled = false;
-					continue;
-				}
+				char *filename = (char *)XCALLOC(1, strlen(fdata->dir) + strlen(fdata->prefix) + strlen(fdata->suffix) + 2);
 				sprintf(filename, "%s/%s%s", fdata->dir, fdata->prefix, fdata->suffix);
 				if(fdata->f != NULL) {
 					//todo: finalize file stream with lame_encode_flush_nogap

@@ -132,10 +132,18 @@ Building
 
    The program runs as a daemon (background process) by default, so it may look like
    it has exited right after startup. Diagnostic messages are printed to syslog
-   (on Raspbian they are directed to `/var/log/messages` by default).
+   (on Raspbian Jessie they are directed to `/var/log/daemon.log` by default).
 
  * If you wish to start the program automatically at boot, you can use example startup
-   scripts from `init.d` subdirectory. Example for Debian / Raspbian:
+   scripts from `init.d` subdirectory.
+
+   Example for Debian / Raspbian Jessie or newer (or any other systemd-based distro):
+
+        sudo cp init.d/rtl_airband.service /etc/systemd/system
+        sudo systemctl daemon-reload
+        sudo systemctl enable rtl_airband
+
+   Example for Debian / Raspbian Wheezy or older (sysvinit-based):
 
         sudo cp init.d/rtl_airband-debian.sh /etc/init.d/rtl_airband
         sudo chmod 755 /etc/init.d/rtl_airband

@@ -373,7 +373,7 @@ void* output_thread(void* params) {
 
 	if(DEBUG) gettimeofday(&ts, NULL);
 	while (!do_exit) {
-		pthread_cond_wait(&mp3_cond, &mp3_mutex);
+		safe_cond_wait(&mp3_cond, &mp3_mutex);
 		for (int i = 0; i < mixer_count; i++) {
 			if(mixers[i].enabled == false) continue;
 			channel_t *channel = &mixers[i].channel;

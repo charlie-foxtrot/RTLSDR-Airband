@@ -640,7 +640,7 @@ void demodulate() {
 				ts.tv_sec = te.tv_sec;
 				ts.tv_usec = te.tv_usec;
 			}
-			pthread_cond_signal(&mp3_cond);
+			safe_cond_signal(&mp3_cond, &mp3_mutex);
 			dev->row++;
 			if (dev->row == 12) {
 				dev->row = 0;

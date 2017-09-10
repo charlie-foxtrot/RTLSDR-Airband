@@ -36,6 +36,8 @@
 #define ALIGN2 __attribute__((aligned(32)))
 #define SLEEP(x) usleep(x * 1000)
 #define THREAD pthread_t
+#define safe_cond_signal(n, m) pthread_mutex_lock(m); pthread_cond_signal(n); pthread_mutex_unlock(m)
+#define safe_cond_wait(n, m) pthread_mutex_lock(m); pthread_cond_wait(n, m); pthread_mutex_unlock(m)
 #define GOTOXY(x, y) printf("%c[%d;%df",0x1B,y,x)
 #ifndef SYSCONFDIR
 #define SYSCONFDIR "/usr/local/etc"

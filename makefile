@@ -14,6 +14,8 @@ ifneq ($(RTL_AIRBAND_VERSION), \"\")
 endif
 export CXXFLAGS = $(CFLAGS)
 LDLIBS = -lrt -lm -lvorbisenc -lmp3lame -lshout -lpthread -lrtlsdr -lconfig++
+INSTALL_USER = root
+INSTALL_GROUP = root
 
 SUBDIRS = hello_fft
 CLEANDIRS = $(SUBDIRS:%=clean-%)
@@ -50,6 +52,11 @@ else ifeq ($(PLATFORM), x86)
   CFLAGS += -march=native
   LDLIBS += -lfftw3f
   DEPS = $(OBJ)
+else ifeq ($(PLATFORM), x86-freebsd)
+  CFLAGS += -march=native -I/usr/local/include
+  LDLIBS += -lfftw3f -lc++
+  DEPS = $(OBJ)
+  INSTALL_GROUP = wheel
 else
   DEPS =
 endif
@@ -64,7 +71,8 @@ ifndef DEPS
 	\tPLATFORM=rpiv2 make\t\tRaspberry Pi V2 (NEON FPU, use BCM VideoCore for FFT)\n \
 	\tPLATFORM=armv7-generic make\tOther ARMv7 platforms, like Cubieboard (NEON FPU, use main CPU for FFT)\n \
 	\tPLATFORM=armv8-generic make\t64-bit ARM platforms, like Odroid C2 (use main CPU for FFT)\n \
-	\tPLATFORM=x86 make\t\tbuild binary for x86\n\n \
+	\tPLATFORM=x86 make\t\tbuild binary for x86 (Linux)\n \
+	\tPLATFORM=x86-freebsd gmake\tbuild binary for x86 (FreeBSD)\n\n \
 	Additional options:\n \
 	\tNFM=1\t\t\t\tInclude support for Narrow FM demodulation\n \
 	\t\t\t\t\tWarning: this incurs noticeable performance penalty both for AM and FM\n \
@@ -91,10 +99,10 @@ clean: $(CLEANDIRS)
 	rm -f *.o rtl_airband
 
 install: $(BIN)
-	install -d -o root -g root $(BINDIR)
-	install -o root -g root -m 755 $(BIN) $(BINDIR)
-	install -d -o root -g root $(SYSCONFDIR)
-	test -f $(SYSCONFDIR)/$(CFG) || install -o root -g root -m 600 $(DEFCONFIG) $(SYSCONFDIR)/$(CFG)
+	install -d -o $(INSTALL_USER) -g $(INSTALL_GROUP) $(BINDIR)
+	install -o $(INSTALL_USER) -g $(INSTALL_GROUP) -m 755 $(BIN) $(BINDIR)
+	install -d -o $(INSTALL_USER) -g $(INSTALL_GROUP) $(SYSCONFDIR)
+	test -f $(SYSCONFDIR)/$(CFG) || install -o $(INSTALL_USER) -g $(INSTALL_GROUP) -m 600 $(DEFCONFIG) $(SYSCONFDIR)/$(CFG)
 	@printf "\n *** Done. If this is a new install, edit $(SYSCONFDIR)/$(CFG) to suit your needs.\n\n"
 
 $(CLEANDIRS):

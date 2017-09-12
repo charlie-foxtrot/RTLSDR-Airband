@@ -1,7 +1,8 @@
 RTLSDR-Airband
 =====================
 
-RTLSDR Airband is a Linux program intended for AM/NFM voice channels reception and online streaming to services such as liveatc.net
+RTLSDR Airband is a Linux/Unix program intended for AM/NFM voice channels reception and online streaming
+to services such as liveatc.net.
 
 Features
 ---------------------
@@ -118,7 +119,16 @@ Building
         sudo apt-get install libfftw3-dev
         PLATFORM=x86 NFM=1 make
 
- * Install the software:
+   There are some FreeBSD-specific options, which must be enabled when building for this OS,
+   so use this instead:
+
+	PLATFORM=x86-freebsd gmake
+
+ * Install the software. On FreeBSD:
+
+	PLATFORM=x86-freebsd gmake install
+
+   Other platforms:
 
         make install
 

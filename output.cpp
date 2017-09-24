@@ -330,6 +330,25 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 		} else if(channel->outputs[k].type == O_MIXER) {
 			mixer_data *mdata = (mixer_data *)(channel->outputs[k].data);
 			mixer_put_samples(mdata->mixer, mdata->input, channel->waveout, WAVE_BATCH);
+#ifdef PULSE
+		} else if(channel->outputs[k].type == O_PULSE) {
+			pulse_data *pdata = (pulse_data *)(channel->outputs[k].data);
+
+			if (pdata->simple == NULL)
+				continue;
+
+			if(pdata->continuous == false && channel->axcindicate == ' ')
+				continue;
+
+			int pa_error;
+
+			if (pa_simple_write(pdata->simple, channel->waveout, (size_t) WAVE_BATCH * sizeof(float), &pa_error) < 0) {
+				log(LOG_WARNING, "Failed to write to pulse, output disabled: %s.\n", pa_strerror(pa_error));
+
+				pa_simple_free(pdata->simple);
+				pdata->simple = NULL;
+	        }
+#endif
 		}
 	}
 }
@@ -355,6 +374,15 @@ void disable_channel_outputs(channel_t *channel) {
 		} else if(output->type == O_MIXER) {
 			mixer_data *mdata = (mixer_data *)(output->data);
 			mixer_disable_input(mdata->mixer, mdata->input);
+#ifdef PULSE
+		} else if(output->type == O_PULSE) {
+			pulse_data *pdata = (pulse_data *)(output->data);
+
+			if (pdata->simple != NULL)
+			{
+				pa_simple_free(pdata->simple);
+			}
+#endif
 		}
 	}
 }

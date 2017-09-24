@@ -64,6 +64,11 @@ ifeq ($(NFM), 1)
   CFLAGS += -DNFM
 endif
 
+ifeq ($(PULSE), 1)
+  CFLAGS += -DPULSE
+  LDLIBS += -lpulse -lpulse-simple
+endif
+
 $(BIN): $(DEPS)
 ifndef DEPS
 	@printf "\nPlease set PLATFORM variable to one of available platforms:\n \

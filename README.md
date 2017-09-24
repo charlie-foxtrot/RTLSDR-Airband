@@ -88,6 +88,8 @@ Building
 
    `PLATFORM=platform_name` - selects the hardware platform. This option is mandatory. See below.
 
+   `PULSE=1` - enables PulseAudio support. By default, PulseAudio is disabled.
+
    `NFM=1` - enables NFM support. By default, NFM is disabled.
 
    **Warning:** Do not enable NFM, if you only use AM (especially on low-power platforms, like RPi).

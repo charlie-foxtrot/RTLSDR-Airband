@@ -28,6 +28,10 @@
 #ifdef USE_BCM_VC
 #include "hello_fft/gpu_fft.h"
 #endif
+#ifdef PULSE
+#include <pulse/simple.h>
+#include <pulse/error.h>
+#endif
 
 #ifndef RTL_AIRBAND_VERSION
 #define RTL_AIRBAND_VERSION "2.3.0"
@@ -110,12 +114,32 @@ struct file_data {
 	FILE *f;
 };
 
+#ifdef PULSE
+struct pulse_data {
+	const char *server;
+	const char *name;
+	const char *dev;
+	const char *stream_name;
+
+	bool continuous;
+
+	pa_simple *simple;
+};
+#endif
+
 struct mixer_data {
 	struct mixer_t *mixer;
 	int input;
 };
 
-enum output_type { O_ICECAST, O_FILE, O_MIXER };
+enum output_type {
+	O_ICECAST,
+	O_FILE,
+	O_MIXER
+#ifdef PULSE
+	, O_PULSE
+#endif
+};
 struct output_t {
 	enum output_type type;
 	bool enabled;

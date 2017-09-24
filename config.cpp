@@ -90,6 +90,39 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			}
 			debug_print("dev[%d].chan[%d].out[%d] connected to mixer %s as input %d (ampfactor=%.1f balance=%.1f)\n",
 				i, j, o, name, mdata->input, ampfactor, balance);
+#ifdef PULSE
+		} else if(!strncmp(outs[o]["type"], "pulse", 5)) {
+			channel->outputs[oo].data = XCALLOC(1, sizeof(struct pulse_data));
+			channel->outputs[oo].type = O_PULSE;
+
+			pulse_data *pdata = (pulse_data *)(channel->outputs[oo].data);
+			pdata->continuous = outs[o].exists("continuous") ?
+				(bool)(outs[o]["continuous"]) : false;
+			pdata->server = outs[o].exists("server") ? strdup(outs[o]["server"]) : NULL;
+			pdata->name = strdup(outs[o].exists("name") ? outs[o]["name"] : "rtl_airband");
+			pdata->dev = outs[o].exists("dev") ? strdup(outs[o]["dev"]) : NULL;
+
+			if (outs[o].exists("stream_name")) {
+				pdata->stream_name = strdup(outs[o]["stream_name"]);
+			} else {
+				char buf[1024];
+				snprintf(buf, sizeof(buf), "%.3f MHz", (float)channel->freqlist[0].frequency  / 1000000.0f);
+				pdata->stream_name = strdup(buf);
+			}
+
+			static const pa_sample_spec ss = {
+				.format = PA_SAMPLE_FLOAT32LE,
+				.rate = WAVE_RATE,
+				.channels = 1,
+			};
+
+			int pa_error;
+
+			if (!(pdata->simple = pa_simple_new(pdata->server, pdata->name, PA_STREAM_PLAYBACK, pdata->dev, pdata->stream_name, &ss, NULL, NULL, &pa_error))) {
+				cerr<<"Configuration error: Failed to connect to pulse audio server: "<<pa_strerror(pa_error)<<"\n";
+				error();
+			}
+#endif
 		} else {
 			cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown output type\n";
 			error();

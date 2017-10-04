@@ -28,6 +28,9 @@
 #include <vorbis/vorbisenc.h>
 #include <shout/shout.h>
 #include <lame/lame.h>
+#ifdef PULSE
+#include <pulse/pulseaudio.h>
+#endif
 #include <syslog.h>
 #include <cstdlib>
 #include <cstring>
@@ -333,21 +336,10 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 #ifdef PULSE
 		} else if(channel->outputs[k].type == O_PULSE) {
 			pulse_data *pdata = (pulse_data *)(channel->outputs[k].data);
-
-			if (pdata->simple == NULL)
-				continue;
-
 			if(pdata->continuous == false && channel->axcindicate == ' ')
 				continue;
 
-			int pa_error;
-
-			if (pa_simple_write(pdata->simple, channel->waveout, (size_t) WAVE_BATCH * sizeof(float), &pa_error) < 0) {
-				log(LOG_WARNING, "Failed to write to pulse, output disabled: %s.\n", pa_strerror(pa_error));
-
-				pa_simple_free(pdata->simple);
-				pdata->simple = NULL;
-	        }
+			pulse_write_stream(pdata, channel->mode, channel->waveout, channel->waveout_r, (size_t)WAVE_BATCH * sizeof(float));
 #endif
 		}
 	}
@@ -377,11 +369,7 @@ void disable_channel_outputs(channel_t *channel) {
 #ifdef PULSE
 		} else if(output->type == O_PULSE) {
 			pulse_data *pdata = (pulse_data *)(output->data);
-
-			if (pdata->simple != NULL)
-			{
-				pa_simple_free(pdata->simple);
-			}
+			pulse_shutdown(pdata);
 #endif
 		}
 	}
@@ -446,30 +434,47 @@ void* output_thread(void* params) {
 }
 
 // reconnect as required
-void* icecast_check(void* params) {
+void* output_check_thread(void* params) {
 	while (!do_exit) {
 		SLEEP(10000);
 		for (int i = 0; i < device_count; i++) {
 			device_t* dev = devices + i;
 			for (int j = 0; j < dev->channel_count; j++) {
 				for (int k = 0; k < dev->channels[j].output_count; k++) {
-					if(dev->channels[j].outputs[k].type != O_ICECAST)
-						continue;
-					icecast_data *icecast = (icecast_data *)(dev->channels[j].outputs[k].data);
-					if(dev->failed) {
-						if(icecast->shout) {
-							log(LOG_WARNING, "Device #%d failed, disconnecting stream %s:%d/%s\n",
-								i, icecast->hostname, icecast->port, icecast->mountpoint);
-							shout_close(icecast->shout);
-							shout_free(icecast->shout);
-							icecast->shout = NULL;
+					if(dev->channels[j].outputs[k].type == O_ICECAST) {
+						icecast_data *icecast = (icecast_data *)(dev->channels[j].outputs[k].data);
+						if(dev->failed) {
+							if(icecast->shout) {
+								log(LOG_WARNING, "Device #%d failed, disconnecting stream %s:%d/%s\n",
+									i, icecast->hostname, icecast->port, icecast->mountpoint);
+								shout_close(icecast->shout);
+								shout_free(icecast->shout);
+								icecast->shout = NULL;
+							}
+						} else {
+							if (icecast->shout == NULL){
+								log(LOG_NOTICE, "Trying to reconnect to %s:%d/%s...\n",
+									icecast->hostname, icecast->port, icecast->mountpoint);
+								shout_setup(icecast, dev->channels[j].mode);
+							}
 						}
-					} else {
-						if (icecast->shout == NULL){
-							log(LOG_NOTICE, "Trying to reconnect to %s:%d/%s...\n",
-								icecast->hostname, icecast->port, icecast->mountpoint);
-							shout_setup(icecast, dev->channels[j].mode);
+#ifdef PULSE
+					} else if(dev->channels[j].outputs[k].type == O_PULSE) {
+						pulse_data *pdata = (pulse_data *)(dev->channels[j].outputs[k].data);
+						if(dev->failed) {
+							if(pdata->context) {	// TODO: pa_context_get_state
+								log(LOG_WARNING, "Device #%d failed, disconnecting pulse server %s\n",
+									i, pdata->server);
+								pulse_shutdown(pdata);
+							}
+						} else {
+							if (pdata->context == NULL){
+								log(LOG_NOTICE, "Trying to reconnect to pulse server %s...\n",
+									pdata->server);
+								pulse_setup(pdata, dev->channels[j].mode);
+							}
 						}
+#endif
 					}
 				}
 			}
@@ -479,13 +484,22 @@ void* icecast_check(void* params) {
 			for (int k = 0; k < mixers[i].channel.output_count; k++) {
 				if(mixers[i].channel.outputs[k].enabled == false)
 					continue;
-				if(mixers[i].channel.outputs[k].type != O_ICECAST)
-					continue;
-				icecast_data *icecast = (icecast_data *)(mixers[i].channel.outputs[k].data);
-				if(icecast->shout == NULL) {
-					log(LOG_NOTICE, "Trying to reconnect to %s:%d/%s...\n",
-						icecast->hostname, icecast->port, icecast->mountpoint);
-					shout_setup(icecast, mixers[i].channel.mode);
+				if(mixers[i].channel.outputs[k].type == O_ICECAST) {
+					icecast_data *icecast = (icecast_data *)(mixers[i].channel.outputs[k].data);
+					if(icecast->shout == NULL) {
+						log(LOG_NOTICE, "Trying to reconnect to %s:%d/%s...\n",
+							icecast->hostname, icecast->port, icecast->mountpoint);
+						shout_setup(icecast, mixers[i].channel.mode);
+					}
+#ifdef PULSE
+				} else if(mixers[i].channel.outputs[k].type == O_PULSE) {
+					pulse_data *pdata = (pulse_data *)(mixers[i].channel.outputs[k].data);
+					if (pdata->context == NULL){
+						log(LOG_NOTICE, "Trying to reconnect to pulse server %s...\n",
+							pdata->server);
+						pulse_setup(pdata, mixers[i].channel.mode);
+					}
+#endif
 				}
 			}
 		}

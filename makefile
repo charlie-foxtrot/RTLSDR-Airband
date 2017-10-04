@@ -66,7 +66,8 @@ endif
 
 ifeq ($(PULSE), 1)
   CFLAGS += -DPULSE
-  LDLIBS += -lpulse -lpulse-simple
+  LDLIBS += -lpulse
+  DEPS += pulse.o
 endif
 
 $(BIN): $(DEPS)

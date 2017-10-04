@@ -29,8 +29,8 @@
 #include "hello_fft/gpu_fft.h"
 #endif
 #ifdef PULSE
-#include <pulse/simple.h>
-#include <pulse/error.h>
+#include <pulse/context.h>
+#include <pulse/stream.h>
 #endif
 
 #ifndef RTL_AIRBAND_VERSION
@@ -120,10 +120,9 @@ struct pulse_data {
 	const char *name;
 	const char *dev;
 	const char *stream_name;
-
 	bool continuous;
-
-	pa_simple *simple;
+	pa_context *context;
+	pa_stream *left, *right;
 };
 #endif
 
@@ -256,7 +255,7 @@ lame_t airlame_init(mix_modes mixmode);
 void shout_setup(icecast_data *icecast, mix_modes mixmode);
 void disable_device_outputs(device_t *dev);
 void disable_channel_outputs(channel_t *channel);
-void *icecast_check(void* params);
+void *output_check_thread(void* params);
 void *output_thread(void* params);
 
 // rtl_airband.cpp
@@ -302,5 +301,12 @@ const char *mixer_get_error();
 // config.cpp
 int parse_devices(libconfig::Setting &devs);
 int parse_mixers(libconfig::Setting &mx);
+
+// pulse.cpp
+void pulse_init();
+int pulse_setup(pulse_data *pdata, mix_modes mixmode);
+void pulse_start();
+void pulse_shutdown(pulse_data *pdata);
+void pulse_write_stream(pulse_data *pdata, mix_modes mode, float *data_left, float *data_right, size_t len);
 
 // vim: ts=4

@@ -109,19 +109,6 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				snprintf(buf, sizeof(buf), "%.3f MHz", (float)channel->freqlist[0].frequency  / 1000000.0f);
 				pdata->stream_name = strdup(buf);
 			}
-
-			static const pa_sample_spec ss = {
-				.format = PA_SAMPLE_FLOAT32LE,
-				.rate = WAVE_RATE,
-				.channels = 1,
-			};
-
-			int pa_error;
-
-			if (!(pdata->simple = pa_simple_new(pdata->server, pdata->name, PA_STREAM_PLAYBACK, pdata->dev, pdata->stream_name, &ss, NULL, NULL, &pa_error))) {
-				cerr<<"Configuration error: Failed to connect to pulse audio server: "<<pa_strerror(pa_error)<<"\n";
-				error();
-			}
 #endif
 		} else {
 			cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown output type\n";

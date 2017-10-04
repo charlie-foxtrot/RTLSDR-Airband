@@ -910,8 +910,14 @@ int main(int argc, char* argv[]) {
 				channel->lame = airlame_init(channel->mode);
 			for (int k = 0; k < channel->output_count; k++) {
 				output_t *output = channel->outputs + k;
-				if(output->type == O_ICECAST)
+				if(output->type == O_ICECAST) {
 					shout_setup((icecast_data *)(output->data), channel->mode);
+#ifdef PULSE
+				} else if(output->type == O_PULSE) {
+					pulse_init();
+					pulse_setup((pulse_data *)(output->data), channel->mode);
+#endif
+				}
 			}
 		}
 		pthread_create(&dev->rtl_thread, NULL, &rtlsdr_exec, dev);
@@ -951,12 +957,15 @@ int main(int argc, char* argv[]) {
 		}
 	}
 	THREAD thread2;
-	pthread_create(&thread2, NULL, &icecast_check, NULL);
+	pthread_create(&thread2, NULL, &output_check_thread, NULL);
 	THREAD thread3;
 	pthread_create(&thread3, NULL, &output_thread, NULL);
 	THREAD thread4;
 	if(mixer_count > 0)
 		pthread_create(&thread4, NULL, &mixer_thread, NULL);
+#ifdef PULSE
+	pulse_start();
+#endif
 
 	demodulate();
 
@@ -969,6 +978,7 @@ int main(int argc, char* argv[]) {
 	}
 	log(LOG_INFO, "rtlsdr threads closed\n");
 	close_debug();
+// FIXME: pulseaudio cleanup
 	return 0;
 }
 // vim: ts=4

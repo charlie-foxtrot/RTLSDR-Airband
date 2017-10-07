@@ -302,11 +302,13 @@ const char *mixer_get_error();
 int parse_devices(libconfig::Setting &devs);
 int parse_mixers(libconfig::Setting &mx);
 
+#ifdef PULSE
 // pulse.cpp
 void pulse_init();
 int pulse_setup(pulse_data *pdata, mix_modes mixmode);
 void pulse_start();
 void pulse_shutdown(pulse_data *pdata);
 void pulse_write_stream(pulse_data *pdata, mix_modes mode, float *data_left, float *data_right, size_t len);
+#endif
 
 // vim: ts=4

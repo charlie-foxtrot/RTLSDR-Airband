@@ -105,6 +105,10 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			if (outs[o].exists("stream_name")) {
 				pdata->stream_name = strdup(outs[o]["stream_name"]);
 			} else {
+				if(parsing_mixers) {
+					cerr<<"Configuration error: mixers.["<<i<<"] outputs["<<o<<"]: PulseAudio outputs of mixers must have stream_name defined\n";
+					error();
+				}
 				char buf[1024];
 				snprintf(buf, sizeof(buf), "%.3f MHz", (float)channel->freqlist[0].frequency  / 1000000.0f);
 				pdata->stream_name = strdup(buf);

@@ -173,12 +173,29 @@ void pulse_start() {
 }
 
 void pulse_write_stream(pulse_data *pdata, mix_modes mode, float *data_left, float *data_right, size_t len) {
+	pa_usec_t latency;
+	int ret;
+
 	PA_LOOP_LOCK(mainloop);
 	if(!pdata->context || pa_context_get_state(pdata->context) != PA_CONTEXT_READY)
 		goto end;
 	if(!pdata->left || pa_stream_get_state(pdata->left) != PA_STREAM_READY)
 		goto end;
 
+	ret = pa_stream_get_latency(pdata->left, &latency, NULL);
+	if(ret < 0) {
+		log(LOG_WARNING, "pulse: %s: failed to retrieve latency info for stream \"%s\" (error is: %s), disconnecting\n",
+			COALESCE(pdata->server), pdata->stream_name, pa_strerror(ret));
+		pulse_shutdown(pdata);
+		goto end;
+	}
+	if(latency > PULSE_STREAM_LATENCY_LIMIT) {
+		log(LOG_INFO, "pulse: %s: exceeded max backlog for stream \"%s\", disconnecting\n",
+			COALESCE(pdata->server), pdata->stream_name);
+		pulse_shutdown(pdata);
+		goto end;
+	}
+	debug_bulk_print("%s: stream=\"%s\" ret=%d latency=%f ms\n", COALESCE(pdata->server), pdata->stream_name, ret, (float)latency / 1000.0f);
         if(pa_stream_write(pdata->left, data_left, len, NULL, 0LL, PA_SEEK_RELATIVE) < 0) {
 		log(LOG_NOTICE, "pa_stream_write failed, disconnecting server %s\n", COALESCE(pdata->server));
 		pulse_shutdown(pdata);

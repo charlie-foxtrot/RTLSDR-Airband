@@ -303,6 +303,7 @@ int parse_devices(libconfig::Setting &devs);
 int parse_mixers(libconfig::Setting &mx);
 
 #ifdef PULSE
+#define PULSE_STREAM_LATENCY_LIMIT 10000000UL
 // pulse.cpp
 void pulse_init();
 int pulse_setup(pulse_data *pdata, mix_modes mixmode);

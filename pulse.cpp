@@ -23,7 +23,7 @@
 #include <pulse/pulseaudio.h>
 #include "rtl_airband.h"
 
-#define COALESCE(x) ((x) ? (x) : "<unspecified>")
+#define SERVER_IFNOTNULL(x) ((x) ? (x) : "<default_server>")
 #define PA_LOOP_LOCK(x) if(!pa_threaded_mainloop_in_thread(x)) { pa_threaded_mainloop_lock(x); }
 #define PA_LOOP_UNLOCK(x) if(!pa_threaded_mainloop_in_thread(x)) { pa_threaded_mainloop_unlock(x); }
 
@@ -56,12 +56,12 @@ void pulse_shutdown(pulse_data *pdata) {
 static void pulse_stream_underflow_cb(pa_stream *stream, void *userdata) {
 	pulse_data *pdata = (pulse_data *)userdata;
 	if(pdata->continuous)		// do not flood the logs on every squelch closing
-		log(LOG_INFO, "pulse: server %s: stream \"%s\": underflow\n", COALESCE(pdata->server), pdata->stream_name);
+		log(LOG_INFO, "pulse: %s: stream \"%s\": underflow\n", SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
 }
 
 static void pulse_stream_overflow_cb(pa_stream *stream, void *userdata) {
 	pulse_data *pdata = (pulse_data *)userdata;
-	log(LOG_INFO, "pulse: %s: stream \"%s\": overflow\n", COALESCE(pdata->server), pdata->stream_name);
+	log(LOG_INFO, "pulse: %s: stream \"%s\": overflow\n", SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
 }
 
 static void stream_state_cb(pa_stream *stream, void *userdata) {
@@ -73,10 +73,10 @@ static void stream_state_cb(pa_stream *stream, void *userdata) {
 	case PA_STREAM_CREATING:
 		break;
 	case PA_STREAM_FAILED:
-		log(LOG_WARNING, "pulse: %s: stream \"%s\" failed", COALESCE(pdata->server), pdata->stream_name);
+		log(LOG_WARNING, "pulse: %s: stream \"%s\" failed", SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
 		break;
 	case PA_STREAM_TERMINATED:
-		log(LOG_WARNING, "pulse: %s: stream \"%s\" terminated", COALESCE(pdata->server), pdata->stream_name);
+		log(LOG_WARNING, "pulse: %s: stream \"%s\" terminated", SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
 		break;
 	break;
 	}
@@ -91,7 +91,7 @@ static void pulse_setup_streams(pulse_data *pdata) {
 	PA_LOOP_LOCK(mainloop);
 	if(!(pdata->left = pa_stream_new(pdata->context, pdata->stream_name, &ss, NULL))) {
 		log(LOG_ERR, "pulse: %s: failed to create stream \"%s\": %s",
-			COALESCE(pdata->server), pdata->stream_name, pa_strerror(pa_context_errno(pdata->context)));
+			SERVER_IFNOTNULL(pdata->server), pdata->stream_name, pa_strerror(pa_context_errno(pdata->context)));
 		goto fail;
 	}
 	pa_stream_set_state_callback(pdata->left, stream_state_cb, pdata);
@@ -102,10 +102,10 @@ static void pulse_setup_streams(pulse_data *pdata) {
 				      |PA_STREAM_ADJUST_LATENCY
 				      |PA_STREAM_AUTO_TIMING_UPDATE), NULL, NULL) < 0) {
 		log(LOG_ERR, "pulse: %s: failed to connect stream \"%s\": %s",
-			COALESCE(pdata->server), pdata->stream_name, pa_strerror(pa_context_errno(pdata->context)));
+			SERVER_IFNOTNULL(pdata->server), pdata->stream_name, pa_strerror(pa_context_errno(pdata->context)));
 		goto fail;
 	}
-	log(LOG_INFO, "pulse: %s stream \"%s\" connected", COALESCE(pdata->server), pdata->stream_name);
+	log(LOG_INFO, "pulse: %s: stream \"%s\" connected", SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
 	PA_LOOP_UNLOCK(mainloop);
 	return;
 fail:
@@ -116,19 +116,19 @@ static void pulse_ctx_state_cb(pa_context *c, void *userdata) {
 	pulse_data *pdata = (pulse_data *)userdata;
 	switch (pa_context_get_state(c)) {
 	case PA_CONTEXT_READY:
-		log(LOG_INFO, "pulse: connected to %s", COALESCE(pdata->server));
+		log(LOG_INFO, "pulse: %s: connected", SERVER_IFNOTNULL(pdata->server));
 		pulse_setup_streams(pdata);
 		break;
 	case PA_CONTEXT_TERMINATED:
-		log(LOG_INFO, "pulse: connection to %s terminated", COALESCE(pdata->server));
+		log(LOG_INFO, "pulse: %s: connection terminated", SERVER_IFNOTNULL(pdata->server));
 		break;
 	case PA_CONTEXT_FAILED:
-		log(LOG_ERR, "pulse: connection to %s failed: %s", COALESCE(pdata->server),
+		log(LOG_ERR, "pulse: %s: connection failed: %s", SERVER_IFNOTNULL(pdata->server),
 			 pa_strerror(pa_context_errno(pdata->context)));
 		pulse_shutdown(pdata);
 		break;
 	case PA_CONTEXT_CONNECTING:
-		log(LOG_INFO, "pulse: connecting to %s...", COALESCE(pdata->server));
+		log(LOG_INFO, "pulse: %s: connecting", SERVER_IFNOTNULL(pdata->server));
 		break;
 	case PA_CONTEXT_UNCONNECTED:
 	case PA_CONTEXT_AUTHORIZING:
@@ -151,7 +151,7 @@ int pulse_setup(pulse_data *pdata, mix_modes mixmode) {
 	}
 	pa_context_set_state_callback(pdata->context, &pulse_ctx_state_cb, pdata);
 	if(pa_context_connect(pdata->context, pdata->server, PA_CONTEXT_NOFLAGS, NULL) < 0) {
-		log(LOG_WARNING, "pulse: failed to connect to %s: %s", COALESCE(pdata->server),
+		log(LOG_WARNING, "pulse: %s: failed to connect: %s", SERVER_IFNOTNULL(pdata->server),
 			pa_strerror(pa_context_errno(pdata->context)));
 		pa_context_unref(pdata->context);
 		pdata->context = NULL;
@@ -180,21 +180,21 @@ void pulse_write_stream(pulse_data *pdata, mix_modes mode, float *data_left, flo
 	ret = pa_stream_get_latency(pdata->left, &latency, NULL);
 	if(ret < 0) {
 		log(LOG_WARNING, "pulse: %s: failed to get latency info for stream \"%s\" (error is: %s), disconnecting\n",
-			COALESCE(pdata->server), pdata->stream_name, pa_strerror(ret));
+			SERVER_IFNOTNULL(pdata->server), pdata->stream_name, pa_strerror(ret));
 		pulse_shutdown(pdata);
 		goto end;
 	}
 	if(latency > PULSE_STREAM_LATENCY_LIMIT) {
 		log(LOG_INFO, "pulse: %s: exceeded max backlog for stream \"%s\", disconnecting\n",
-			COALESCE(pdata->server), pdata->stream_name);
+			SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
 		pulse_shutdown(pdata);
 		goto end;
 	}
 	debug_bulk_print("pulse: %s: stream=\"%s\" ret=%d latency=%f ms\n",
-		COALESCE(pdata->server), pdata->stream_name, ret, (float)latency / 1000.0f);
+		SERVER_IFNOTNULL(pdata->server), pdata->stream_name, ret, (float)latency / 1000.0f);
         if(pa_stream_write(pdata->left, data_left, len, NULL, 0LL, PA_SEEK_RELATIVE) < 0) {
 		log(LOG_WARNING, "pulse: %s: could not write to stream \"%s\", disconnecting\n",
-			COALESCE(pdata->server), pdata->stream_name);
+			SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
 		pulse_shutdown(pdata);
 		goto end;
 	}

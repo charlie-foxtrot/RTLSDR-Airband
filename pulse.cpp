@@ -61,7 +61,8 @@ void pulse_shutdown(pulse_data *pdata) {
 
 static void pulse_stream_underflow_cb(pa_stream *stream, void *userdata) {
 	pulse_data *pdata = (pulse_data *)userdata;
-	log(LOG_INFO, "pulse: server %s: stream \"%s\": underflow occurred\n", COALESCE(pdata->server), pdata->stream_name);
+	if(pdata->continuous)		// do not flood the logs on every squelch closing
+		log(LOG_INFO, "pulse: server %s: stream \"%s\": underflow occurred\n", COALESCE(pdata->server), pdata->stream_name);
 }
 
 static void pulse_stream_overflow_cb(pa_stream *stream, void *userdata) {

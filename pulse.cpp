@@ -74,11 +74,9 @@ static void stream_state_cb(pa_stream *stream, void *userdata) {
 		break;
 	case PA_STREAM_FAILED:
 		log(LOG_WARNING, "pulse: %s: stream \"%s\" failed", COALESCE(pdata->server), pdata->stream_name);
-// pulse_shutdown?
 		break;
 	case PA_STREAM_TERMINATED:
 		log(LOG_WARNING, "pulse: %s: stream \"%s\" terminated", COALESCE(pdata->server), pdata->stream_name);
-// pulse_shutdown?
 		break;
 	break;
 	}
@@ -123,7 +121,6 @@ static void pulse_ctx_state_cb(pa_context *c, void *userdata) {
 		break;
 	case PA_CONTEXT_TERMINATED:
 		log(LOG_INFO, "pulse: connection to %s terminated", COALESCE(pdata->server));
-// pulse_shutdown?
 		break;
 	case PA_CONTEXT_FAILED:
 		log(LOG_ERR, "pulse: connection to %s failed: %s", COALESCE(pdata->server),

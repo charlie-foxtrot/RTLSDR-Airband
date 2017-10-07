@@ -59,6 +59,16 @@ void pulse_shutdown(pulse_data *pdata) {
 	PA_LOOP_UNLOCK(mainloop);
 }
 
+static void pulse_stream_underflow_cb(pa_stream *stream, void *userdata) {
+	pulse_data *pdata = (pulse_data *)userdata;
+	log(LOG_INFO, "pulse: server %s: stream \"%s\": underflow occurred\n", COALESCE(pdata->server), pdata->stream_name);
+}
+
+static void pulse_stream_overflow_cb(pa_stream *stream, void *userdata) {
+	pulse_data *pdata = (pulse_data *)userdata;
+	log(LOG_INFO, "pulse: server %s: stream \"%s\": overflow occurred\n", COALESCE(pdata->server), pdata->stream_name);
+}
+
 static void stream_state_cb(pa_stream *stream, void *userdata) {
 	pulse_data *pdata = (pulse_data *)userdata;
 
@@ -89,6 +99,8 @@ static void pulse_setup_streams(pulse_data *pdata) {
 		goto fail;
 	}
 	pa_stream_set_state_callback(pdata->left, stream_state_cb, pdata);
+	pa_stream_set_underflow_callback(pdata->left, pulse_stream_underflow_cb, pdata);
+	pa_stream_set_overflow_callback(pdata->left, pulse_stream_overflow_cb, pdata);
 //	pa_stream_set_write_callback(pdata->left, stream_request_cb, pdata);
 	if(pa_stream_connect_playback(pdata->left, NULL, NULL,
 				      (pa_stream_flags_t)(PA_STREAM_INTERPOLATE_TIMING

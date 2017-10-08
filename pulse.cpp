@@ -32,6 +32,7 @@ using namespace std;
 pa_threaded_mainloop *mainloop = NULL;
 
 void pulse_shutdown(pulse_data *pdata) {
+	log(LOG_NOTICE, "pulse: %s: disconnecting streams and context\n", SERVER_IFNOTNULL(pdata->server));
 	PA_LOOP_LOCK(mainloop);
 	if(!pdata)
 		return;
@@ -82,22 +83,18 @@ static void stream_state_cb(pa_stream *stream, void *userdata) {
 	}
 }
 
-static void pulse_setup_streams(pulse_data *pdata) {
-	static const pa_sample_spec ss = {
-		.format = PA_SAMPLE_FLOAT32LE,
-		.rate = WAVE_RATE,
-		.channels = 1,
-	};
+static pa_stream *pulse_setup_stream(pulse_data *pdata, const pa_sample_spec *ss, pa_channel_map *cmap) {
+	pa_stream *stream = NULL;
 	PA_LOOP_LOCK(mainloop);
-	if(!(pdata->left = pa_stream_new(pdata->context, pdata->stream_name, &ss, NULL))) {
+	if(!(stream = pa_stream_new(pdata->context, pdata->stream_name, ss, cmap))) {
 		log(LOG_ERR, "pulse: %s: failed to create stream \"%s\": %s",
 			SERVER_IFNOTNULL(pdata->server), pdata->stream_name, pa_strerror(pa_context_errno(pdata->context)));
 		goto fail;
 	}
-	pa_stream_set_state_callback(pdata->left, stream_state_cb, pdata);
-	pa_stream_set_underflow_callback(pdata->left, pulse_stream_underflow_cb, pdata);
-	pa_stream_set_overflow_callback(pdata->left, pulse_stream_overflow_cb, pdata);
-	if(pa_stream_connect_playback(pdata->left, NULL, NULL,
+	pa_stream_set_state_callback(stream, stream_state_cb, pdata);
+	pa_stream_set_underflow_callback(stream, pulse_stream_underflow_cb, pdata);
+	pa_stream_set_overflow_callback(stream, pulse_stream_overflow_cb, pdata);
+	if(pa_stream_connect_playback(stream, NULL, NULL,
 				      (pa_stream_flags_t)(PA_STREAM_INTERPOLATE_TIMING
 				      |PA_STREAM_ADJUST_LATENCY
 				      |PA_STREAM_AUTO_TIMING_UPDATE), NULL, NULL) < 0) {
@@ -107,6 +104,28 @@ static void pulse_setup_streams(pulse_data *pdata) {
 	}
 	log(LOG_INFO, "pulse: %s: stream \"%s\" connected", SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
 	PA_LOOP_UNLOCK(mainloop);
+	return stream;
+fail:
+	PA_LOOP_UNLOCK(mainloop);
+	return NULL;
+}
+
+static void pulse_setup_streams(pulse_data *pdata) {
+	const pa_sample_spec ss = {
+		.format = PA_SAMPLE_FLOAT32LE,
+		.rate = WAVE_RATE,
+		.channels = 1
+	};
+	pa_channel_map_init_mono(&pdata->lmap);
+	pdata->lmap.map[0] = (pdata->mode == MM_STEREO ? PA_CHANNEL_POSITION_LEFT : PA_CHANNEL_POSITION_MONO);
+	if(!(pdata->left = pulse_setup_stream(pdata, &ss, &pdata->lmap)))
+		goto fail;
+	if(pdata->mode == MM_STEREO) {
+		pa_channel_map_init_mono(&pdata->rmap);
+		pdata->rmap.map[0] = PA_CHANNEL_POSITION_RIGHT;
+		if(!(pdata->right = pulse_setup_stream(pdata, &ss, &pdata->rmap)))
+			goto fail;
+	}
 	return;
 fail:
 	pulse_shutdown(pdata);
@@ -149,6 +168,7 @@ int pulse_setup(pulse_data *pdata, mix_modes mixmode) {
 		log(LOG_ERR, "%s", "pulse: failed to create context\n");
 		return -1;
 	}
+	pdata->mode = mixmode;
 	pa_context_set_state_callback(pdata->context, &pulse_ctx_state_cb, pdata);
 	if(pa_context_connect(pdata->context, pdata->server, PA_CONTEXT_NOFLAGS, NULL) < 0) {
 		log(LOG_WARNING, "pulse: %s: failed to connect: %s", SERVER_IFNOTNULL(pdata->server),
@@ -167,39 +187,50 @@ void pulse_start() {
 	PA_LOOP_UNLOCK(mainloop);
 }
 
-void pulse_write_stream(pulse_data *pdata, mix_modes mode, float *data_left, float *data_right, size_t len) {
+static int pulse_write_single_stream(pa_stream *stream, pulse_data *pdata, float *data, size_t len) {
 	pa_usec_t latency;
-	int ret;
+	int ret = -1;
+	int lret;
 
 	PA_LOOP_LOCK(mainloop);
-	if(!pdata->context || pa_context_get_state(pdata->context) != PA_CONTEXT_READY)
-		goto end;
-	if(!pdata->left || pa_stream_get_state(pdata->left) != PA_STREAM_READY)
+	if(!stream || pa_stream_get_state(stream) != PA_STREAM_READY)
 		goto end;
 
-	ret = pa_stream_get_latency(pdata->left, &latency, NULL);
-	if(ret < 0) {
+	lret = pa_stream_get_latency(stream, &latency, NULL);
+	if(lret < 0) {
 		log(LOG_WARNING, "pulse: %s: failed to get latency info for stream \"%s\" (error is: %s), disconnecting\n",
-			SERVER_IFNOTNULL(pdata->server), pdata->stream_name, pa_strerror(ret));
-		pulse_shutdown(pdata);
+			SERVER_IFNOTNULL(pdata->server), pdata->stream_name, pa_strerror(lret));
 		goto end;
 	}
 	if(latency > PULSE_STREAM_LATENCY_LIMIT) {
 		log(LOG_INFO, "pulse: %s: exceeded max backlog for stream \"%s\", disconnecting\n",
 			SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
-		pulse_shutdown(pdata);
 		goto end;
 	}
-	debug_bulk_print("pulse: %s: stream=\"%s\" ret=%d latency=%f ms\n",
-		SERVER_IFNOTNULL(pdata->server), pdata->stream_name, ret, (float)latency / 1000.0f);
-        if(pa_stream_write(pdata->left, data_left, len, NULL, 0LL, PA_SEEK_RELATIVE) < 0) {
+	debug_bulk_print("pulse: %s: stream=\"%s\" lret=%d latency=%f ms\n",
+		SERVER_IFNOTNULL(pdata->server), pdata->stream_name, lret, (float)latency / 1000.0f);
+        if(pa_stream_write(stream, data, len, NULL, 0LL, PA_SEEK_RELATIVE) < 0) {
 		log(LOG_WARNING, "pulse: %s: could not write to stream \"%s\", disconnecting\n",
 			SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
-		pulse_shutdown(pdata);
 		goto end;
 	}
-//TODO: handle stereo stream
+	ret = 0;
+end:
+	PA_LOOP_UNLOCK(mainloop);
+	return ret;
+}
 
+void pulse_write_stream(pulse_data *pdata, mix_modes mode, float *data_left, float *data_right, size_t len) {
+	PA_LOOP_LOCK(mainloop);
+	if(!pdata->context || pa_context_get_state(pdata->context) != PA_CONTEXT_READY)
+		goto end;
+	if(pulse_write_single_stream(pdata->left, pdata, data_left, len) < 0)
+		goto fail;
+	if(mode == MM_STEREO && pulse_write_single_stream(pdata->right, pdata, data_right, len) < 0)
+		goto fail;
+	goto end;
+fail:
+	pulse_shutdown(pdata);
 end:
 	PA_LOOP_UNLOCK(mainloop);
 	return;

@@ -893,8 +893,14 @@ int main(int argc, char* argv[]) {
 			channel->lame = airlame_init(mixers[i].channel.mode);
 		for (int k = 0; k < channel->output_count; k++) {
 			output_t *output = channel->outputs + k;
-			if(output->type == O_ICECAST)
+			if(output->type == O_ICECAST) {
 				shout_setup((icecast_data *)(output->data), channel->mode);
+#ifdef PULSE
+			} else if(output->type == O_PULSE) {
+				pulse_init();
+				pulse_setup((pulse_data *)(output->data), channel->mode);
+#endif
+			}
 		}
 	}
 	for (int i = 0; i < device_count; i++) {

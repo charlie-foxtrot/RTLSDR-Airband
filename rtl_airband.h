@@ -93,6 +93,8 @@ extern "C" void samplefft(sample_fft_arg *a, unsigned char* buffer, float* windo
 
 //#define AFC_LOGGING
 
+enum ch_states { CH_DIRTY, CH_WORKING, CH_READY };
+enum mix_modes { MM_MONO, MM_STEREO };
 struct icecast_data {
 	const char *hostname;
 	int port;
@@ -120,9 +122,11 @@ struct pulse_data {
 	const char *name;
 	const char *dev;
 	const char *stream_name;
-	bool continuous;
 	pa_context *context;
 	pa_stream *left, *right;
+	pa_channel_map lmap, rmap;
+	mix_modes mode;
+	bool continuous;
 };
 #endif
 
@@ -158,8 +162,6 @@ enum modulations {
 #endif
 };
 
-enum ch_states { CH_DIRTY, CH_WORKING, CH_READY };
-enum mix_modes { MM_MONO, MM_STEREO };
 struct freq_t {
 	int frequency;				// scan frequency
 	char *label;				// frequency label

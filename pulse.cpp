@@ -184,8 +184,8 @@ int pulse_setup(pulse_data *pdata, mix_modes mixmode) {
 	if(pa_context_connect(pdata->context, pdata->server, PA_CONTEXT_NOFLAGS, NULL) < 0) {
 		log(LOG_WARNING, "pulse: %s: failed to connect: %s", SERVER_IFNOTNULL(pdata->server),
 			pa_strerror(pa_context_errno(pdata->context)));
-		pa_context_unref(pdata->context);
-		pdata->context = NULL;
+		// Don't clean up things here, context state is now set to PA_CONTEXT_FAILED,
+		// so pulse_ctx_state_cb will take care of that.
 		return -1;
 	}
 	return 0;

@@ -462,15 +462,11 @@ void* output_check_thread(void* params) {
 					} else if(dev->channels[j].outputs[k].type == O_PULSE) {
 						pulse_data *pdata = (pulse_data *)(dev->channels[j].outputs[k].data);
 						if(dev->failed) {
-							if(pdata->context) {	// TODO: pa_context_get_state
-								log(LOG_WARNING, "Device #%d failed, disconnecting pulse server %s\n",
-									i, pdata->server);
+							if(pdata->context) {
 								pulse_shutdown(pdata);
 							}
 						} else {
 							if (pdata->context == NULL){
-								log(LOG_NOTICE, "Trying to reconnect to pulse server %s...\n",
-									pdata->server);
 								pulse_setup(pdata, dev->channels[j].mode);
 							}
 						}
@@ -495,8 +491,6 @@ void* output_check_thread(void* params) {
 				} else if(mixers[i].channel.outputs[k].type == O_PULSE) {
 					pulse_data *pdata = (pulse_data *)(mixers[i].channel.outputs[k].data);
 					if (pdata->context == NULL){
-						log(LOG_NOTICE, "Trying to reconnect to pulse server %s...\n",
-							pdata->server);
 						pulse_setup(pdata, mixers[i].channel.mode);
 					}
 #endif

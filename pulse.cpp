@@ -32,7 +32,8 @@ using namespace std;
 pa_threaded_mainloop *mainloop = NULL;
 
 void pulse_shutdown(pulse_data *pdata) {
-	log(LOG_NOTICE, "pulse: %s: disconnecting streams and context\n", SERVER_IFNOTNULL(pdata->server));
+	log(LOG_NOTICE, "pulse: %s: disconnecting context for stream \"%s\"\n",
+		SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
 	PA_LOOP_LOCK(mainloop);
 	if(!pdata)
 		return;
@@ -158,7 +159,7 @@ static void pulse_ctx_state_cb(pa_context *c, void *userdata) {
 		pulse_shutdown(pdata);
 		break;
 	case PA_CONTEXT_CONNECTING:
-		log(LOG_INFO, "pulse: %s: connecting", SERVER_IFNOTNULL(pdata->server));
+		log(LOG_INFO, "pulse: %s: connecting...", SERVER_IFNOTNULL(pdata->server));
 		break;
 	case PA_CONTEXT_UNCONNECTED:
 	case PA_CONTEXT_AUTHORIZING:

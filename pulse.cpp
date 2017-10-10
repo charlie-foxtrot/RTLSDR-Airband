@@ -70,11 +70,17 @@ static void stream_state_cb(pa_stream *stream, void *userdata) {
 
 	switch (pa_stream_get_state(stream)) {
 	case PA_STREAM_READY:
+		if(pdata->mode == MM_MONO ||
+		  (pa_stream_get_state(pdata->left) == PA_STREAM_READY &&
+		  pa_stream_get_state(pdata->right) == PA_STREAM_READY))
+			pa_stream_cork(pdata->left, 0, NULL, NULL);
+		break;
 	case PA_STREAM_UNCONNECTED:
 	case PA_STREAM_CREATING:
 		break;
 	case PA_STREAM_FAILED:
-		log(LOG_WARNING, "pulse: %s: stream \"%s\" failed", SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
+		log(LOG_WARNING, "pulse: %s: stream \"%s\" failed: %s", SERVER_IFNOTNULL(pdata->server), pdata->stream_name,
+		pa_strerror(pa_context_errno(pdata->context)));
 		break;
 	case PA_STREAM_TERMINATED:
 		log(LOG_WARNING, "pulse: %s: stream \"%s\" terminated", SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
@@ -83,7 +89,7 @@ static void stream_state_cb(pa_stream *stream, void *userdata) {
 	}
 }
 
-static pa_stream *pulse_setup_stream(pulse_data *pdata, const pa_sample_spec *ss, pa_channel_map *cmap) {
+static pa_stream *pulse_setup_stream(pulse_data *pdata, const pa_sample_spec *ss, pa_channel_map *cmap, pa_stream *sync_stream) {
 	pa_stream *stream = NULL;
 	PA_LOOP_LOCK(mainloop);
 	if(!(stream = pa_stream_new(pdata->context, pdata->stream_name, ss, cmap))) {
@@ -94,10 +100,15 @@ static pa_stream *pulse_setup_stream(pulse_data *pdata, const pa_sample_spec *ss
 	pa_stream_set_state_callback(stream, stream_state_cb, pdata);
 	pa_stream_set_underflow_callback(stream, pulse_stream_underflow_cb, pdata);
 	pa_stream_set_overflow_callback(stream, pulse_stream_overflow_cb, pdata);
+// Initially streams are corked (paused). For mono streams this is irrelevant,
+// but for stereo mixers it's required to keep left and right channels in sync.
+// Starting the left channel stream before the other stream from the sync pair is
+// set up causes the left channel stream to fail.
 	if(pa_stream_connect_playback(stream, NULL, NULL,
 				      (pa_stream_flags_t)(PA_STREAM_INTERPOLATE_TIMING
 				      |PA_STREAM_ADJUST_LATENCY
-				      |PA_STREAM_AUTO_TIMING_UPDATE), NULL, NULL) < 0) {
+				      |PA_STREAM_START_CORKED
+				      |PA_STREAM_AUTO_TIMING_UPDATE), NULL, sync_stream) < 0) {
 		log(LOG_ERR, "pulse: %s: failed to connect stream \"%s\": %s",
 			SERVER_IFNOTNULL(pdata->server), pdata->stream_name, pa_strerror(pa_context_errno(pdata->context)));
 		goto fail;
@@ -118,12 +129,12 @@ static void pulse_setup_streams(pulse_data *pdata) {
 	};
 	pa_channel_map_init_mono(&pdata->lmap);
 	pdata->lmap.map[0] = (pdata->mode == MM_STEREO ? PA_CHANNEL_POSITION_LEFT : PA_CHANNEL_POSITION_MONO);
-	if(!(pdata->left = pulse_setup_stream(pdata, &ss, &pdata->lmap)))
+	if(!(pdata->left = pulse_setup_stream(pdata, &ss, &pdata->lmap, NULL)))
 		goto fail;
 	if(pdata->mode == MM_STEREO) {
 		pa_channel_map_init_mono(&pdata->rmap);
 		pdata->rmap.map[0] = PA_CHANNEL_POSITION_RIGHT;
-		if(!(pdata->right = pulse_setup_stream(pdata, &ss, &pdata->rmap)))
+		if(!(pdata->right = pulse_setup_stream(pdata, &ss, &pdata->rmap, pdata->left)))
 			goto fail;
 	}
 	return;
@@ -187,7 +198,7 @@ void pulse_start() {
 	PA_LOOP_UNLOCK(mainloop);
 }
 
-static int pulse_write_single_stream(pa_stream *stream, pulse_data *pdata, float *data, size_t len) {
+static int pulse_write_single_stream(pa_stream *stream, pulse_data *pdata, float *data, size_t len, bool is_master) {
 	pa_usec_t latency;
 	int ret = -1;
 	int lret;
@@ -196,19 +207,21 @@ static int pulse_write_single_stream(pa_stream *stream, pulse_data *pdata, float
 	if(!stream || pa_stream_get_state(stream) != PA_STREAM_READY)
 		goto end;
 
-	lret = pa_stream_get_latency(stream, &latency, NULL);
-	if(lret < 0) {
-		log(LOG_WARNING, "pulse: %s: failed to get latency info for stream \"%s\" (error is: %s), disconnecting\n",
-			SERVER_IFNOTNULL(pdata->server), pdata->stream_name, pa_strerror(lret));
-		goto end;
+	if(is_master) {	/* latency info is only meaningful for master stream) */
+		lret = pa_stream_get_latency(stream, &latency, NULL);
+		if(lret < 0) {
+			log(LOG_WARNING, "pulse: %s: failed to get latency info for stream \"%s\" (error is: %s), disconnecting\n",
+				SERVER_IFNOTNULL(pdata->server), pdata->stream_name, pa_strerror(lret));
+			goto end;
+		}
+		if(latency > PULSE_STREAM_LATENCY_LIMIT) {
+			log(LOG_INFO, "pulse: %s: exceeded max backlog for stream \"%s\", disconnecting\n",
+				SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
+			goto end;
+		}
+		debug_bulk_print("pulse: %s: stream=\"%s\" lret=%d latency=%f ms\n",
+			SERVER_IFNOTNULL(pdata->server), pdata->stream_name, lret, (float)latency / 1000.0f);
 	}
-	if(latency > PULSE_STREAM_LATENCY_LIMIT) {
-		log(LOG_INFO, "pulse: %s: exceeded max backlog for stream \"%s\", disconnecting\n",
-			SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
-		goto end;
-	}
-	debug_bulk_print("pulse: %s: stream=\"%s\" lret=%d latency=%f ms\n",
-		SERVER_IFNOTNULL(pdata->server), pdata->stream_name, lret, (float)latency / 1000.0f);
         if(pa_stream_write(stream, data, len, NULL, 0LL, PA_SEEK_RELATIVE) < 0) {
 		log(LOG_WARNING, "pulse: %s: could not write to stream \"%s\", disconnecting\n",
 			SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
@@ -224,9 +237,9 @@ void pulse_write_stream(pulse_data *pdata, mix_modes mode, float *data_left, flo
 	PA_LOOP_LOCK(mainloop);
 	if(!pdata->context || pa_context_get_state(pdata->context) != PA_CONTEXT_READY)
 		goto end;
-	if(pulse_write_single_stream(pdata->left, pdata, data_left, len) < 0)
+	if(pulse_write_single_stream(pdata->left, pdata, data_left, len, true) < 0)
 		goto fail;
-	if(mode == MM_STEREO && pulse_write_single_stream(pdata->right, pdata, data_right, len) < 0)
+	if(mode == MM_STEREO && pulse_write_single_stream(pdata->right, pdata, data_right, len, false) < 0)
 		goto fail;
 	goto end;
 fail:

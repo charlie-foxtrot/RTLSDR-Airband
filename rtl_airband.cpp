@@ -625,7 +625,7 @@ void demodulate() {
 							channel->axcindicate,
 							(dev->channels[0].freqlist[channel->freq_idx].frequency / 1000000.0));
 					else
-						printf("%4.0f/%3.0f%c",
+						printf("%4.0f/%3.0f%c ",
 							fparms->agcavgslow,
 							(fparms->sqlevel > 0 ? fparms->sqlevel : fparms->agcmin),
 							channel->axcindicate);

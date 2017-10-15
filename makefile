@@ -97,6 +97,8 @@ rtl_airband.o: rtl_airband.h
 
 output.o: rtl_airband.h
 
+pulse.o: rtl_airband.h
+
 util.o: rtl_airband.h
 
 $(SUBDIRS):

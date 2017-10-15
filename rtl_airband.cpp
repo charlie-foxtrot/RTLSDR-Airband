@@ -109,6 +109,47 @@ void sighandler(int sig) {
 	do_exit = 1;
 }
 
+/* taken from librtlsdr-keenerd, (c) Kyle Keen */
+static int nearest_gain(rtlsdr_dev_t *dev, int target_gain) {
+	int i, r, err1, err2, count, nearest;
+	int *gains;
+	r = rtlsdr_set_tuner_gain_mode(dev, 1);
+	if (r < 0)
+		return r;
+	count = rtlsdr_get_tuner_gains(dev, NULL);
+	if (count <= 0) {
+		return -1;
+	}
+	gains = (int *)XCALLOC(count, sizeof(int));
+	count = rtlsdr_get_tuner_gains(dev, gains);
+	nearest = gains[0];
+	for (i = 0; i < count; i++) {
+		err1 = abs(target_gain - nearest);
+		err2 = abs(target_gain - gains[i]);
+		if (err2 < err1) {
+			nearest = gains[i];
+		}
+	}
+	free(gains);
+	return nearest;
+}
+
+uint32_t rtl_find_device_by_serial(const char *s) {
+	uint32_t device_count, device;
+	char vendor[256] = {0}, product[256] = {0}, serial[256] = {0};
+	device_count = rtlsdr_get_device_count();
+	if(device_count < 1)
+		return RTL_DEV_INVALID;
+	for(uint32_t i = 0; i < device_count; i++) {
+		rtlsdr_get_device_usb_strings(i, vendor, product, serial);
+		if (strcmp(s, serial) != 0)
+			continue;
+		device = i;
+		return device;
+	}
+	return RTL_DEV_INVALID;
+}
+
 void* rtlsdr_exec(void* params) {
 	int r;
 	device_t *dev = (device_t*)params;
@@ -128,12 +169,19 @@ void* rtlsdr_exec(void* params) {
 	r = rtlsdr_set_freq_correction(dev->rtlsdr, dev->correction);
 	if (r < 0 && r != -2 ) log(LOG_ERR, "Failed to set freq correction for device #%d. Error %d.\n", dev->device, r);
 
+	int ngain = nearest_gain(dev->rtlsdr, dev->gain);
+	if(ngain < 0) {
+		log(LOG_ERR, "Failed to read supported gain list for device #%d: error %d\n", dev->device, ngain);
+		_exit(1);
+	}
 	r = rtlsdr_set_tuner_gain_mode(dev->rtlsdr, 1);
-	r |= rtlsdr_set_tuner_gain(dev->rtlsdr, dev->gain);
+	r |= rtlsdr_set_tuner_gain(dev->rtlsdr, ngain);
 	if (r < 0)
-		log(LOG_ERR, "Failed to set gain to %0.2f for device #%d. Error %d.\n", (float)rtlsdr_get_tuner_gain(dev->rtlsdr) / 10.0, dev->device, r);
+		log(LOG_ERR, "Failed to set gain to %0.2f for device #%d: error %d\n",
+			(float)ngain / 10.f, dev->device, r);
 	else
-		log(LOG_INFO, "Device #%d: gain set to %0.2f dB\n", dev->device, (float)rtlsdr_get_tuner_gain(dev->rtlsdr) / 10.0);
+		log(LOG_INFO, "Device #%d: gain set to %0.2f dB\n", dev->device,
+			(float)rtlsdr_get_tuner_gain(dev->rtlsdr) / 10.f);
 
 	r = rtlsdr_set_agc_mode(dev->rtlsdr, 0);
 	if (r < 0) log(LOG_ERR, "Failed to disable AGC for device #%d. Error %d.\n", dev->device, r);
@@ -164,8 +212,8 @@ void* controller_thread(void* params) {
 				consecutive_squelch_off++;
 			} else {
 				i++; i %= dev->channels[0].freq_count;
-				dev->channels[0].frequency = dev->channels[0].freqlist[i];
-				dev->centerfreq = dev->channels[0].freqlist[i] + 2 * (double)(SOURCE_RATE / FFT_SIZE);
+				dev->channels[0].freq_idx = i;
+				dev->centerfreq = dev->channels[0].freqlist[i].frequency + 2 * (double)(SOURCE_RATE / FFT_SIZE);
 				rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);
 			}
 		} else {
@@ -463,13 +511,14 @@ void demodulate() {
 			for (int i = 0; i < dev->channel_count; i++) {
 				AFC afc(dev, i);
 				channel_t* channel = dev->channels + i;
+				freq_t *fparms = channel->freqlist + channel->freq_idx;
 #if defined (__arm__) || defined (__aarch64__)
-				float agcmin2 = channel->agcmin * 4.5f;
+				float agcmin2 = fparms->agcmin * 4.5f;
 				for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j++) {
 					channel->waveref[j] = min(channel->wavein[j], agcmin2);
 				}
 #else
-				__m128 agccap = _mm_set1_ps(channel->agcmin * 4.5f);
+				__m128 agccap = _mm_set1_ps(fparms->agcmin * 4.5f);
 				for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j += 4) {
 					__m128 t = _mm_loadu_ps(channel->wavein + j);
 					_mm_storeu_ps(channel->waveref + j, _mm_min_ps(t, agccap));
@@ -477,24 +526,24 @@ void demodulate() {
 #endif
 				for (int j = AGC_EXTRA; j < WAVE_BATCH + AGC_EXTRA; j++) {
 					// auto noise floor
-					if (channel->sqlevel < 0 && j % 16 == 0) {
-						channel->agcmin = channel->agcmin * 0.97f + min(channel->agcavgslow, channel->agcmin) * 0.03f + 0.0001f;
+					if (fparms->sqlevel < 0 && j % 16 == 0) {
+						fparms->agcmin = fparms->agcmin * 0.97f + min(fparms->agcavgslow, fparms->agcmin) * 0.03f + 0.0001f;
 					}
 
 					// average power
-					channel->agcavgslow = channel->agcavgslow * 0.99f + channel->waveref[j] * 0.01f;
+					fparms->agcavgslow = fparms->agcavgslow * 0.99f + channel->waveref[j] * 0.01f;
 
-					float sqlevel = channel->sqlevel > 0 ? (float)channel->sqlevel : 3.0f * channel->agcmin;
+					float sqlevel = fparms->sqlevel > 0 ? (float)fparms->sqlevel : 3.0f * fparms->agcmin;
 					if (channel->agcsq > 0) {
 						channel->agcsq = max(channel->agcsq - 1, 1);
-						if (channel->agcsq == 1 && channel->agcavgslow > sqlevel) {
+						if (channel->agcsq == 1 && fparms->agcavgslow > sqlevel) {
 							channel->agcsq = -AGC_EXTRA * 2;
 							channel->axcindicate = '*';
 							if(channel->modulation == MOD_AM) {
 							// fade in
 								for (int k = j - AGC_EXTRA; k < j; k++) {
 									if (channel->wavein[k] > sqlevel) {
-										channel->agcavgfast = channel->agcavgfast * 0.9f + channel->wavein[k] * 0.1f;
+										fparms->agcavgfast = fparms->agcavgfast * 0.9f + channel->wavein[k] * 0.1f;
 									}
 								}
 							}
@@ -502,13 +551,13 @@ void demodulate() {
 					} else {
 						if (channel->wavein[j] > sqlevel) {
 							if(channel->modulation == MOD_AM)
-								channel->agcavgfast = channel->agcavgfast * 0.995f + channel->wavein[j] * 0.005f;
-							channel->agclow = 0;
+								fparms->agcavgfast = fparms->agcavgfast * 0.995f + channel->wavein[j] * 0.005f;
+							fparms->agclow = 0;
 						} else {
-							channel->agclow++;
+							fparms->agclow++;
 						}
 						channel->agcsq = min(channel->agcsq + 1, -1);
-						if (channel->agclow == AGC_EXTRA - 12) {
+						if (fparms->agclow == AGC_EXTRA - 12) {
 							channel->agcsq = AGC_EXTRA * 2;
 							channel->axcindicate = ' ';
 							if(channel->modulation == MOD_AM) {
@@ -523,10 +572,10 @@ void demodulate() {
 						channel->waveout[j] = 0;
 					} else {
 						if(channel->modulation == MOD_AM) {
-							channel->waveout[j] = (channel->wavein[j - AGC_EXTRA] - channel->agcavgfast) / (channel->agcavgfast * 1.5f);
+							channel->waveout[j] = (channel->wavein[j - AGC_EXTRA] - fparms->agcavgfast) / (fparms->agcavgfast * 1.5f);
 							if (abs(channel->waveout[j]) > 0.8f) {
 								channel->waveout[j] *= 0.85f;
-								channel->agcavgfast *= 1.15f;
+								fparms->agcavgfast *= 1.15f;
 							}
 						}
 #ifdef NFM
@@ -545,8 +594,8 @@ void demodulate() {
 							channel->pr = rotated_r;
 							channel->pj = rotated_j;
 // de-emphasis IIR + DC blocking
-							channel->agcavgfast = channel->agcavgfast * 0.995f + channel->waveout[j] * 0.005f;
-							channel->waveout[j] -= channel->agcavgfast;
+							fparms->agcavgfast = fparms->agcavgfast * 0.995f + channel->waveout[j] * 0.005f;
+							channel->waveout[j] -= fparms->agcavgfast;
 							channel->waveout[j] = channel->waveout[j] * (1.0f - channel->alpha) + channel->waveout[j-1] * channel->alpha;
 						}
 #endif // NFM
@@ -570,9 +619,16 @@ void demodulate() {
 
 				if (foreground) {
 					if(dev->mode == R_SCAN)
-						printf("%4.0f/%3.0f%c %7.3f", channel->agcavgslow, channel->agcmin, channel->axcindicate, (dev->channels[0].frequency / 1000000.0));
+						printf("%4.0f/%3.0f%c %7.3f",
+							fparms->agcavgslow,
+							(fparms->sqlevel > 0 ? fparms->sqlevel : fparms->agcmin),
+							channel->axcindicate,
+							(dev->channels[0].freqlist[channel->freq_idx].frequency / 1000000.0));
 					else
-						printf("%4.0f/%3.0f%c", channel->agcavgslow, channel->agcmin, channel->axcindicate);
+						printf("%4.0f/%3.0f%c ",
+							fparms->agcavgslow,
+							(fparms->sqlevel > 0 ? fparms->sqlevel : fparms->agcmin),
+							channel->axcindicate);
 					fflush(stdout);
 				}
 			}
@@ -584,7 +640,7 @@ void demodulate() {
 				ts.tv_sec = te.tv_sec;
 				ts.tv_usec = te.tv_usec;
 			}
-			pthread_cond_signal(&mp3_cond);
+			safe_cond_signal(&mp3_cond, &mp3_mutex);
 			dev->row++;
 			if (dev->row == 12) {
 				dev->row = 0;
@@ -672,6 +728,17 @@ int main(int argc, char* argv[]) {
 	}
 #endif /* !__arm__ */
 
+	// If executing other than as root, GPU memory gets alloc'd and the
+	// 'permission denied' message on /dev/mem kills rtl_airband without
+	// releasing GPU memory.
+#ifdef USE_BCM_VC
+	// XXX should probably do this check in other circumstances also.
+	if(0 != getuid()) {
+		cerr<<"FFT library requires that rtl_airband be executed as root\n";
+		exit(1);
+	}
+#endif
+
 	// read config
 	try {
 		Config config;
@@ -713,7 +780,7 @@ int main(int argc, char* argv[]) {
 		sigaction(SIGQUIT, &sigact, NULL);
 		sigaction(SIGTERM, &sigact, NULL);
 
-		uintptr_t tempptr = (uintptr_t)malloc(device_count * sizeof(device_t)+31);
+		uintptr_t tempptr = (uintptr_t)XCALLOC(1, device_count * sizeof(device_t)+31);
 		tempptr &= ~0x0F;
 		devices = (device_t *)tempptr;
 		shout_init();
@@ -721,17 +788,9 @@ int main(int argc, char* argv[]) {
 
 		if(root.exists("mixers")) {
 			Setting &mx = config.lookup("mixers");
-			mixers = (mixer_t *)calloc(mx.getLength(), sizeof(struct mixer_t));
-			if(!mixers) {
-				cerr<<"Cannot allocate memory for mixers\n";
-				error();
-			}
+			mixers = (mixer_t *)XCALLOC(mx.getLength(), sizeof(struct mixer_t));
 			if((mixer_count = parse_mixers(mx)) > 0) {
-				mixers = (mixer_t *)realloc(mixers, mixer_count * sizeof(struct mixer_t));
-				if(!mixers) {
-					cerr<<"Cannot allocate memory for mixers\n";
-					error();
-				}
+				mixers = (mixer_t *)XREALLOC(mixers, mixer_count * sizeof(struct mixer_t));
 			} else {
 				free(mixers);
 			}
@@ -739,7 +798,7 @@ int main(int argc, char* argv[]) {
 			mixer_count = 0;
 		}
 
-		int devs_enabled = parse_devices(devs);
+		uint32_t devs_enabled = parse_devices(devs);
 		if (devs_enabled < 1) {
 			cerr<<"Configuration error: no devices defined\n";
 			error();
@@ -749,14 +808,19 @@ int main(int argc, char* argv[]) {
 			mixer_t *m = &mixers[z];
 			debug_print("mixer[%d]: name=%s, input_count=%d, output_count=%d\n", z, m->name, m->input_count, m->channel.output_count);
 		}
-		int device_count2 = rtlsdr_get_device_count();
+		uint32_t device_count2 = rtlsdr_get_device_count();
 		if (device_count2 < devs_enabled) {
 			cerr<<"Not enough devices ("<<devs_enabled<<" configured, "<<device_count2<<" detected)\n";
 			error();
 		}
-		for(int i = 0; i < devs_enabled; i++) {
+		for(uint32_t i = 0; i < devs_enabled; i++) {
 			device_t* dev = devices + i;
-			if(dev->device >= device_count2) {
+			if(dev->serial != NULL) {
+				if((dev->device = rtl_find_device_by_serial(dev->serial)) == RTL_DEV_INVALID) {
+					cerr<<"Device with serial number "<<dev->serial<<" not found\n";
+					error();
+				}
+			} else if(dev->device >= device_count2) {
 				cerr<<"Specified device id "<<(int)dev->device<<" is greater or equal than number of devices ("<<device_count2<<")\n";
 				error();
 			}
@@ -829,8 +893,14 @@ int main(int argc, char* argv[]) {
 			channel->lame = airlame_init(mixers[i].channel.mode);
 		for (int k = 0; k < channel->output_count; k++) {
 			output_t *output = channel->outputs + k;
-			if(output->type == O_ICECAST)
+			if(output->type == O_ICECAST) {
 				shout_setup((icecast_data *)(output->data), channel->mode);
+#ifdef PULSE
+			} else if(output->type == O_PULSE) {
+				pulse_init();
+				pulse_setup((pulse_data *)(output->data), channel->mode);
+#endif
+			}
 		}
 	}
 	for (int i = 0; i < device_count; i++) {
@@ -846,8 +916,14 @@ int main(int argc, char* argv[]) {
 				channel->lame = airlame_init(channel->mode);
 			for (int k = 0; k < channel->output_count; k++) {
 				output_t *output = channel->outputs + k;
-				if(output->type == O_ICECAST)
+				if(output->type == O_ICECAST) {
 					shout_setup((icecast_data *)(output->data), channel->mode);
+#ifdef PULSE
+				} else if(output->type == O_PULSE) {
+					pulse_init();
+					pulse_setup((pulse_data *)(output->data), channel->mode);
+#endif
+				}
 			}
 		}
 		pthread_create(&dev->rtl_thread, NULL, &rtlsdr_exec, dev);
@@ -878,7 +954,7 @@ int main(int argc, char* argv[]) {
 		for (int i = 0; i < device_count; i++) {
 			GOTOXY(0, i * 17 + 1);
 			for (int j = 0; j < devices[i].channel_count; j++) {
-				printf(" %7.3f  ", devices[i].channels[j].frequency / 1000000.0);
+				printf(" %7.3f  ", devices[i].channels[j].freqlist[devices[i].channels[j].freq_idx].frequency / 1000000.0);
 			}
 			if (i != device_count - 1) {
 				GOTOXY(0, i * 17 + 16);
@@ -887,12 +963,15 @@ int main(int argc, char* argv[]) {
 		}
 	}
 	THREAD thread2;
-	pthread_create(&thread2, NULL, &icecast_check, NULL);
+	pthread_create(&thread2, NULL, &output_check_thread, NULL);
 	THREAD thread3;
 	pthread_create(&thread3, NULL, &output_thread, NULL);
 	THREAD thread4;
 	if(mixer_count > 0)
 		pthread_create(&thread4, NULL, &mixer_thread, NULL);
+#ifdef PULSE
+	pulse_start();
+#endif
 
 	demodulate();
 
@@ -905,6 +984,7 @@ int main(int argc, char* argv[]) {
 	}
 	log(LOG_INFO, "rtlsdr threads closed\n");
 	close_debug();
+// FIXME: pulseaudio cleanup
 	return 0;
 }
 // vim: ts=4

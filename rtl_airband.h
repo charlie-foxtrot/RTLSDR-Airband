@@ -28,12 +28,20 @@
 #ifdef USE_BCM_VC
 #include "hello_fft/gpu_fft.h"
 #endif
+#ifdef PULSE
+#include <pulse/context.h>
+#include <pulse/stream.h>
+#endif
 
+#ifndef RTL_AIRBAND_VERSION
 #define RTL_AIRBAND_VERSION "2.3.0"
+#endif
 #define ALIGN
 #define ALIGN2 __attribute__((aligned(32)))
 #define SLEEP(x) usleep(x * 1000)
 #define THREAD pthread_t
+#define safe_cond_signal(n, m) pthread_mutex_lock(m); pthread_cond_signal(n); pthread_mutex_unlock(m)
+#define safe_cond_wait(n, m) pthread_mutex_lock(m); pthread_cond_wait(n, m); pthread_mutex_unlock(m)
 #define GOTOXY(x, y) printf("%c[%d;%df",0x1B,y,x)
 #ifndef SYSCONFDIR
 #define SYSCONFDIR "/usr/local/etc"
@@ -62,6 +70,7 @@
 #define FFT_SIZE_LOG 9
 #define LAMEBUF_SIZE 22000 //todo: calculate
 #define MIX_DIVISOR 2
+#define RTL_DEV_INVALID 0xFFFFFFFF
 
 #define ONES(x) ~(~0 << (x))
 #define SET_BIT(a, x) (a) |= (1 << (x))
@@ -84,6 +93,8 @@ extern "C" void samplefft(sample_fft_arg *a, unsigned char* buffer, float* windo
 
 //#define AFC_LOGGING
 
+enum ch_states { CH_DIRTY, CH_WORKING, CH_READY };
+enum mix_modes { MM_MONO, MM_STEREO };
 struct icecast_data {
 	const char *hostname;
 	int port;
@@ -105,12 +116,33 @@ struct file_data {
 	FILE *f;
 };
 
+#ifdef PULSE
+struct pulse_data {
+	const char *server;
+	const char *name;
+	const char *sink;
+	const char *stream_name;
+	pa_context *context;
+	pa_stream *left, *right;
+	pa_channel_map lmap, rmap;
+	mix_modes mode;
+	bool continuous;
+};
+#endif
+
 struct mixer_data {
 	struct mixer_t *mixer;
 	int input;
 };
 
-enum output_type { O_ICECAST, O_FILE, O_MIXER };
+enum output_type {
+	O_ICECAST,
+	O_FILE,
+	O_MIXER
+#ifdef PULSE
+	, O_PULSE
+#endif
+};
 struct output_t {
 	enum output_type type;
 	bool enabled;
@@ -130,8 +162,15 @@ enum modulations {
 #endif
 };
 
-enum ch_states { CH_DIRTY, CH_WORKING, CH_READY };
-enum mix_modes { MM_MONO, MM_STEREO };
+struct freq_t {
+	int frequency;				// scan frequency
+	char *label;				// frequency label
+	float agcavgfast;			// average power, for AGC
+	float agcavgslow;			// average power, for squelch level detection
+	float agcmin;				// noise level
+	int sqlevel;				// manually configured squelch level
+	int agclow;				// low level sample count
+};
 struct channel_t {
 	float wavein[WAVE_LEN];		// FFT output waveform
 	float waveref[WAVE_LEN];	// for power level calculation
@@ -150,17 +189,11 @@ struct channel_t {
 	enum modulations modulation;
 	enum mix_modes mode;		// mono or stereo
 	int agcsq;					// squelch status, 0 = signal, 1 = suppressed
-	float agcavgfast;			// average power, for AGC
-	float agcavgslow;			// average power, for squelch level detection
-	float agcmin;				// noise level
-	int sqlevel;				// manually configured squelch level
-	int agclow;					// low level sample count
 	char axcindicate;			// squelch/AFC status indicator: ' ' - no signal; '*' - has signal; '>', '<' - signal tuned by AFC
 	unsigned char afc;			//0 - AFC disabled; 1 - minimal AFC; 2 - more aggressive AFC and so on to 255
-	int frequency;
+	struct freq_t *freqlist;
 	int freq_count;
-	int *freqlist;
-	char **labels;
+	int freq_idx;
 	int output_count;
 	int need_mp3;
 	enum ch_states state;		// mixer channel state flag
@@ -174,7 +207,8 @@ struct device_t {
 	int bufs;
 	int bufe;
 	rtlsdr_dev_t* rtlsdr;
-	int device;
+	char *serial;
+	uint32_t device;
 	int centerfreq;
 	int correction;
 	int gain;
@@ -223,7 +257,7 @@ lame_t airlame_init(mix_modes mixmode);
 void shout_setup(icecast_data *icecast, mix_modes mixmode);
 void disable_device_outputs(device_t *dev);
 void disable_channel_outputs(channel_t *channel);
-void *icecast_check(void* params);
+void *output_check_thread(void* params);
 void *output_thread(void* params);
 
 // rtl_airband.cpp
@@ -246,6 +280,8 @@ void log(int priority, const char *format, ...);
 void tag_queue_put(device_t *dev, int freq, struct timeval tv);
 void tag_queue_get(device_t *dev, struct freq_tag *tag);
 void tag_queue_advance(device_t *dev);
+void *xcalloc(size_t nmemb, size_t size, const char *file, const int line, const char *func);
+void *xrealloc(void *ptr, size_t size, const char *file, const int line, const char *func);
 void init_debug (char *file);
 void close_debug();
 extern FILE *debugf;
@@ -253,6 +289,8 @@ extern FILE *debugf;
 	do { if (DEBUG) fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); fflush(debugf); } while (0)
 #define debug_bulk_print(fmt, ...) \
 	do { if (DEBUG) fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); } while (0)
+#define XCALLOC(nmemb, size) xcalloc((nmemb), (size), __FILE__, __LINE__, __func__)
+#define XREALLOC(ptr, size) xrealloc((ptr), (size), __FILE__, __LINE__, __func__)
 
 // mixer.cpp
 mixer_t *getmixerbyname(const char *name);
@@ -265,5 +303,15 @@ const char *mixer_get_error();
 // config.cpp
 int parse_devices(libconfig::Setting &devs);
 int parse_mixers(libconfig::Setting &mx);
+
+#ifdef PULSE
+#define PULSE_STREAM_LATENCY_LIMIT 10000000UL
+// pulse.cpp
+void pulse_init();
+int pulse_setup(pulse_data *pdata, mix_modes mixmode);
+void pulse_start();
+void pulse_shutdown(pulse_data *pdata);
+void pulse_write_stream(pulse_data *pdata, mix_modes mode, float *data_left, float *data_right, size_t len);
+#endif
 
 // vim: ts=4

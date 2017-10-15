@@ -21,6 +21,7 @@
 #include <unistd.h>
 #include <syslog.h>
 #include <iostream>
+#include <cstdlib>
 #include <cstdarg>
 #include <cstring>
 #include <cerrno>
@@ -110,6 +111,26 @@ void tag_queue_advance(device_t *dev) {
 	pthread_mutex_lock(&dev->tag_queue_lock);
 	dev->tq_tail++; dev->tq_tail %= TAG_QUEUE_LEN;
 	pthread_mutex_unlock(&dev->tag_queue_lock);
+}
+
+void *xcalloc(size_t nmemb, size_t size, const char *file, const int line, const char *func) {
+	void *ptr = calloc(nmemb, size);
+	if(ptr == NULL) {
+		log(LOG_ERR, "%s:%d: %s(): calloc(%zu, %zu) failed: %s\n",
+			file, line, func, nmemb, size, strerror(errno));
+		error();
+	}
+	return ptr;
+}
+
+void *xrealloc(void *ptr, size_t size, const char *file, const int line, const char *func) {
+	ptr = realloc(ptr, size);
+	if(ptr == NULL) {
+		log(LOG_ERR, "%s:%d: %s(): realloc(%zu) failed: %s\n",
+			file, line, func, size, strerror(errno));
+		error();
+	}
+	return ptr;
 }
 
 // vim: ts=4

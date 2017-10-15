@@ -63,10 +63,7 @@ int mixer_connect_input(mixer_t *mixer, float ampfactor, float balance) {
 		mixer_set_error("too many inputs");
 		return(-1);
 	}
-	if((mixer->inputs[i].wavein = (float *)calloc(WAVE_LEN, sizeof(float))) == NULL) {
-		mixer_set_error("failed to allocate sample buffer");
-		return(-1);
-	}
+	mixer->inputs[i].wavein = (float *)XCALLOC(WAVE_LEN, sizeof(float));
 	if((pthread_mutex_init(&mixer->inputs[i].mutex, NULL)) != 0) {
 		mixer_set_error("failed to initialize input mutex");
 		return(-1);
@@ -194,7 +191,7 @@ void *mixer_thread(void *params) {
 	        	    ts.tv_usec = te.tv_usec;
 			    }
 				channel->state = CH_READY;
-				pthread_cond_signal(&mp3_cond);
+				safe_cond_signal(&mp3_cond, &mp3_mutex);
 				mixer->interval = MIX_DIVISOR;
 				mixer->inputs_todo = ONES(mixer->input_count);
 			} else {

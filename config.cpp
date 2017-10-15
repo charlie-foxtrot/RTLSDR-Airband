@@ -35,12 +35,7 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			continue;
 		}
 		if(!strncmp(outs[o]["type"], "icecast", 7)) {
-			channel->outputs[oo].data = malloc(sizeof(struct icecast_data));
-			if(channel->outputs[oo].data == NULL) {
-				cerr<<"Cannot allocate memory for outputs\n";
-				error();
-			}
-			memset(channel->outputs[oo].data, 0, sizeof(struct icecast_data));
+			channel->outputs[oo].data = XCALLOC(1, sizeof(struct icecast_data));
 			channel->outputs[oo].type = O_ICECAST;
 			icecast_data *idata = (icecast_data *)(channel->outputs[oo].data);
 			idata->hostname = strdup(outs[o]["server"]);
@@ -58,12 +53,7 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				idata->send_scan_freq_tags = 0;
 			channel->need_mp3 = 1;
 		} else if(!strncmp(outs[o]["type"], "file", 4)) {
-			channel->outputs[oo].data = malloc(sizeof(struct file_data));
-			if(channel->outputs[oo].data == NULL) {
-				cerr<<"Cannot allocate memory for outputs\n";
-				error();
-			}
-			memset(channel->outputs[oo].data, 0, sizeof(struct file_data));
+			channel->outputs[oo].data = XCALLOC(1, sizeof(struct file_data));
 			channel->outputs[oo].type = O_FILE;
 			file_data *fdata = (file_data *)(channel->outputs[oo].data);
 			fdata->dir = strdup(outs[o]["directory"]);
@@ -77,12 +67,7 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				cerr<<"Configuration error: mixers.["<<i<<"] outputs["<<o<<"]: mixer output is not allowed for mixers\n";
 				error();
 			}
-			channel->outputs[oo].data = malloc(sizeof(struct mixer_data));
-			if(channel->outputs[oo].data == NULL) {
-				cerr<<"Cannot allocate memory for outputs\n";
-				error();
-			}
-			memset(channel->outputs[oo].data, 0, sizeof(struct mixer_data));
+			channel->outputs[oo].data = XCALLOC(1, sizeof(struct mixer_data));
 			channel->outputs[oo].type = O_MIXER;
 			mixer_data *mdata = (mixer_data *)(channel->outputs[oo].data);
 			const char *name = (const char *)outs[o]["name"];
@@ -105,6 +90,30 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			}
 			debug_print("dev[%d].chan[%d].out[%d] connected to mixer %s as input %d (ampfactor=%.1f balance=%.1f)\n",
 				i, j, o, name, mdata->input, ampfactor, balance);
+#ifdef PULSE
+		} else if(!strncmp(outs[o]["type"], "pulse", 5)) {
+			channel->outputs[oo].data = XCALLOC(1, sizeof(struct pulse_data));
+			channel->outputs[oo].type = O_PULSE;
+
+			pulse_data *pdata = (pulse_data *)(channel->outputs[oo].data);
+			pdata->continuous = outs[o].exists("continuous") ?
+				(bool)(outs[o]["continuous"]) : false;
+			pdata->server = outs[o].exists("server") ? strdup(outs[o]["server"]) : NULL;
+			pdata->name = strdup(outs[o].exists("name") ? outs[o]["name"] : "rtl_airband");
+			pdata->sink = outs[o].exists("sink") ? strdup(outs[o]["sink"]) : NULL;
+
+			if (outs[o].exists("stream_name")) {
+				pdata->stream_name = strdup(outs[o]["stream_name"]);
+			} else {
+				if(parsing_mixers) {
+					cerr<<"Configuration error: mixers.["<<i<<"] outputs["<<o<<"]: PulseAudio outputs of mixers must have stream_name defined\n";
+					error();
+				}
+				char buf[1024];
+				snprintf(buf, sizeof(buf), "%.3f MHz", (float)channel->freqlist[0].frequency  / 1000000.0f);
+				pdata->stream_name = strdup(buf);
+			}
+#endif
 		} else {
 			cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown output type\n";
 			error();
@@ -114,6 +123,25 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 		oo++;
 	}
 	return oo;
+}
+
+static struct freq_t *mk_freqlist( int n )
+{
+	if(n < 1) {
+		cerr<<"mk_freqlist: invalid list length " << n << "\n";
+		error();
+	}
+	struct freq_t *fl = (struct freq_t *)XCALLOC(n, sizeof(struct freq_t));
+	for(int i = 0; i < n; i++) {
+		fl[i].frequency = 0;
+		fl[i].label = NULL;
+		fl[i].agcavgfast = 0.5f;
+		fl[i].agcavgslow = 0.5f;
+		fl[i].agcmin = 100.0f;
+		fl[i].agclow = 0;
+		fl[i].sqlevel = -1;
+	}
+	return fl;
 }
 
 static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
@@ -133,14 +161,11 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		}
 		channel->agcsq = 1;
 		channel->axcindicate = ' ';
-		channel->agcavgfast = 0.5f;
-		channel->agcavgslow = 0.5f;
-		channel->agcmin = 100.0f;
-		channel->agclow = 0;
-		channel->sqlevel = -1.0f;
 		channel->modulation = MOD_AM;
 		channel->mode = MM_MONO;
 		channel->need_mp3 = 0;
+		channel->freq_count = 1;
+		channel->freq_idx = 0;
 		if(chans[j].exists("modulation")) {
 #ifdef NFM
 			if(!strncmp(chans[j]["modulation"], "nfm", 3)) {
@@ -154,43 +179,59 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				error();
 			}
 		}
-		if(chans[j].exists("squelch")) {
-			channel->sqlevel = (int)chans[j]["squelch"];
-			if(channel->sqlevel <= 0) {
-				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch must be greater than 0\n";
-				error();
-			}
-		}
 		channel->afc = chans[j].exists("afc") ? (unsigned char) (unsigned int)chans[j]["afc"] : 0;
 		if(dev->mode == R_MULTICHANNEL) {
-			channel->frequency = chans[j]["freq"];
+			channel->freqlist = mk_freqlist( 1 );
+			channel->freqlist[0].frequency = chans[j]["freq"];
 		} else { /* R_SCAN */
 			channel->freq_count = chans[j]["freqs"].getLength();
 			if(channel->freq_count < 1) {
 				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: freqs should be a list with at least one element\n";
 				error();
 			}
+			channel->freqlist = mk_freqlist( channel->freq_count );
 			if(chans[j].exists("labels") && chans[j]["labels"].getLength() < channel->freq_count) {
 				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: labels should be a list with at least "
 					<<channel->freq_count<<" elements\n";
 				error();
 			}
-			channel->freqlist = (int *)malloc(channel->freq_count * sizeof(int));
-			channel->labels = (char **)malloc(channel->freq_count * sizeof(char *));
-			memset(channel->labels, 0, channel->freq_count * sizeof(char *));
-			if(channel->freqlist == NULL || channel->labels == NULL) {
-				cerr<<"Cannot allocate memory for freqlist\n";
+			if(chans[j].exists("squelch") && libconfig::Setting::TypeList == chans[j]["squelch"].getType() && chans[j]["squelch"].getLength() < channel->freq_count) {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch should be an int or a list with at least "
+					<<channel->freq_count<<" elements\n";
 				error();
 			}
 			for(int f = 0; f<channel->freq_count; f++) {
-				channel->freqlist[f] = (int)(chans[j]["freqs"][f]);
-				if(chans[j].exists("labels"))
-					channel->labels[f] = strdup(chans[j]["labels"][f]);
+				channel->freqlist[f].frequency = (int)(chans[j]["freqs"][f]);
+				if(chans[j].exists("labels")) {
+					channel->freqlist[f].label = strdup(chans[j]["labels"][f]);
+				}
 			}
 // Set initial frequency for scanning
 // We tune 2 FFT bins higher to avoid DC spike
-			channel->frequency = channel->freqlist[0];
-			dev->centerfreq = channel->freqlist[0] + 2 * (double)(SOURCE_RATE / FFT_SIZE);
+			dev->centerfreq = channel->freqlist[0].frequency + 2 * (double)(SOURCE_RATE / FFT_SIZE);
+		}
+		if(chans[j].exists("squelch")) {
+			if(libconfig::Setting::TypeList == chans[j]["squelch"].getType()) {
+				// New-style array of per-frequency squelch settings
+				for(int f = 0; f<channel->freq_count; f++) {
+					channel->freqlist[f].sqlevel = (int)chans[j]["squelch"][f];
+				}
+				// NB: no value check; -1 allows auto-squelch for
+				//     some frequencies and not others.
+			} else if(libconfig::Setting::TypeInt == chans[j]["squelch"].getType()) {
+				// Legacy (single squelch for all frequencies)
+				int sqlevel = (int)chans[j]["squelch"];
+				if(sqlevel <= 0) {
+					cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch must be greater than 0\n";
+					error();
+				}
+				for(int f = 0; f<channel->freq_count; f++) {
+					channel->freqlist[f].sqlevel = sqlevel;
+				}
+			} else {
+				cerr<<"Invalid value for squelch (should be int or list - use parentheses)\n";
+				error();
+			}
 		}
 #ifdef NFM
 		if(chans[j].exists("tau")) {
@@ -205,24 +246,16 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: no outputs defined\n";
 			error();
 		}
-		channel->outputs = (output_t *)malloc(channel->output_count * sizeof(struct output_t));
-		if(channel->outputs == NULL) {
-			cerr<<"Cannot allocate memory for outputs\n";
-			error();
-		}
+		channel->outputs = (output_t *)XCALLOC(channel->output_count, sizeof(struct output_t));
 		int outputs_enabled = parse_outputs(outputs, channel, i, j, false);
 		if(outputs_enabled < 1) {
 			cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: no outputs defined\n";
 			error();
 		}
-		channel->outputs = (output_t *)realloc(channel->outputs, outputs_enabled * sizeof(struct output_t));
-		if(channel->outputs == NULL) {
-			cerr<<"Cannot allocate memory for outputs\n";
-			error();
-		}
+		channel->outputs = (output_t *)XREALLOC(channel->outputs, outputs_enabled * sizeof(struct output_t));
 		channel->output_count = outputs_enabled;
 
-		dev->base_bins[jj] = dev->bins[jj] = (int)ceil((channel->frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
+		dev->base_bins[jj] = dev->bins[jj] = (int)ceil((channel->freqlist[0].frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
 #ifdef NFM
 		if(channel->modulation == MOD_NFM) {
 // Calculate mixing frequency needed for NFM to remove linear phase shift caused by FFT sliding window
@@ -247,7 +280,14 @@ int parse_devices(libconfig::Setting &devs) {
 		if(devs[i].exists("disable") && (bool)devs[i]["disable"] == true) continue;
 		device_t* dev = devices + devcnt;
 		if(!devs[i].exists("correction")) devs[i].add("correction", libconfig::Setting::TypeInt);
-		dev->device = (int)devs[i]["index"];
+		if(devs[i].exists("serial")) {
+			dev->serial = strdup(devs[i]["serial"]);
+		} else if(devs[i].exists("index")) {
+			dev->device = (int)devs[i]["index"];
+		} else {
+			cerr<<"Configuration error: devices.["<<i<<"]: no index and no serial number given\n";
+			error();
+		}
 		dev->channel_count = 0;
 		if(devs[i].exists("gain"))
 			dev->gain = (int)devs[i]["gain"] * 10;
@@ -319,21 +359,13 @@ int parse_mixers(libconfig::Setting &mx) {
 			cerr<<"Configuration error: mixers.["<<i<<"]: no outputs defined\n";
 			error();
 		}
-		channel->outputs = (output_t *)calloc(channel->output_count, sizeof(struct output_t));
-		if(channel->outputs == NULL) {
-			cerr<<"Cannot allocate memory for outputs\n";
-			error();
-		}
+		channel->outputs = (output_t *)XCALLOC(channel->output_count, sizeof(struct output_t));
 		int outputs_enabled = parse_outputs(outputs, channel, i, 0, true);
 		if(outputs_enabled < 1) {
 			cerr<<"Configuration error: mixers.["<<i<<"]: no outputs defined\n";
 			error();
 		}
-		channel->outputs = (output_t *)realloc(channel->outputs, outputs_enabled * sizeof(struct output_t));
-		if(channel->outputs == NULL) {
-			cerr<<"Cannot allocate memory for outputs\n";
-			error();
-		}
+		channel->outputs = (output_t *)XREALLOC(channel->outputs, outputs_enabled * sizeof(struct output_t));
 		channel->output_count = outputs_enabled;
 		mm++;
 	}

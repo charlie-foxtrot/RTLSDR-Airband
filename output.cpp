@@ -28,6 +28,9 @@
 #include <vorbis/vorbisenc.h>
 #include <shout/shout.h>
 #include <lame/lame.h>
+#ifdef PULSE
+#include <pulse/pulseaudio.h>
+#endif
 #include <syslog.h>
 #include <cstdlib>
 #include <cstring>
@@ -136,18 +139,10 @@ class LameTone
 
 public:
 	LameTone(mix_modes mixmode, int msec, unsigned int hz = 0) : _data(NULL), _bytes(0) {
-		_data = (unsigned char *)malloc(LAMEBUF_SIZE);
-		if (!_data) {
-			log(LOG_WARNING, "LameTone: can't alloc %u bytes\n", LAMEBUF_SIZE);
-			return;
-		}
+		_data = (unsigned char *)XCALLOC(1, LAMEBUF_SIZE);
 
 		int samples = (msec * WAVE_RATE) / 1000;
-		float *buf = (float *)malloc(samples * sizeof(float));
-		if (!buf) {
-			log(LOG_WARNING, "LameTone: can't alloc %u samples\n", samples);
-			return;
-		}
+		float *buf = (float *)XCALLOC(samples, sizeof(float));
 
 		if (hz > 0) {
 			const float period = 1.0 / (float)hz;
@@ -241,7 +236,7 @@ static int fdata_open(file_data *fdata, const char *filename, mix_modes mixmode)
 
 unsigned char lamebuf[LAMEBUF_SIZE];
 void process_outputs(channel_t *channel, int cur_scan_freq) {
-	int mp3_bytes;
+	int mp3_bytes = 0;
 	if(channel->need_mp3) {
 		debug_bulk_print("channel->mode=%s\n", channel->mode == MM_STEREO ? "MM_STEREO" : "MM_MONO");
 		mp3_bytes = lame_encode_buffer_ieee_float(
@@ -277,10 +272,10 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 			} else if(icecast->send_scan_freq_tags && cur_scan_freq >= 0) {
 				shout_metadata_t *meta = shout_metadata_new();
 				char description[32];
-				if(channel->labels[cur_scan_freq] != NULL)
-					shout_metadata_add(meta, "song", channel->labels[cur_scan_freq]);
+				if(channel->freqlist[channel->freq_idx].label != NULL)
+					shout_metadata_add(meta, "song", channel->freqlist[channel->freq_idx].label);
 				else {
-					snprintf(description, sizeof(description), "%.3f MHz", channel->freqlist[cur_scan_freq] / 1000000.0);
+					snprintf(description, sizeof(description), "%.3f MHz", channel->freqlist[channel->freq_idx].frequency / 1000000.0);
 					shout_metadata_add(meta, "song", description);
 				}
 				shout_set_metadata(icecast->shout, meta);
@@ -303,12 +298,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 			}
 			if(fdata->suffix == NULL || strcmp(suffix, fdata->suffix)) {	// need to open new file
 				fdata->suffix = strdup(suffix);
-				char *filename = (char *)malloc(strlen(fdata->dir) + strlen(fdata->prefix) + strlen(fdata->suffix) + 2);
-				if(filename == NULL) {
-					log(LOG_WARNING, "process_outputs: cannot allocate memory, output disabled\n");
-					channel->outputs[k].enabled = false;
-					continue;
-				}
+				char *filename = (char *)XCALLOC(1, strlen(fdata->dir) + strlen(fdata->prefix) + strlen(fdata->suffix) + 2);
 				sprintf(filename, "%s/%s%s", fdata->dir, fdata->prefix, fdata->suffix);
 				if(fdata->f != NULL) {
 					//todo: finalize file stream with lame_encode_flush_nogap
@@ -343,6 +333,14 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 		} else if(channel->outputs[k].type == O_MIXER) {
 			mixer_data *mdata = (mixer_data *)(channel->outputs[k].data);
 			mixer_put_samples(mdata->mixer, mdata->input, channel->waveout, WAVE_BATCH);
+#ifdef PULSE
+		} else if(channel->outputs[k].type == O_PULSE) {
+			pulse_data *pdata = (pulse_data *)(channel->outputs[k].data);
+			if(pdata->continuous == false && channel->axcindicate == ' ')
+				continue;
+
+			pulse_write_stream(pdata, channel->mode, channel->waveout, channel->waveout_r, (size_t)WAVE_BATCH * sizeof(float));
+#endif
 		}
 	}
 }
@@ -368,6 +366,11 @@ void disable_channel_outputs(channel_t *channel) {
 		} else if(output->type == O_MIXER) {
 			mixer_data *mdata = (mixer_data *)(output->data);
 			mixer_disable_input(mdata->mixer, mdata->input);
+#ifdef PULSE
+		} else if(output->type == O_PULSE) {
+			pulse_data *pdata = (pulse_data *)(output->data);
+			pulse_shutdown(pdata);
+#endif
 		}
 	}
 }
@@ -386,7 +389,7 @@ void* output_thread(void* params) {
 
 	if(DEBUG) gettimeofday(&ts, NULL);
 	while (!do_exit) {
-		pthread_cond_wait(&mp3_cond, &mp3_mutex);
+		safe_cond_wait(&mp3_cond, &mp3_mutex);
 		for (int i = 0; i < mixer_count; i++) {
 			if(mixers[i].enabled == false) continue;
 			channel_t *channel = &mixers[i].channel;
@@ -431,30 +434,43 @@ void* output_thread(void* params) {
 }
 
 // reconnect as required
-void* icecast_check(void* params) {
+void* output_check_thread(void* params) {
 	while (!do_exit) {
 		SLEEP(10000);
 		for (int i = 0; i < device_count; i++) {
 			device_t* dev = devices + i;
 			for (int j = 0; j < dev->channel_count; j++) {
 				for (int k = 0; k < dev->channels[j].output_count; k++) {
-					if(dev->channels[j].outputs[k].type != O_ICECAST)
-						continue;
-					icecast_data *icecast = (icecast_data *)(dev->channels[j].outputs[k].data);
-					if(dev->failed) {
-						if(icecast->shout) {
-							log(LOG_WARNING, "Device #%d failed, disconnecting stream %s:%d/%s\n",
-								i, icecast->hostname, icecast->port, icecast->mountpoint);
-							shout_close(icecast->shout);
-							shout_free(icecast->shout);
-							icecast->shout = NULL;
+					if(dev->channels[j].outputs[k].type == O_ICECAST) {
+						icecast_data *icecast = (icecast_data *)(dev->channels[j].outputs[k].data);
+						if(dev->failed) {
+							if(icecast->shout) {
+								log(LOG_WARNING, "Device #%d failed, disconnecting stream %s:%d/%s\n",
+									i, icecast->hostname, icecast->port, icecast->mountpoint);
+								shout_close(icecast->shout);
+								shout_free(icecast->shout);
+								icecast->shout = NULL;
+							}
+						} else {
+							if (icecast->shout == NULL){
+								log(LOG_NOTICE, "Trying to reconnect to %s:%d/%s...\n",
+									icecast->hostname, icecast->port, icecast->mountpoint);
+								shout_setup(icecast, dev->channels[j].mode);
+							}
 						}
-					} else {
-						if (icecast->shout == NULL){
-							log(LOG_NOTICE, "Trying to reconnect to %s:%d/%s...\n",
-								icecast->hostname, icecast->port, icecast->mountpoint);
-							shout_setup(icecast, dev->channels[j].mode);
+#ifdef PULSE
+					} else if(dev->channels[j].outputs[k].type == O_PULSE) {
+						pulse_data *pdata = (pulse_data *)(dev->channels[j].outputs[k].data);
+						if(dev->failed) {
+							if(pdata->context) {
+								pulse_shutdown(pdata);
+							}
+						} else {
+							if (pdata->context == NULL){
+								pulse_setup(pdata, dev->channels[j].mode);
+							}
 						}
+#endif
 					}
 				}
 			}
@@ -464,13 +480,20 @@ void* icecast_check(void* params) {
 			for (int k = 0; k < mixers[i].channel.output_count; k++) {
 				if(mixers[i].channel.outputs[k].enabled == false)
 					continue;
-				if(mixers[i].channel.outputs[k].type != O_ICECAST)
-					continue;
-				icecast_data *icecast = (icecast_data *)(mixers[i].channel.outputs[k].data);
-				if(icecast->shout == NULL) {
-					log(LOG_NOTICE, "Trying to reconnect to %s:%d/%s...\n",
-						icecast->hostname, icecast->port, icecast->mountpoint);
-					shout_setup(icecast, mixers[i].channel.mode);
+				if(mixers[i].channel.outputs[k].type == O_ICECAST) {
+					icecast_data *icecast = (icecast_data *)(mixers[i].channel.outputs[k].data);
+					if(icecast->shout == NULL) {
+						log(LOG_NOTICE, "Trying to reconnect to %s:%d/%s...\n",
+							icecast->hostname, icecast->port, icecast->mountpoint);
+						shout_setup(icecast, mixers[i].channel.mode);
+					}
+#ifdef PULSE
+				} else if(mixers[i].channel.outputs[k].type == O_PULSE) {
+					pulse_data *pdata = (pulse_data *)(mixers[i].channel.outputs[k].data);
+					if (pdata->context == NULL){
+						pulse_setup(pdata, mixers[i].channel.mode);
+					}
+#endif
 				}
 			}
 		}

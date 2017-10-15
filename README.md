@@ -1,165 +1,188 @@
 RTLSDR-Airband
 =====================
 
-RTLSDR Airband is a Linux/Unix program intended for AM/NFM voice channels reception and online streaming
-to services such as liveatc.net.
+RTLSDR-Airband is a program intended for AM/NFM voice channels reception and online streaming
+to services such as LiveATC.net.
 
 Features
 ---------------------
  * Multichannel mode - decode up to eight AM or NFM channels per dongle (within bandwidth frequency range)
- * Scanner mode - decode unlimited number of AM and/or NFM channels with frequency hopping in a round-robin
+ * Scanner mode - decode unlimited number of AM or NFM channels with frequency hopping in a round-robin
    fashion (no frequency range limitations)
  * Decode multiple dongles simultaneously
- * Auto squelch and Automatic Gain Control
+ * Auto squelch
+ * Automatic volume equalization for AM
  * MP3 encoding
  * Stream to Icecast or SHOUTcast server
  * Record to local MP3 files (continuously or skipping silence periods)
+ * Stream uncompressed audio to a PulseAudio server (eg. for local or networked playback)
  * Multiple streaming/recording destinations per channel
  * Mixing several channels into a single audio stream (both mono and stereo mixing is supported)
 
-Performance
+Supported and tested platforms
 ---------------------
-### x86
- * ~4% per dongle on i5-2430m at 2.1 GHz
+ * GNU/Linux
+   * x86/x86_64
+   * ARMv6 (Raspberry Pi v1)
+   * ARMv7 (Raspberry Pi v2, v3, Cubieboard)
+   * ARMv8
+ * FreeBSD
+   * x86/x86_64
 
-### Raspberry Pi
- * FFT using Broadcom Videocore IV GPU
- * No overclock required when using 1 dongle plus another dongle running dump1090
- * Turbo overclock setting recommended on RPi V1 when using 2 dongles
-   (no overclocking is necessary on RPi V2)
-
-### Other ARMv7-based platforms
- * FFT using main CPU
- * Tested on Cubieboard2 - ~50% CPU when using 1 dongle
-
-Demo
+Screenshot
 ---------------------
-![Demo (Windows version)](demo.png?raw=true)
+![Screenshot](demo.png?raw=true)
 
 Building
 ---------------------
-### Linux (Raspbian)
- * Install RTLSDR library (http://sdr.osmocom.org/trac/wiki/rtl-sdr):
+The following instructions are specific to Raspbian Linux, because it is the most
+prevalent distribution for Raspberry Pi. However the software should build and
+run on pretty much any reasonably modern Linux distribution.
 
-        sudo apt-get update
-        sudo apt-get install git gcc autoconf make libusb-1.0-0-dev libtool
-        cd
-        git clone git://git.osmocom.org/rtl-sdr.git
-        cd rtl-sdr/
-        autoreconf -i
-        ./configure
-        make
-        sudo make install
-        sudo ldconfig
-        sudo mv $HOME/rtl-sdr/rtl-sdr.rules /etc/udev/rules.d/rtl-sdr.rules
+### Dependencies
 
- * Blacklist DVB drivers to avoid conflict with SDR driver - before connecting
-   the USB dongle create file `/etc/modprobe.d/dvb-blacklist.conf` with text
-   editor (eg. nano) and add the following lines:
+The following third-party software is required to compile RTLSDR-Airband. Raspian
+package names are given in parentheses:
+
+ * GCC compiler (gcc)
+ * GNU make (make)
+ * LAME mp3 encoder (libmp3lame-dev)
+ * libshout library (libshout3-dev)
+ * libconfig library (libconfig++-dev)
+ * rtl-sdr library (librtlsdr-dev)
+
+Additionally, on a Raspberry Pi:
+
+ * Broadcom VideoCore GPU development headers and libraries (libraspberrypi-dev)
+
+and for platforms other than Raspberry Pi:
+
+ * FFTW library (libfftw3-dev)
+
+This software is packaged in most Linux distributions. In Raspbian you can install
+it all at once with a single command:
+
+        sudo apt-get install gcc make libmp3lame-dev libshout3-dev libconfig++-dev librtlsdr-dev libraspberrypi-dev
+
+On platforms other than Raspberry Pi you also need this:
+
+        sudo apt-get install libfftw3-dev
+
+Then you have to blacklist DVB drivers for RTL chipset to avoid conflict with SDR
+applications. Using any text editor (eg. `nano`) create a file named
+`/etc/modprobe.d/dvb-blacklist.conf` and put the following lines in it:
 
         blacklist r820t
         blacklist rtl2832
         blacklist rtl2830
         blacklist dvb_usb_rtl28xxu
 
- * Download a release tarball from from https://github.com/szpajder/RTLSDR-Airband/releases
-   and unpack it. Example:
+Save the file and exit the editor.
 
-        tar xvfz RTLSDR-Airband-1.0.0.tar.gz
-        cd RTLSDR-Airband-1.0.0
+### Compilation
 
-   Alternatively you can pull the latest code from git:
+You may either go for a stable release (these are quite well tested) or the latest
+development code from Git repository (which has all the cutting-edge features and
+bugs as well). New code always goes to the `unstable` branch first before it is
+merged into `master` branch and a release is made.
+
+To download a release tarball, go to https://github.com/szpajder/RTLSDR-Airband/releases ,
+get the latest one and unpack it. Example:
+
+        tar xvfz RTLSDR-Airband-2.3.0.tar.gz
+        cd RTLSDR-Airband-2.3.0
+
+If you prefer to run the latest development code, then do this:
 
         git clone https://github.com/szpajder/RTLSDR-Airband.git
         cd RTLSDR-Airband/
-
-   If you want cutting-edge features which didn't make it into a release yet, checkout
-   the unstable branch:
-
         git checkout unstable
 
-   Be aware that it might be experimental, buggy, or at least, untested.
+The build process is controlled with environment variables passed to the `make` program.
+Just type:
 
- * Install necessary dependencies:
+        make
 
-        sudo apt-get install libmp3lame-dev libvorbis-dev libshout-dev libconfig++-dev
+to list all available build options. Currently the only mandatory option is PLATFORM,
+which is used to set the hardware platform you are building for. Setting this option
+enables hardware-specific code optimizations. For example, on a Raspberry Pi the
+Fast Fourier Transform calculation is offloaded to the Broadcom VideoCore GPU, which
+is crucial for good performance. Of course you can build the program without GPU
+support, but it will cause main CPU utilization to be prohibitively high. On the other
+hand, it does not make sense to include VC GPU support on a platform which is not
+equipped with it (eg. desktop x86 PC).
 
- * Set the build options and run `make`. Available build options:
-
-   `PLATFORM=platform_name` - selects the hardware platform. This option is mandatory. See below.
-
-   `PULSE=1` - enables PulseAudio support. By default, PulseAudio is disabled.
-
-   `NFM=1` - enables NFM support. By default, NFM is disabled.
-
-   **Warning:** Do not enable NFM, if you only use AM (especially on low-power platforms, like RPi).
-   This incurs performance penalty, both for AM and NFM.
-
-   Examples:
-
-   Build a binary for RPi version 1 (ARMv6 CPU, Broadcom VideoCore GPU):
+Build options are specified before (or after) `make` command. For example, to compile
+the program for Raspberry Pi version 1, type:
 
         PLATFORM=rpiv1 make
 
-   Same platform, but with NFM support enabled:
+This enables VC GPU support together with some code optimized for ARMv6 CPU.
 
-        PLATFORM=rpiv1 NFM=1 make
+Other supported PLATFORM values:
 
-   Building for RPi V2 (ARMv7 CPU, Broadcom VideoCore GPU), with NFM support:
+   * `rpiv2` - for Raspberry Pi v2 and v3 (ARMv7 CPU, Broadcom VideoCore GPU)
+   * `armv7-generic` - for ARMv7-based platforms which do not have VC GPU, eg. Cubieboard
+   * `armv8-generic` - for 64-bit ARM platforms, eg. Odroid C2
+   * `x86` - for your desktop PC running Linux
+   * `x86-freebsd` - for your desktop PC running FreeBSD (probably you need to use `gmake` instead of `make`)
 
-        PLATFORM=rpiv2 NFM=1 make
+### Enabling optional features
 
-   Building for other ARM-based platforms without VideoCore GPU (FFTW3
-   library is needed in this case), NFM disabled:
+##### Narrowband FM demodulation
 
-        sudo apt-get install libfftw3-dev
-        PLATFORM=armv7-generic make		# for ARMv7 platforms, like Cubieboard
-	PLATFORM=armv8-generic make		# for 64-bit ARM platforms, like Odroid C2
+By default only AM demodulation is enabled. This is enough for VHF airband. If you want
+to use the program to monitor other things, like rail frequencies or public services,
+you need NFM support.
 
-   Building for generic x86 CPU (FFTW3 library is needed in this case), NFM enabled:
+If you have compiled the program before, type:
 
-        sudo apt-get install libfftw3-dev
-        PLATFORM=x86 NFM=1 make
+        make clean
 
-   There are some FreeBSD-specific options, which must be enabled when building for this OS,
-   so use this instead:
+to start from a fresh build. **Note: do this every time you decide to change your
+set of build options.** Then type:
 
-	PLATFORM=x86-freebsd gmake
+        PLATFORM=<your_platform> NFM=1 make
 
- * Install the software. On FreeBSD:
+**Warning:** Do not enable NFM, if you do not plan to use it (especially on low-performance
+platforms, like RPi). Enabling NFM incurs performance penalty, both for AM and NFM.
 
-	PLATFORM=x86-freebsd gmake install
+##### PulseAudio support
 
-   Other platforms:
+PulseAudio is a sound server which allows sharing audio equipment (read: sound card(s))
+across many sound sources (applications). It is a default sound server in pretty much
+every mainstream Linux distribution.
+
+RTLSDR-Airband can stream uncompressed audio to a PulseAudio server for real-time playback.
+The server may run on the same machine or on another one, reachable over your local network.
+Using PulseAudio you can, for example, play the sound via the soundcard of the Raspberry Pi
+you run RTLSDR-Airband on. Or you can stream the audio from a Pi located near the antenna
+(eg. in the attic) to speakers connected to the desktop PC you are sitting at. Of course
+you can do the same thing with Icecast, but with PulseAudio it comes with less hassle -
+you don't need to set up a local Icecast server, you don't need to launch VLC or other
+player, you get a per-stream volume knob in your mixer. Audio quality is better (no MP3
+compression) and latency is really low (usually below half a second).
+
+First, install PulseAudio library and headers:
+
+        apt-get install libpulse-dev
+
+Recompile RTLSDR-Airband with PULSE=1 build option:
+
+        make clean
+        PLATFORM=<your_platform> PULSE=1 make
+
+### Installation
+
+After RTLSDR-Airband is built, install it:
 
         make install
 
-   By default, the binary is installed to `/usr/local/bin/rtl_airband`.
+On FreeBSD it's a little different:
 
- * Edit the configuration file to suit your needs. See chapter "Configuring" below.
+        PLATFORM=x86-freebsd gmake install
 
- * You need to run the program with root privileges - for example:
-
-        sudo /usr/local/bin/rtl_airband
-
-   The program runs as a daemon (background process) by default, so it may look like
-   it has exited right after startup. Diagnostic messages are printed to syslog
-   (on Raspbian Jessie they are directed to `/var/log/daemon.log` by default).
-
- * If you wish to start the program automatically at boot, you can use example startup
-   scripts from `init.d` subdirectory.
-
-   Example for Debian / Raspbian Jessie or newer (or any other systemd-based distro):
-
-        sudo cp init.d/rtl_airband.service /etc/systemd/system
-        sudo systemctl daemon-reload
-        sudo systemctl enable rtl_airband
-
-   Example for Debian / Raspbian Wheezy or older (sysvinit-based):
-
-        sudo cp init.d/rtl_airband-debian.sh /etc/init.d/rtl_airband
-        sudo chmod 755 /etc/init.d/rtl_airband
-        sudo update-rc.d rtl_airband defaults
+The binary will be installed to `/usr/local/bin/rtl_airband`.
 
 Configuring
 --------------------
@@ -169,7 +192,7 @@ is a good starting point. When you do `make install`, this file will get copied 
 `/usr/local/etc/rtl_airband.conf` (unless you already have your own config file installed).
 All available config parameters are mentioned and documented in config/reference.conf.
 
-Command line options
+Running the program
 --------------------
 rtl_airband accepts the following command line options:
 
@@ -179,7 +202,35 @@ rtl_airband accepts the following command line options:
     -c <config_file_path>   Use non-default configuration file
     -Q                      Use quadri correlator for FM demodulation (default is atan2)
                             (this option is available only if rtl_airband was compiled
-			    with NFM support enabled)
+                            with NFM support enabled)
+
+On Raspberry Pi you need to run the program with root privileges, otherwise it won't be
+able to access GPU hardware:
+
+        sudo /usr/local/bin/rtl_airband
+
+On other arches you can run the program with user privileges. The only prerequisite is
+to have access rights to USB devices. Check `/dev/bus/usb` directory for permissions of
+device nodes - most probably they are writable by a group `usb` or `plugdev` or similar.
+Just add yourself to that group and rtl_airband should run fine.
+
+The program runs as a daemon (background process) by default, so it may look like it has
+exited right after startup. Diagnostic messages are printed to syslog (on Raspbian Jessie
+they are directed to `/var/log/daemon.log` by default).
+
+If you wish to start the program automatically at boot, you can use example startup
+scripts from `init.d` subdirectory. Example for Debian / Raspbian Jessie or newer (or
+any other distribution based on systemd):
+
+        sudo cp init.d/rtl_airband.service /etc/systemd/system
+        sudo systemctl daemon-reload
+        sudo systemctl enable rtl_airband
+
+Example for Debian / Raspbian Wheezy or older (sysvinit-based):
+
+        sudo cp init.d/rtl_airband-debian.sh /etc/init.d/rtl_airband
+        sudo chmod 755 /etc/init.d/rtl_airband
+        sudo update-rc.d rtl_airband defaults
 
 Troubleshooting
 --------------------
@@ -242,9 +293,19 @@ any error messages, for example: `tail /var/log/messages`. Common problems:
    This is due to a bug in libusb versions earlier than 1.0.17. Upgrade to a newer
    version.
 
+Credits and thanks
+--------------------
+I hereby express my gratitude to everybody who helped with the development and testing
+of RTLSDR-Airband. Special thanks go to:
+
+ * Dave Pascoe
+ * SDR Guru
+ * Marcus Ströbel
+ * strix-technica
+
 License
 --------------------
-Copyright (C) 2015-2016 Tomasz Lemiech <szpajder@gmail.com>
+Copyright (C) 2015-2017 Tomasz Lemiech <szpajder@gmail.com>
 
 Based on original work by Wong Man Hang <microtony@gmail.com>
 
@@ -261,15 +322,9 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-Open Source Licenses
+Open Source Licenses of bundled code
 ---------------------
-
-###fftw3
- * Copyright (c) 2003, 2007-14 Matteo Frigo
- * Copyright (c) 2003, 2007-14 Massachusetts Institute of Technology
- * GNU General Public License Version 2
-
-###gpu_fft
+### gpu_fft
 BCM2835 "GPU_FFT" release 2.0
 Copyright (c) 2014, Andrew Holme.
 All rights reserved.
@@ -296,91 +351,7 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-###libmp3lame
- *      Copyright (c) 1999 Mark Taylor
- *      Copyright (c) 2000-2002 Takehiro Tominaga
- *      Copyright (c) 2000-2011 Robert Hegemann
- *      Copyright (c) 2001 Gabriel Bouvigne
- *      Copyright (c) 2001 John Dahlstrom
- *  GNU Library General Public License Version 2
-
-###libogg
-Copyright (c) 2002, Xiph.org Foundation
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions
-are met:
-
-- Redistributions of source code must retain the above copyright
-notice, this list of conditions and the following disclaimer.
-
-- Redistributions in binary form must reproduce the above copyright
-notice, this list of conditions and the following disclaimer in the
-documentation and/or other materials provided with the distribution.
-
-- Neither the name of the Xiph.org Foundation nor the names of its
-contributors may be used to endorse or promote products derived from
-this software without specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION
-OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-###librtlsdr
+### rtl-sdr
  * Copyright (C) 2012 by Steve Markgraf <steve@steve-m.de>
+ * Copyright (C) 2015 by Kyle Keen <keenerd@gmail.com>
  * GNU General Public License Version 2
-
-###libshout
- * Copyright (C) 2002-2004 the Icecast team <team@icecast.org>
- * GNU Library General Public License Version 2
-
-###libvorbis
-Copyright (c) 2002-2008 Xiph.org Foundation
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions
-are met:
-
-- Redistributions of source code must retain the above copyright
-notice, this list of conditions and the following disclaimer.
-
-- Redistributions in binary form must reproduce the above copyright
-notice, this list of conditions and the following disclaimer in the
-documentation and/or other materials provided with the distribution.
-
-- Neither the name of the Xiph.org Foundation nor the names of its
-contributors may be used to endorse or promote products derived from
-this software without specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION
-OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-###libconfig
-Copyright (C) 2005-2014  Mark A Lindner
-
-This library is free software; you can redistribute it and/or
-modify it under the terms of the GNU Lesser General Public License
-published by the Free Software Foundation; either version 2.1 of
-the License, or (at your option) any later version.
-
-This library is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-Lesser General Public License for more details.

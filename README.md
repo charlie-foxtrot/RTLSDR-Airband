@@ -44,7 +44,7 @@ run on pretty much any reasonably modern Linux distribution.
 The following third-party software is required to compile RTLSDR-Airband. Raspian
 package names are given in parentheses:
 
- * GCC compiler (gcc)
+ * GNU C++ compiler (g++)
  * GNU make (make)
  * LAME mp3 encoder (libmp3lame-dev)
  * libshout library (libshout3-dev)
@@ -62,7 +62,7 @@ and for platforms other than Raspberry Pi:
 This software is packaged in most Linux distributions. In Raspbian you can install
 it all at once with a single command:
 
-        sudo apt-get install gcc make libmp3lame-dev libshout3-dev libconfig++-dev librtlsdr-dev libraspberrypi-dev
+        sudo apt-get install g++ make libmp3lame-dev libshout3-dev libconfig++-dev librtlsdr-dev libraspberrypi-dev
 
 On platforms other than Raspberry Pi you also need this:
 

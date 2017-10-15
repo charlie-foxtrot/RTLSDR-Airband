@@ -34,7 +34,7 @@
 #endif
 
 #ifndef RTL_AIRBAND_VERSION
-#define RTL_AIRBAND_VERSION "2.3.0"
+#define RTL_AIRBAND_VERSION "2.4.0"
 #endif
 #define ALIGN
 #define ALIGN2 __attribute__((aligned(32)))

@@ -1,5 +1,39 @@
 NEWS:
 
+Version 2.4.0:
+ * Support for PulseAudio output via new output type `pulse`. With this
+   feature you can eg. play the sound via the soundcard of the Raspberry
+   Pi you run RTLSDR-Airband on (you need to install and run pulseaudio
+   daemon on it, though). Or you can stream the audio from a Pi located
+   near the antenna (eg. in the attic) to speakers connected to the desktop
+   PC you are sitting at, without launching a local Icecast server,
+   as before. Because the audio stream is sent uncompressed, it is
+   not recommended to run it across the Internet - jitter or packet loss
+   will easily cause the audio to become choppy. However in a local network
+   PulseAudio is a good choice. And it gives much lower latency as compared
+   to Icecast (typically under 0.5 seconds). Thanks to Marcus Ströbel
+   for the idea and initial implementation.
+ * Support for referring to RTL devices by their serial numbers in the
+   config file. Instead of `index = <dongle_index>` parameter, use `serial =
+   <dongle_serial_number>` to get consistent behavior across reboots
+   and hardware reconfigurations.
+ * Set RTL gain to the nearest gain value supported by the device. This is
+   required for E4000 tuners, which do not round the given gain value to
+   the nearest supported setting, which causes the gain setting operation
+   to fail.
+ * Improved squelch operation in scan mode. All squelch-related variables
+   (noise floor, AGC coefficients, etc) are now calculated and stored
+   separately for each scanned channel. Earlier their values were common
+   to all channels, which caused squelch problems in case when noise floor
+   varied considerably between channels. Thanks to @strix-technica.
+ * Added build target for FreeBSD on x86. Use `PLATFORM=x86-freebsd` to
+   compile and `PLATFORM=x86-freebsd gmake install` to install. Thanks
+   to @nyammy.
+ * Display squelch setting in waterfall in place of noise floor value when
+   squelch is set manually.
+ * Bug fixes, performance improvements.
+ * Decluttered and more understandable documentation.
+
 Version 2.3.0:
  * Added support for mixers. It is now possible to produce audio streams
    combined from several input channels. Both mono and stereo mixing is

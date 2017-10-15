@@ -82,7 +82,8 @@ ifndef DEPS
 	Additional options:\n \
 	\tNFM=1\t\t\t\tInclude support for Narrow FM demodulation\n \
 	\t\t\t\t\tWarning: this incurs noticeable performance penalty both for AM and FM\n \
-	\t\t\t\t\tDo not enable NFM, if you only use AM (especially on low-power platforms, like RPi)\n\n"
+	\t\t\t\t\tDo not enable NFM, if you only use AM (especially on low-power platforms, like RPi)\n \
+	\tPULSE=1\t\t\t\tInclude support for streaming to PulseAudio server\n\n"
 	@false
 endif
 

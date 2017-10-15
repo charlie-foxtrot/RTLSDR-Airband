@@ -105,7 +105,7 @@ static pa_stream *pulse_setup_stream(pulse_data *pdata, const pa_sample_spec *ss
 // but for stereo mixers it's required to keep left and right channels in sync.
 // Starting the left channel stream before the other stream from the sync pair is
 // set up causes the left channel stream to fail.
-	if(pa_stream_connect_playback(stream, NULL, NULL,
+	if(pa_stream_connect_playback(stream, pdata->sink, NULL,
 				      (pa_stream_flags_t)(PA_STREAM_INTERPOLATE_TIMING
 				      |PA_STREAM_ADJUST_LATENCY
 				      |PA_STREAM_START_CORKED

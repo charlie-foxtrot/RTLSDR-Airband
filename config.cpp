@@ -100,7 +100,7 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				(bool)(outs[o]["continuous"]) : false;
 			pdata->server = outs[o].exists("server") ? strdup(outs[o]["server"]) : NULL;
 			pdata->name = strdup(outs[o].exists("name") ? outs[o]["name"] : "rtl_airband");
-			pdata->dev = outs[o].exists("dev") ? strdup(outs[o]["dev"]) : NULL;
+			pdata->sink = outs[o].exists("sink") ? strdup(outs[o]["sink"]) : NULL;
 
 			if (outs[o].exists("stream_name")) {
 				pdata->stream_name = strdup(outs[o]["stream_name"]);

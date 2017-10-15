@@ -120,7 +120,7 @@ struct file_data {
 struct pulse_data {
 	const char *server;
 	const char *name;
-	const char *dev;
+	const char *sink;
 	const char *stream_name;
 	pa_context *context;
 	pa_stream *left, *right;

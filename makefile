@@ -70,6 +70,12 @@ ifeq ($(PULSE), 1)
   DEPS += pulse.o
 endif
 
+ifeq ($(WITH_MIRISDR), 1)
+  CFLAGS += -DWITH_MIRISDR
+  DEPS += mirisdr.o
+  LDLIBS += -lmirisdr
+endif
+
 $(BIN): $(DEPS)
 ifndef DEPS
 	@printf "\nPlease set PLATFORM variable to one of available platforms:\n \
@@ -79,6 +85,8 @@ ifndef DEPS
 	\tPLATFORM=armv8-generic make\t64-bit ARM platforms, like Odroid C2 (use main CPU for FFT)\n \
 	\tPLATFORM=x86 make\t\tbuild binary for x86 (Linux)\n \
 	\tPLATFORM=x86-freebsd gmake\tbuild binary for x86 (FreeBSD)\n\n \
+	SDR Hardware options:\n \
+	\tWITH_MIRISDR=1\t\t\tEnable Mirics DVB-T chipset support (via libmirisdr)\n \
 	Additional options:\n \
 	\tNFM=1\t\t\t\tInclude support for Narrow FM demodulation\n \
 	\t\t\t\t\tWarning: this incurs noticeable performance penalty both for AM and FM\n \

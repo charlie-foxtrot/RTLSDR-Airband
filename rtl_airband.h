@@ -18,6 +18,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifndef _RTL_AIRBAND_H
+#define _RTL_AIRBAND_H 1
 #include <cstdio>
 #include <pthread.h>
 #include <sys/time.h>
@@ -25,6 +27,9 @@
 #include <lame/lame.h>
 #include <libconfig.h++>
 #include <rtl-sdr.h>
+#ifdef WITH_MIRISDR
+#include <mirisdr.h>
+#endif
 #ifdef USE_BCM_VC
 #include "hello_fft/gpu_fft.h"
 #endif
@@ -135,6 +140,15 @@ struct mixer_data {
 	int input;
 };
 
+enum hw_type {
+	HW_RTLSDR
+#ifdef WITH_MIRISDR
+	, HW_MIRISDR
+#endif
+};
+
+enum sample_format { SFMT_U8, SFMT_S8, SFMT_UNDEF };
+
 enum output_type {
 	O_ICECAST,
 	O_FILE,
@@ -207,6 +221,9 @@ struct device_t {
 	int bufs;
 	int bufe;
 	rtlsdr_dev_t* rtlsdr;
+#ifdef WITH_MIRISDR
+	mirisdr_dev_t  *mirisdr;	// FIXME: hw-agnostic pointer
+#endif
 	char *serial;
 	uint32_t device;
 	int centerfreq;
@@ -221,7 +238,7 @@ struct device_t {
 	channel_t channels[CHANNELS];
 	int waveend;
 	int waveavail;
-	THREAD rtl_thread;
+	THREAD sdr_thread;
 	THREAD controller_thread;
 	struct freq_tag tag_queue[TAG_QUEUE_LEN];
 	int tq_head, tq_tail;
@@ -231,6 +248,8 @@ struct device_t {
 	int row;
 	int failed;
 	enum rec_modes mode;
+	enum hw_type type;
+	enum sample_format sfmt;
 };
 
 struct mixinput_t {
@@ -264,7 +283,7 @@ void *output_thread(void* params);
 extern bool use_localtime;
 extern int device_count, mixer_count;
 extern int shout_metadata_delay, do_syslog, foreground;
-extern volatile int do_exit;
+extern volatile int do_exit, device_opened;
 extern float alpha;
 extern device_t *devices;
 extern mixer_t *mixers;
@@ -313,5 +332,6 @@ void pulse_start();
 void pulse_shutdown(pulse_data *pdata);
 void pulse_write_stream(pulse_data *pdata, mix_modes mode, float *data_left, float *data_right, size_t len);
 #endif
+#endif /* _RTL_AIRBAND_H */
 
 // vim: ts=4

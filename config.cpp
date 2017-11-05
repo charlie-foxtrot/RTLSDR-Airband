@@ -280,6 +280,23 @@ int parse_devices(libconfig::Setting &devs) {
 		if(devs[i].exists("disable") && (bool)devs[i]["disable"] == true) continue;
 		device_t* dev = devices + devcnt;
 		if(!devs[i].exists("correction")) devs[i].add("correction", libconfig::Setting::TypeInt);
+		if(devs[i].exists("type")) {
+			if(!strcmp(devs[i]["type"], "rtlsdr")) {
+				dev->type = HW_RTLSDR;
+				dev->sfmt = SFMT_U8;
+#ifdef WITH_MIRISDR
+			} else if(!strcmp(devs[i]["type"], "mirisdr")) {
+				dev->type = HW_MIRISDR;
+				dev->sfmt = SFMT_S8;
+#endif
+			} else {
+				cerr<<"Configuration error: devices.["<<i<<"]: unknown hardware type specified\n";
+				error();
+			}
+		} else {
+			dev->type = HW_RTLSDR;
+			dev->sfmt = SFMT_U8;
+		}
 		if(devs[i].exists("serial")) {
 			dev->serial = strdup(devs[i]["serial"]);
 		} else if(devs[i].exists("index")) {
@@ -289,9 +306,15 @@ int parse_devices(libconfig::Setting &devs) {
 			error();
 		}
 		dev->channel_count = 0;
-		if(devs[i].exists("gain"))
-			dev->gain = (int)devs[i]["gain"] * 10;
-		else {
+		dev->gain = -1;
+// FIXME: pass unmodified float gain value to the hw-specific routine
+		if(devs[i].exists("gain")) {
+			if(devs[i]["gain"].getType() == libconfig::Setting::TypeInt)	// backward compatibility
+				dev->gain = (int)devs[i]["gain"] * 10;
+			else if(devs[i]["gain"].getType() == libconfig::Setting::TypeFloat)
+				dev->gain = (int)((float)devs[i]["gain"] * 10.0f);
+		}
+		if(dev->gain < 0) {
 			cerr<<"Configuration error: devices.["<<i<<"]: gain is not configured\n";
 			error();
 		}

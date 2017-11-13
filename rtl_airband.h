@@ -72,7 +72,11 @@
 #define TAG_QUEUE_LEN 16
 #define CHANNELS 8
 #define MAX_MIXINPUTS 32
-#define FFT_SIZE_LOG 9
+
+#define MIN_FFT_SIZE_LOG 8
+#define DEFAULT_FFT_SIZE_LOG 9
+#define MAX_FFT_SIZE_LOG 13
+
 #define LAMEBUF_SIZE 22000 //todo: calculate
 #define MIX_DIVISOR 2
 #define RTL_DEV_INVALID 0xFFFFFFFF
@@ -94,7 +98,6 @@ extern "C" void samplefft(sample_fft_arg *a, unsigned char* buffer, float* windo
 #else
 # define FFT_BATCH 1
 #endif
-#define FFT_SIZE (2<<(FFT_SIZE_LOG - 1))
 
 //#define AFC_LOGGING
 
@@ -217,7 +220,8 @@ struct channel_t {
 
 enum rec_modes { R_MULTICHANNEL, R_SCAN };
 struct device_t {
-	unsigned char buffer[BUF_SIZE + FFT_SIZE * 2 + 48];
+	unsigned char *buffer;
+// FIXME: size_t
 	int bufs;
 	int bufe;
 	rtlsdr_dev_t* rtlsdr;
@@ -233,9 +237,11 @@ struct device_t {
 	float alpha;
 #endif
 	int channel_count;
+// FIXME: size_t / unsigned
 	int base_bins[CHANNELS];
 	int bins[CHANNELS];
 	channel_t channels[CHANNELS];
+// FIXME: size_t
 	int waveend;
 	int waveavail;
 	THREAD sdr_thread;
@@ -281,6 +287,7 @@ void *output_thread(void* params);
 
 // rtl_airband.cpp
 extern bool use_localtime;
+extern size_t fft_size, fft_size_log;
 extern int device_count, mixer_count;
 extern int shout_metadata_delay, do_syslog, foreground;
 extern volatile int do_exit, device_opened;

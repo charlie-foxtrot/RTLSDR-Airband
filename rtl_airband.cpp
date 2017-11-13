@@ -80,6 +80,8 @@ int rtlsdr_buffers = 10;
 int foreground = 0, do_syslog = 1, shout_metadata_delay = 3;
 volatile int do_exit = 0;
 bool use_localtime = false;
+size_t fft_size_log = DEFAULT_FFT_SIZE_LOG;
+size_t fft_size = 1 << fft_size_log;
 #ifdef NFM
 float alpha = exp(-1.0f/(WAVE_RATE * 2e-4));
 enum fm_demod_algo {
@@ -101,7 +103,7 @@ void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx) {
 	pthread_mutex_lock(&dev->buffer_lock);
 	memcpy(dev->buffer + dev->bufe, buf, len);
 	if (dev->bufe == 0) {
-		memcpy(dev->buffer + BUF_SIZE, buf, FFT_SIZE * 2);
+		memcpy(dev->buffer + BUF_SIZE, buf, fft_size * 2);
 	}
 	dev->bufe = dev->bufe + len;
 	if (dev->bufe == BUF_SIZE) dev->bufe = 0;
@@ -217,7 +219,7 @@ void* controller_thread(void* params) {
 			} else {
 				i++; i %= dev->channels[0].freq_count;
 				dev->channels[0].freq_idx = i;
-				dev->centerfreq = dev->channels[0].freqlist[i].frequency + 2 * (double)(SOURCE_RATE / FFT_SIZE);
+				dev->centerfreq = dev->channels[0].freqlist[i].frequency + 2 * (double)(SOURCE_RATE / fft_size);
 // FIXME: make this hw-agnostic
 				switch(dev->type) {
 				case HW_RTLSDR:
@@ -312,7 +314,7 @@ class AFC
 			if (bin < -STEP)
 				break;
 
-			} else if ( (bin + STEP) >= FFT_SIZE)
+			} else if ( (bin + STEP) >= fft_size)
 				break;
 
 			const float value = square(fft_results, bin + STEP);
@@ -374,16 +376,16 @@ void demodulate() {
 	fftwf_plan fft;
 	fftwf_complex* fftin;
 	fftwf_complex* fftout;
-	fftin = fftwf_alloc_complex(FFT_SIZE);
-	fftout = fftwf_alloc_complex(FFT_SIZE);
-	fft = fftwf_plan_dft_1d(FFT_SIZE, fftin, fftout, FFTW_FORWARD, FFTW_MEASURE);
+	fftin = fftwf_alloc_complex(fft_size);
+	fftout = fftwf_alloc_complex(fft_size);
+	fft = fftwf_plan_dft_1d(fft_size, fftin, fftout, FFTW_FORWARD, FFTW_MEASURE);
 #else
 	int mb = mbox_open();
 	struct GPU_FFT *fft;
-	int ret = gpu_fft_prepare(mb, FFT_SIZE_LOG, GPU_FFT_FWD, FFT_BATCH, &fft);
+	int ret = gpu_fft_prepare(mb, fft_size_log, GPU_FFT_FWD, FFT_BATCH, &fft);
 	switch (ret) {
 		case -1: log(LOG_CRIT, "Unable to enable V3D. Please check your firmware is up to date.\n"); error();
-		case -2: log(LOG_CRIT, "log2_N=%d not supported. Try between 8 and 17.\n", FFT_SIZE_LOG); error();
+		case -2: log(LOG_CRIT, "log2_N=%d not supported. Try between 8 and 17.\n", fft_size_log); error();
 		case -3: log(LOG_CRIT, "Out of memory. Try a smaller batch or increase GPU memory.\n"); error();
 	}
 #endif
@@ -399,19 +401,19 @@ void demodulate() {
 	// initialize fft window
 	// blackman 7
 	// the whole matrix is computed
-	ALIGN float ALIGN2 window[FFT_SIZE * 2];
+	ALIGN float ALIGN2 window[fft_size * 2];
 	const double a0 = 0.27105140069342f;
 	const double a1 = 0.43329793923448f;	const double a2 = 0.21812299954311f;
 	const double a3 = 0.06592544638803f;	const double a4 = 0.01081174209837f;
 	const double a5 = 0.00077658482522f;	const double a6 = 0.00001388721735f;
 
-	for (int i = 0; i < FFT_SIZE; i++) {
-		double x = a0 - (a1 * cos((2.0 * M_PI * i) / (FFT_SIZE-1)))
-			+ (a2 * cos((4.0 * M_PI * i) / (FFT_SIZE - 1)))
-			- (a3 * cos((6.0 * M_PI * i) / (FFT_SIZE - 1)))
-			+ (a4 * cos((8.0 * M_PI * i) / (FFT_SIZE - 1)))
-			- (a5 * cos((10.0 * M_PI * i) / (FFT_SIZE - 1)))
-			+ (a6 * cos((12.0 * M_PI * i) / (FFT_SIZE - 1)));
+	for (size_t i = 0; i < fft_size; i++) {
+		double x = a0 - (a1 * cos((2.0 * M_PI * i) / (fft_size-1)))
+			+ (a2 * cos((4.0 * M_PI * i) / (fft_size - 1)))
+			- (a3 * cos((6.0 * M_PI * i) / (fft_size - 1)))
+			+ (a4 * cos((8.0 * M_PI * i) / (fft_size - 1)))
+			- (a5 * cos((10.0 * M_PI * i) / (fft_size - 1)))
+			+ (a6 * cos((12.0 * M_PI * i) / (fft_size - 1)));
 		window[i * 2] = window[i * 2 + 1] = (float)x;
 	}
 
@@ -419,7 +421,8 @@ void demodulate() {
 	if(DEBUG)
 		gettimeofday(&ts, NULL);
 	// speed2 = number of bytes per wave sample (x 2 for I and Q)
-	int speed2 = (SOURCE_RATE * 2) / WAVE_RATE;
+	size_t speed2 = (SOURCE_RATE * 2) / WAVE_RATE;
+	size_t available;
 	int device_num = 0;
 	while (true) {
 
@@ -432,11 +435,12 @@ void demodulate() {
 		}
 
 		device_t* dev = devices + device_num;
+
 		pthread_mutex_lock(&dev->buffer_lock);
-		int available = dev->bufe - dev->bufs;
-		if (available < 0) {
-			available += BUF_SIZE;
-		}
+		if(dev->bufe >= dev->bufs)
+			available = dev->bufe - dev->bufs;
+		else
+			available = BUF_SIZE - dev->bufs + dev->bufe;
 		pthread_mutex_unlock(&dev->buffer_lock);
 
 		if(atomic_get(&device_opened)==0) {
@@ -448,7 +452,7 @@ void demodulate() {
 			// move to next device
 			device_num = (device_num + 1) % device_count;
 			continue;
-		} else if (available < speed2 * FFT_BATCH + FFT_SIZE * 2) {
+		} else if (available < speed2 * FFT_BATCH + fft_size * 2) {
 			// move to next device
 			device_num = (device_num + 1) % device_count;
 			SLEEP(10);
@@ -456,19 +460,19 @@ void demodulate() {
 		}
 
 #if defined USE_BCM_VC
-		sample_fft_arg sfa = {FFT_SIZE / 4, fft->in};
+		sample_fft_arg sfa = {fft_size / 4, fft->in};
 		for (int i = 0; i < FFT_BATCH; i++) {
 			samplefft(&sfa, dev->buffer + dev->bufs + i * speed2, window, levels);
 			sfa.dest+= fft->step;
 		}
 #elif defined (__arm__) || defined (__aarch64__)
-		for (int i = 0; i < FFT_SIZE; i++) {
+		for (size_t i = 0; i < fft_size; i++) {
 			unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
 			fftin[i][0] = levels[*(buf2)] * window[i*2];
 			fftin[i][1] = levels[*(buf2+1)] * window[i*2];
 		}
 #else /* x86 */
-		for (int i = 0; i < FFT_SIZE; i += 2) {
+		for (size_t i = 0; i < fft_size; i += 2) {
 			__m128 a, b;
 			if(dev->sfmt == SFMT_U8) {
 				unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
@@ -771,6 +775,22 @@ int main(int argc, char* argv[]) {
 			cerr<<"Configuration error: rtlsdr_buffers must be greater than 0\n";
 			error();
 		}
+		if(root.exists("fft_size")) {
+			int fsize = (int)(root["fft_size"]);
+			fft_size_log = 0;
+			for(size_t i = MIN_FFT_SIZE_LOG; i <= MAX_FFT_SIZE_LOG; i++) {
+				if(fsize == 1 << i) {
+					fft_size = (size_t)fsize;
+					fft_size_log = i;
+					break;
+				}
+			}
+			if(fft_size_log == 0) {
+				cerr<<"Configuration error: invalid fft_size value (must be a power of two in range "<<
+					(1<<MIN_FFT_SIZE_LOG)<<"-"<<(1<<MAX_FFT_SIZE_LOG)<<")\n";
+				error();
+			}
+		}
 		if(root.exists("shout_metadata_delay")) shout_metadata_delay = (int)(root["shout_metadata_delay"]);
 		if(shout_metadata_delay < 0 || shout_metadata_delay > 2*TAG_QUEUE_LEN) {
 			cerr<<"Configuration error: shout_metadata_delay is out of allowed range (0-"<<2 * TAG_QUEUE_LEN<<")\n";
@@ -799,7 +819,7 @@ int main(int argc, char* argv[]) {
 		sigaction(SIGINT, &sigact, NULL);
 		sigaction(SIGQUIT, &sigact, NULL);
 		sigaction(SIGTERM, &sigact, NULL);
-
+// FIXME: alignment needed for buffer only
 		uintptr_t tempptr = (uintptr_t)XCALLOC(1, device_count * sizeof(device_t)+31);
 		tempptr &= ~0x0F;
 		devices = (device_t *)tempptr;

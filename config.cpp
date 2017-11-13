@@ -208,7 +208,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			}
 // Set initial frequency for scanning
 // We tune 2 FFT bins higher to avoid DC spike
-			dev->centerfreq = channel->freqlist[0].frequency + 2 * (double)(SOURCE_RATE / FFT_SIZE);
+			dev->centerfreq = channel->freqlist[0].frequency + 2 * (double)(SOURCE_RATE / fft_size);
 		}
 		if(chans[j].exists("squelch")) {
 			if(libconfig::Setting::TypeList == chans[j]["squelch"].getType()) {
@@ -255,13 +255,13 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		channel->outputs = (output_t *)XREALLOC(channel->outputs, outputs_enabled * sizeof(struct output_t));
 		channel->output_count = outputs_enabled;
 
-		dev->base_bins[jj] = dev->bins[jj] = (int)ceil((channel->freqlist[0].frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / FFT_SIZE) - 1.0f) % FFT_SIZE;
+		dev->base_bins[jj] = dev->bins[jj] = (int)ceil((channel->freqlist[0].frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / fft_size) - 1.0f) % fft_size;
 #ifdef NFM
 		if(channel->modulation == MOD_NFM) {
 // Calculate mixing frequency needed for NFM to remove linear phase shift caused by FFT sliding window
 // This equals bin_width_Hz * (distance_from_DC_bin)
-			float timeref_freq = 2.0f * M_PI * (float)(SOURCE_RATE / FFT_SIZE) *
-			(float)(dev->bins[jj] < (FFT_SIZE >> 1) ? dev->bins[jj] + 1 : dev->bins[jj] - FFT_SIZE + 1) / (float)WAVE_RATE;
+			float timeref_freq = 2.0f * M_PI * (float)(SOURCE_RATE / fft_size) *
+			(float)(dev->bins[jj] < (fft_size >> 1) ? dev->bins[jj] + 1 : dev->bins[jj] - fft_size + 1) / (float)WAVE_RATE;
 // Pre-generate the waveform for better performance
 			for(int k = 0; k < WAVE_RATE; k++) {
 				channel->timeref_cos[k] = cosf(timeref_freq * k);
@@ -339,6 +339,8 @@ int parse_devices(libconfig::Setting &devs) {
 		}
 #endif
 		dev->correction = (int)devs[i]["correction"];
+// FIXME: alignment
+		dev->buffer = (unsigned char *)XCALLOC(sizeof(unsigned char), BUF_SIZE + fft_size * 2 + 48);	// FIXME: do we need the tail?
 		memset(dev->bins, 0, sizeof(dev->bins));
 		memset(dev->base_bins, 0, sizeof(dev->base_bins));
 		dev->bufs = dev->bufe = dev->waveend = dev->waveavail = dev->row = dev->tq_head = dev->tq_tail = 0;

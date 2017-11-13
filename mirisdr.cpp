@@ -59,7 +59,7 @@ void mirisdr_callback(unsigned char *buf, uint32_t len, void *ctx) {
 	pthread_mutex_lock(&dev->buffer_lock);
 	memcpy(dev->buffer + dev->bufe, buf, len);
 	if (dev->bufe == 0) {
-		memcpy(dev->buffer + BUF_SIZE, buf, FFT_SIZE * 2);
+		memcpy(dev->buffer + BUF_SIZE, buf, fft_size * 2);
 	}
 	dev->bufe = dev->bufe + len;
 	if (dev->bufe == BUF_SIZE) dev->bufe = 0;

@@ -99,9 +99,11 @@ $(FFT):	hello_fft ;
 
 config.o: rtl_airband.h
 
+mirics.o: rtl_airband.h mirisdr.h
+
 mixer.o: rtl_airband.h
 
-rtl_airband.o: rtl_airband.h
+rtl_airband.o: rtl_airband.h mirisdr.h
 
 output.o: rtl_airband.h
 

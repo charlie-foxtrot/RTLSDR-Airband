@@ -122,7 +122,7 @@ void *mirisdr_exec(void *params) {
 	}
 	fprintf(stderr, "Using USB transfer mode %s\n", mirisdr_get_transfer(mirisdr));
 */
-	r = mirisdr_set_sample_rate(mirisdr, SOURCE_RATE);	// FIXME: configurable
+	r = mirisdr_set_sample_rate(mirisdr, dev->sample_rate);
 	if (r < 0) {
 		log(LOG_ERR, "Failed to set sample rate for device #%d: error %d\n", dev->device, r);
 		_exit(1);

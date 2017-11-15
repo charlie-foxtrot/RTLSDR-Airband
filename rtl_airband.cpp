@@ -168,7 +168,7 @@ void* rtlsdr_exec(void* params) {
 		error();
 		return NULL;
 	}
-	r = rtlsdr_set_sample_rate(dev->rtlsdr, SOURCE_RATE);
+	r = rtlsdr_set_sample_rate(dev->rtlsdr, dev->sample_rate);
 	if (r < 0) log(LOG_ERR, "Failed to set sample rate for device #%d. Error %d.\n", dev->device, r);
 	r = rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);
 	if (r < 0) log(LOG_ERR, "Failed to set center freq for device #%d. Error %d.\n", dev->device, r);
@@ -219,7 +219,7 @@ void* controller_thread(void* params) {
 			} else {
 				i++; i %= dev->channels[0].freq_count;
 				dev->channels[0].freq_idx = i;
-				dev->centerfreq = dev->channels[0].freqlist[i].frequency + 2 * (double)(SOURCE_RATE / fft_size);
+				dev->centerfreq = dev->channels[0].freqlist[i].frequency + 2 * (double)(dev->sample_rate / fft_size);
 // FIXME: make this hw-agnostic
 				switch(dev->type) {
 				case HW_RTLSDR:
@@ -420,8 +420,6 @@ void demodulate() {
 	struct timeval ts, te;
 	if(DEBUG)
 		gettimeofday(&ts, NULL);
-	// speed2 = number of bytes per wave sample (x 2 for I and Q)
-	size_t speed2 = (SOURCE_RATE * 2) / WAVE_RATE;
 	size_t available;
 	int device_num = 0;
 	while (true) {
@@ -448,11 +446,13 @@ void demodulate() {
 			do_exit = 1;
 			continue;
 		}
+		// number of input bytes per output wave sample (x 2 for I and Q)
+		size_t bps = (dev->sample_rate * 2) / WAVE_RATE;
 		if (dev->failed) {
 			// move to next device
 			device_num = (device_num + 1) % device_count;
 			continue;
-		} else if (available < speed2 * FFT_BATCH + fft_size * 2) {
+		} else if (available < bps * FFT_BATCH + fft_size * 2) {
 			// move to next device
 			device_num = (device_num + 1) % device_count;
 			SLEEP(10);
@@ -462,7 +462,7 @@ void demodulate() {
 #if defined USE_BCM_VC
 		sample_fft_arg sfa = {fft_size / 4, fft->in};
 		for (int i = 0; i < FFT_BATCH; i++) {
-			samplefft(&sfa, dev->buffer + dev->bufs + i * speed2, window, levels);
+			samplefft(&sfa, dev->buffer + dev->bufs + i * bps, window, levels);
 			sfa.dest+= fft->step;
 		}
 #elif defined (__arm__) || defined (__aarch64__)
@@ -671,7 +671,7 @@ void demodulate() {
 			}
 		}
 
-		dev->bufs += speed2 * FFT_BATCH;
+		dev->bufs += bps * FFT_BATCH;
 		if (dev->bufs >= BUF_SIZE) dev->bufs -= BUF_SIZE;
 		device_num = (device_num + 1) % device_count;
 	}

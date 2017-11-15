@@ -208,7 +208,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			}
 // Set initial frequency for scanning
 // We tune 2 FFT bins higher to avoid DC spike
-			dev->centerfreq = channel->freqlist[0].frequency + 2 * (double)(SOURCE_RATE / fft_size);
+			dev->centerfreq = channel->freqlist[0].frequency + 2 * (double)(dev->sample_rate / fft_size);
 		}
 		if(chans[j].exists("squelch")) {
 			if(libconfig::Setting::TypeList == chans[j]["squelch"].getType()) {
@@ -255,12 +255,12 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		channel->outputs = (output_t *)XREALLOC(channel->outputs, outputs_enabled * sizeof(struct output_t));
 		channel->output_count = outputs_enabled;
 
-		dev->base_bins[jj] = dev->bins[jj] = (int)ceil((channel->freqlist[0].frequency + SOURCE_RATE - dev->centerfreq) / (double)(SOURCE_RATE / fft_size) - 1.0f) % fft_size;
+		dev->base_bins[jj] = dev->bins[jj] = (int)ceil((channel->freqlist[0].frequency + dev->sample_rate - dev->centerfreq) / (double)(dev->sample_rate / fft_size) - 1.0f) % fft_size;
 #ifdef NFM
 		if(channel->modulation == MOD_NFM) {
 // Calculate mixing frequency needed for NFM to remove linear phase shift caused by FFT sliding window
 // This equals bin_width_Hz * (distance_from_DC_bin)
-			float timeref_freq = 2.0f * M_PI * (float)(SOURCE_RATE / fft_size) *
+			float timeref_freq = 2.0f * M_PI * (float)(dev->sample_rate / fft_size) *
 			(float)(dev->bins[jj] < (fft_size >> 1) ? dev->bins[jj] + 1 : dev->bins[jj] - fft_size + 1) / (float)WAVE_RATE;
 // Pre-generate the waveform for better performance
 			for(int k = 0; k < WAVE_RATE; k++) {
@@ -307,6 +307,7 @@ int parse_devices(libconfig::Setting &devs) {
 		}
 		dev->channel_count = 0;
 		dev->gain = -1;
+		dev->sample_rate = DEFAULT_SAMPLE_RATE;		// FIXME: not all receiver types can handle arbitrary sample rate
 // FIXME: pass unmodified float gain value to the hw-specific routine
 		if(devs[i].exists("gain")) {
 			if(devs[i]["gain"].getType() == libconfig::Setting::TypeInt)	// backward compatibility
@@ -317,6 +318,14 @@ int parse_devices(libconfig::Setting &devs) {
 		if(dev->gain < 0) {
 			cerr<<"Configuration error: devices.["<<i<<"]: gain is not configured\n";
 			error();
+		}
+		if(devs[i].exists("sample_rate")) {
+			int sample_rate = (int)(devs[i]["sample_rate"]);
+			if(sample_rate < WAVE_RATE) {
+				cerr<<"Configuration error: devices.["<<i<<"]: sample_rate must be greater than "<<WAVE_RATE<<"\n";
+				error();
+			}
+			dev->sample_rate = (uint32_t)sample_rate;
 		}
 		if(devs[i].exists("mode")) {
 			if(!strncmp(devs[i]["mode"], "multichannel", 12)) {

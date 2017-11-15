@@ -58,7 +58,7 @@
 #endif
 
 #define BUF_SIZE 2560000
-#define SOURCE_RATE 2560000
+#define DEFAULT_SAMPLE_RATE 2560000
 #ifdef NFM
 #define WAVE_RATE 16000
 #else
@@ -230,6 +230,7 @@ struct device_t {
 #endif
 	char *serial;
 	uint32_t device;
+	uint32_t sample_rate;
 	int centerfreq;
 	int correction;
 	int gain;

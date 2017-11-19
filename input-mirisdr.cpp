@@ -108,20 +108,12 @@ void *mirisdr_exec(void *params) {
 		_exit(1);
 	}
 
-/*	if(usb_xfer_mode == 0)
-		r = mirisdr_set_transfer(mirisdr, "ISOC");
-	else if(usb_xfer_mode == 1)
-		r = mirisdr_set_transfer(mirisdr, "BULK");
-	else {
-		fprintf(stderr, "Invalid USB transfer mode\n");
-		_exit(1);
-	}
+	r = mirisdr_set_transfer(mirisdr, "BULK");
 	if (r < 0) {
-		fprintf(stderr, "Failed to set transfer mode for device #%d: error %d\n", device, r);
+		log(LOG_ERR, "Failed to set bulk transfer mode for MiriSDR device #%d: error %d\n", dev->device, r);
 		_exit(1);
 	}
-	fprintf(stderr, "Using USB transfer mode %s\n", mirisdr_get_transfer(mirisdr));
-*/
+
 	r = mirisdr_set_sample_rate(mirisdr, dev->sample_rate);
 	if (r < 0) {
 		log(LOG_ERR, "Failed to set sample rate for device #%d: error %d\n", dev->device, r);

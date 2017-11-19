@@ -72,7 +72,7 @@ endif
 
 ifeq ($(WITH_MIRISDR), 1)
   CFLAGS += -DWITH_MIRISDR
-  DEPS += mirisdr.o
+  DEPS += input-mirisdr.o
   LDLIBS += -lmirisdr
 endif
 
@@ -99,11 +99,11 @@ $(FFT):	hello_fft ;
 
 config.o: rtl_airband.h
 
-mirisdr.o: rtl_airband.h mirisdr.h
+input-mirisdr.o: rtl_airband.h input-mirisdr.h
 
 mixer.o: rtl_airband.h
 
-rtl_airband.o: rtl_airband.h mirisdr.h
+rtl_airband.o: rtl_airband.h input-mirisdr.h
 
 output.o: rtl_airband.h
 

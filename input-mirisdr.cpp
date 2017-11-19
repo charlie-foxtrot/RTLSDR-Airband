@@ -1,5 +1,5 @@
 /*
- *  mirisdr.cpp
+ *  input-mirisdr.cpp
  *  MiriSDR-specific routines
  *
  *  Copyright (c) 2015-2017 Tomasz Lemiech <szpajder@gmail.com>
@@ -23,7 +23,7 @@
 #include <syslog.h> // FIXME: get rid of this
 #include <unistd.h>
 #include <mirisdr.h>
-#include "mirisdr.h"
+#include "input-mirisdr.h"
 #include "rtl_airband.h"
 
 /* taken from librtlsdr-keenerd, (c) Kyle Keen */

@@ -65,7 +65,7 @@
 #include <lame/lame.h>
 #include <rtl-sdr.h>
 #ifdef WITH_MIRISDR
-#include "mirisdr.h"
+#include "input-mirisdr.h"
 #endif
 #include "rtl_airband.h"
 

@@ -1,5 +1,5 @@
 /*
- *  mirisdr.h
+ *  input-mirisdr.h
  *  MiriSDR-specific declarations
  *
  *  Copyright (c) 2015-2017 Tomasz Lemiech <szpajder@gmail.com>
@@ -21,7 +21,7 @@
 #include "rtl_airband.h"
 #define MIRISDR_BUFSIZE 320000
 #define MIRISDR_BUFCNT 32
-// mirisdr.cpp
+// input-mirisdr.cpp
 uint32_t mirisdr_find_device_by_serial(const char *s);
 void *mirisdr_exec(void *params);
 void mirisdr_callback(unsigned char *buf, uint32_t len, void *ctx);

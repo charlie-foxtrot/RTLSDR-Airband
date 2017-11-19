@@ -391,7 +391,7 @@ void demodulate() {
 #endif
 
 #ifdef NFM
-	float rotated_r, rotated_j;
+	float derotated_r, derotated_j, swf, cwf;
 #endif
 	ALIGN float ALIGN2 levels[256];
 	for (int i=0; i<256; i++) {
@@ -604,19 +604,20 @@ void demodulate() {
 						}
 #ifdef NFM
 						else {	// NFM
+// remove phase rotation introduced by FFT sliding window
+							sincosf_lut(channel->dm_phi, &swf, &cwf);
 							multiply(channel->complex_samples[2*(j - AGC_EXTRA)], channel->complex_samples[2*(j - AGC_EXTRA)+1],
-// FIXME: use j instead of wavecnt?
-							channel->timeref_cos[channel->wavecnt],
-							channel->timeref_nsin[channel->wavecnt],
-							&rotated_r,
-							&rotated_j);
+							cwf, -swf, &derotated_r, &derotated_j);
+							channel->dm_phi += channel->dm_dphi;
+							channel->dm_phi &= 0xffffff;
+// FM demod
 							if(fm_demod == FM_FAST_ATAN2) {
-								channel->waveout[j] = polar_disc_fast(rotated_r, rotated_j, channel->pr, channel->pj);
+								channel->waveout[j] = polar_disc_fast(derotated_r, derotated_j, channel->pr, channel->pj);
 							} else if(fm_demod == FM_QUADRI_DEMOD) {
-								channel->waveout[j] = fm_quadri_demod(rotated_r, rotated_j, channel->pr, channel->pj);
+								channel->waveout[j] = fm_quadri_demod(derotated_r, derotated_j, channel->pr, channel->pj);
 							}
-							channel->pr = rotated_r;
-							channel->pj = rotated_j;
+							channel->pr = derotated_r;
+							channel->pj = derotated_j;
 // de-emphasis IIR + DC blocking
 							fparms->agcavgfast = fparms->agcavgfast * 0.995f + channel->waveout[j] * 0.005f;
 							channel->waveout[j] -= fparms->agcavgfast;
@@ -624,10 +625,6 @@ void demodulate() {
 						}
 #endif // NFM
 					}
-#ifdef NFM
-					if(channel->modulation == MOD_NFM)
-						channel->wavecnt = (channel->wavecnt + 1) % WAVE_RATE;
-#endif // NFM
 				}
 				memmove(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4);
 #ifdef NFM
@@ -1029,6 +1026,9 @@ int main(int argc, char* argv[]) {
 		pthread_create(&thread4, NULL, &mixer_thread, NULL);
 #ifdef PULSE
 	pulse_start();
+#endif
+#ifdef NFM
+	sincosf_lut_init();
 #endif
 
 	demodulate();

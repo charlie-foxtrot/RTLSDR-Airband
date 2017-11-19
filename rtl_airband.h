@@ -197,11 +197,11 @@ struct channel_t {
 	float complex_samples[2*WAVE_LEN];	// raw samples for NFM demod
 	float timeref_nsin[WAVE_RATE];
 	float timeref_cos[WAVE_RATE];
-	int wavecnt;				// sample counter for timeref shift
 // FIXME: get this from complex_samples?
 	float pr;					// previous sample - real part
 	float pj;					// previous sample - imaginary part
 	float alpha;
+	uint32_t dm_dphi, dm_phi;	// derotation frequency and current phase value
 #endif
 	enum modulations modulation;
 	enum mix_modes mode;		// mono or stereo
@@ -307,6 +307,10 @@ void log(int priority, const char *format, ...);
 void tag_queue_put(device_t *dev, int freq, struct timeval tv);
 void tag_queue_get(device_t *dev, struct freq_tag *tag);
 void tag_queue_advance(device_t *dev);
+#ifdef NFM
+void sincosf_lut_init();
+void sincosf_lut(uint32_t phi, float *sine, float *cosine);
+#endif
 void *xcalloc(size_t nmemb, size_t size, const char *file, const int line, const char *func);
 void *xrealloc(void *ptr, size_t size, const char *file, const int line, const char *func);
 void init_debug (char *file);

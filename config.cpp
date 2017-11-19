@@ -258,15 +258,13 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		dev->base_bins[jj] = dev->bins[jj] = (int)ceil((channel->freqlist[0].frequency + dev->sample_rate - dev->centerfreq) / (double)(dev->sample_rate / fft_size) - 1.0f) % fft_size;
 #ifdef NFM
 		if(channel->modulation == MOD_NFM) {
-// Calculate mixing frequency needed for NFM to remove linear phase shift caused by FFT sliding window
-// This equals bin_width_Hz * (distance_from_DC_bin)
-			float timeref_freq = 2.0f * M_PI * (float)(dev->sample_rate / fft_size) *
-			(float)(dev->bins[jj] < (fft_size >> 1) ? dev->bins[jj] + 1 : dev->bins[jj] - fft_size + 1) / (float)WAVE_RATE;
-// Pre-generate the waveform for better performance
-			for(int k = 0; k < WAVE_RATE; k++) {
-				channel->timeref_cos[k] = cosf(timeref_freq * k);
-				channel->timeref_nsin[k] = -sinf(timeref_freq * k);
-			}
+// Calculate mixing frequency for removing phase rotation introduced by FFT sliding window
+// This equals bin_width_Hz * (distance_from_DC_bin) translated to uint32_t range 0x00000000-0x00ffffff
+// (Cast it to signed int first, because casting negative float to uint is not portable)
+			channel->dm_dphi = (uint32_t)(int)(((float)dev->sample_rate / (float)fft_size *
+				(float)(dev->bins[jj] < (fft_size / 2) ? dev->bins[jj] + 1 : fft_size - dev->bins[jj] - 1)) /
+				(float)WAVE_RATE * 256.0f * 65536.0f);
+			channel->dm_phi = 0.f;
 		}
 #endif
 		jj++;

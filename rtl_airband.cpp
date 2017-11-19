@@ -393,9 +393,14 @@ void demodulate() {
 #ifdef NFM
 	float derotated_r, derotated_j, swf, cwf;
 #endif
-	ALIGN float ALIGN2 levels[256];
+	ALIGN float ALIGN2 levels_u8[256], levels_s8[256];
+	float *levels_ptr = NULL;
+
 	for (int i=0; i<256; i++) {
-		levels[i] = i-127.5f;
+		levels_u8[i] = i-127.5f;
+	}
+	for (int16_t i=-127; i<128; i++) {
+		levels_s8[(uint8_t)i] = i;
 	}
 
 	// initialize fft window
@@ -458,30 +463,35 @@ void demodulate() {
 			SLEEP(10);
 			continue;
 		}
+		switch(dev->sfmt) {
+		case SFMT_U8:
+			levels_ptr = levels_u8;
+			break;
+		case SFMT_S8:
+			levels_ptr = levels_s8;
+			break;
+		default:
+			log(LOG_CRIT, "Unhandled sample type");
+			error();
+		}
 
 #if defined USE_BCM_VC
 		sample_fft_arg sfa = {fft_size / 4, fft->in};
 		for (int i = 0; i < FFT_BATCH; i++) {
-			samplefft(&sfa, dev->buffer + dev->bufs + i * bps, window, levels);
+			samplefft(&sfa, dev->buffer + dev->bufs + i * bps, window, levels_ptr);
 			sfa.dest+= fft->step;
 		}
 #elif defined (__arm__) || defined (__aarch64__)
 		for (size_t i = 0; i < fft_size; i++) {
 			unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
-			fftin[i][0] = levels[*(buf2)] * window[i*2];
-			fftin[i][1] = levels[*(buf2+1)] * window[i*2];
+			fftin[i][0] = levels_ptr[*(buf2)] * window[i*2];
+			fftin[i][1] = levels_ptr[*(buf2+1)] * window[i*2];
 		}
 #else /* x86 */
 		for (size_t i = 0; i < fft_size; i += 2) {
-			__m128 a, b;
-			if(dev->sfmt == SFMT_U8) {
-				unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
-				a = _mm_set_ps(levels[*(buf2 + 3)], levels[*(buf2 + 2)], levels[*(buf2 + 1)], levels[*(buf2)]);
-			} else if(dev->sfmt == SFMT_S8) {
-				char *buf2 = (char *)(dev->buffer + dev->bufs + i * 2);
-				a = _mm_set_ps((float)buf2[3], (float)buf2[2], (float)buf2[1], (float)buf2[0]);
-			}
-			b = _mm_load_ps(&window[i * 2]);
+			unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
+			__m128 a = _mm_set_ps(levels_ptr[*(buf2 + 3)], levels_ptr[*(buf2 + 2)], levels_ptr[*(buf2 + 1)], levels_ptr[*(buf2)]);
+			__m128 b = _mm_load_ps(&window[i * 2]);
 			a = _mm_mul_ps(a, b);
 			_mm_store_ps(&fftin[i][0], a);
 		}

@@ -120,7 +120,7 @@ void *mirisdr_exec(void *params) {
 		_exit(1);
 	}
 
-	r = mirisdr_set_transfer(mirisdr, "BULK");
+	r = mirisdr_set_transfer(mirisdr, (char *)"BULK");
 	if (r < 0) {
 		log(LOG_ERR, "Failed to set bulk transfer mode for MiriSDR device #%d: error %d\n", dev->device, r);
 		_exit(1);
@@ -152,7 +152,7 @@ void *mirisdr_exec(void *params) {
 		log(LOG_ERR, "Device #%d: gain set to %d dB\n", dev->device,
 			mirisdr_get_tuner_gain(mirisdr));
 
-	r = mirisdr_set_sample_format(mirisdr, "504_S8");
+	r = mirisdr_set_sample_format(mirisdr, (char *)"504_S8");
 	if (r < 0) {
 		log(LOG_ERR, "Failed to set sample format for device #%d: error %d\n", dev->device, r);
 		_exit(1);

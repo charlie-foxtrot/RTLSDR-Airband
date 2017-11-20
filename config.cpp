@@ -255,7 +255,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		channel->outputs = (output_t *)XREALLOC(channel->outputs, outputs_enabled * sizeof(struct output_t));
 		channel->output_count = outputs_enabled;
 
-		dev->base_bins[jj] = dev->bins[jj] = (int)ceil((channel->freqlist[0].frequency + dev->sample_rate - dev->centerfreq) / (double)(dev->sample_rate / fft_size) - 1.0f) % fft_size;
+		dev->base_bins[jj] = dev->bins[jj] = (size_t)ceil((channel->freqlist[0].frequency + dev->sample_rate - dev->centerfreq) / (double)(dev->sample_rate / fft_size) - 1.0f) % fft_size;
 #ifdef NFM
 		if(channel->modulation == MOD_NFM) {
 // Calculate mixing frequency for removing phase rotation introduced by FFT sliding window

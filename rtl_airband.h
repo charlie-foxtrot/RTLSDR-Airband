@@ -89,7 +89,7 @@
 #if defined USE_BCM_VC
 struct sample_fft_arg
 {
-	int fft_size_by4;
+	size_t fft_size_by4;
 	GPU_FFT_COMPLEX* dest;
 };
 extern "C" void samplefft(sample_fft_arg *a, unsigned char* buffer, float* window, float* levels);
@@ -236,9 +236,8 @@ struct device_t {
 	float alpha;
 #endif
 	int channel_count;
-// FIXME: size_t / unsigned
-	int base_bins[CHANNELS];
-	int bins[CHANNELS];
+	size_t base_bins[CHANNELS];
+	size_t bins[CHANNELS];
 	channel_t channels[CHANNELS];
 // FIXME: size_t
 	int waveend;

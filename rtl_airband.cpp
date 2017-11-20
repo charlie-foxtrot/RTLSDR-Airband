@@ -312,18 +312,18 @@ class AFC
 	const char _prev_axcindicate;
 
 #ifdef USE_BCM_VC
-	float square(const GPU_FFT_COMPLEX *fft_results, int index)
+	float square(const GPU_FFT_COMPLEX *fft_results, size_t index)
 	{
 		return fft_results[index].re * fft_results[index].re + fft_results[index].im * fft_results[index].im;
 	}
 #else
-	float square(const fftwf_complex *fft_results, int index)
+	float square(const fftwf_complex *fft_results, size_t index)
 	{
 		return fft_results[index][0] * fft_results[index][0] + fft_results[index][1] * fft_results[index][1];
 	}
 #endif
 	template <class FFT_RESULTS, int STEP>
-		int check(const FFT_RESULTS* fft_results, const int base, const float base_value, unsigned char afc)
+		size_t check(const FFT_RESULTS* fft_results, const size_t base, const float base_value, unsigned char afc)
 	{
 		float threshold = 0;
 		int bin;
@@ -332,14 +332,14 @@ class AFC
 			if (bin < -STEP)
 				break;
 
-			} else if ( (bin + STEP) >= fft_size)
+			} else if ( (size_t)(bin + STEP) >= fft_size)
 				break;
 
-			const float value = square(fft_results, bin + STEP);
+			const float value = square(fft_results, (size_t)(bin + STEP));
 			if (value <= base_value)
 				break;
 
-			if (base == bin) {
+			if (base == (size_t)bin) {
 				threshold = (value - base_value) / (float)afc;
 			} else {
 				if ((value - base_value) < threshold)
@@ -365,15 +365,15 @@ public:
 
 		const char axcindicate = channel->axcindicate;
 		if (axcindicate != ' ' && _prev_axcindicate == ' ') {
-			const int base = dev->base_bins[index];
+			const size_t base = dev->base_bins[index];
 			const float base_value = square(fft_results, base);
-			int bin = check<FFT_RESULTS, -1>(fft_results, base, base_value, channel->afc);
+			size_t bin = check<FFT_RESULTS, -1>(fft_results, base, base_value, channel->afc);
 			if (bin == base)
 				bin = check<FFT_RESULTS, 1>(fft_results, base, base_value, channel->afc);
 
 			if (dev->bins[index] != bin) {
 #ifdef AFC_LOGGING
-				log(LOG_INFO, "AFC device=%d channel=%d: base=%d prev=%d now=%d\n", dev->device, index, base, dev->bins[index], bin);
+				log(LOG_INFO, "AFC device=%d channel=%d: base=%zu prev=%zu now=%zu\n", dev->device, index, base, dev->bins[index], bin);
 #endif
 				dev->bins[index] = bin;
 				if ( bin > base )

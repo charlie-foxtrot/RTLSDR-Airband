@@ -26,6 +26,8 @@
 #include "input-mirisdr.h"
 #include "rtl_airband.h"
 
+using namespace std;
+
 /* taken from librtlsdr-keenerd, (c) Kyle Keen */
 static int mirisdr_nearest_gain(mirisdr_dev_t *dev, int target_gain) {
 	int i, r, err1, err2, count, nearest;
@@ -57,12 +59,21 @@ void mirisdr_callback(unsigned char *buf, uint32_t len, void *ctx) {
 	if(do_exit) return;
 	device_t *dev = (device_t*)ctx;
 	pthread_mutex_lock(&dev->buffer_lock);
-	memcpy(dev->buffer + dev->bufe, buf, len);
-	if (dev->bufe == 0) {
-		memcpy(dev->buffer + BUF_SIZE, buf, fft_size * 2);
+	size_t space_left = dev->buf_size - dev->bufe;
+	if(space_left >= len) {
+		memcpy(dev->buffer + dev->bufe, buf, len);
+		if(dev->bufe == 0) {
+			memcpy(dev->buffer + dev->buf_size, dev->buffer, min(len, 2 * fft_size));
+			debug_print("tail_len=%zu\n", min(len, 2 * fft_size));
+		}
+	} else {
+		memcpy(dev->buffer + dev->bufe, buf, space_left);
+		memcpy(dev->buffer, buf + space_left, len - space_left);
+		memcpy(dev->buffer + dev->buf_size, dev->buffer, min(len - space_left, 2 * fft_size));
+		debug_print("buf wrap: space_left=%zu len=%zu bufe=%zu wrap_len=%zu tail_len=%zu\n",
+			space_left, len, dev->bufe, len - space_left, min(len - space_left, 2 * fft_size));
 	}
-	dev->bufe = dev->bufe + len;
-	if (dev->bufe == BUF_SIZE) dev->bufe = 0;
+	dev->bufe = (dev->bufe + len) % dev->buf_size;
 	pthread_mutex_unlock(&dev->buffer_lock);
 }
 

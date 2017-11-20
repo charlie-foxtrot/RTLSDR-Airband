@@ -346,8 +346,18 @@ int parse_devices(libconfig::Setting &devs) {
 		}
 #endif
 		dev->correction = (int)devs[i]["correction"];
+// For the input buffer size use a base value of 2.5e6 bytes and round up to the nearest multiple
+// of FFT_BATCH blocks of input samples.
+// FIXME: base value shall probably depend on hardware type
+// FIXME: this assumes 8-bit I/Q samples
+		size_t fft_batch_len = FFT_BATCH * (2 * dev->sample_rate / WAVE_RATE);
+		dev->buf_size = MIN_BUF_SIZE;
+		if(dev->buf_size % fft_batch_len != 0)
+			dev->buf_size += fft_batch_len - dev->buf_size % fft_batch_len;
+		log(LOG_INFO, "dev->buf_size: %zu\n", dev->buf_size);
 // FIXME: alignment
-		dev->buffer = (unsigned char *)XCALLOC(sizeof(unsigned char), BUF_SIZE + fft_size * 2 + 48);	// FIXME: do we need the tail?
+		dev->buffer = (unsigned char *)XCALLOC(sizeof(unsigned char), dev->buf_size + 2 * fft_size);
+
 		memset(dev->bins, 0, sizeof(dev->bins));
 		memset(dev->base_bins, 0, sizeof(dev->base_bins));
 		dev->bufs = dev->bufe = dev->waveend = dev->waveavail = dev->row = dev->tq_head = dev->tq_tail = 0;

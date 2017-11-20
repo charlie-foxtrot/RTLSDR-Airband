@@ -57,7 +57,7 @@
 #define DEBUG_PATH "rtl_airband_debug.log"
 #endif
 
-#define BUF_SIZE 2560000
+#define MIN_BUF_SIZE 2500000
 #define DEFAULT_SAMPLE_RATE 2560000
 #ifdef NFM
 #define WAVE_RATE 16000
@@ -221,9 +221,7 @@ struct channel_t {
 enum rec_modes { R_MULTICHANNEL, R_SCAN };
 struct device_t {
 	unsigned char *buffer;
-// FIXME: size_t
-	int bufs;
-	int bufe;
+	size_t buf_size, bufs, bufe;
 	rtlsdr_dev_t* rtlsdr;
 #ifdef WITH_MIRISDR
 	mirisdr_dev_t  *mirisdr;	// FIXME: hw-agnostic pointer

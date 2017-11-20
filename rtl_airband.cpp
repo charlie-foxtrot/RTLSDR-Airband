@@ -100,13 +100,30 @@ pthread_mutex_t	mp3_mutex = PTHREAD_MUTEX_INITIALIZER;
 void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx) {
 	if(do_exit) return;
 	device_t *dev = (device_t*)ctx;
+/* Write input data into circular buffer dev->buffer.
+ * In general, dev->buffer_size is not an exact multiple of len,
+ * so we have to take care about proper wrapping.
+ * dev->buffer_size is an exact multiple of FFT_BATCH * bps,
+ * and dev->buffer's real length is dev->buf_size + 2 * fft_size.
+ * On each wrap we copy 2 * fft_size bytes from the start of
+ * dev->buffer to its end, so that the signal windowing function
+ * could handle the whole FFT batch without wrapping. */
 	pthread_mutex_lock(&dev->buffer_lock);
-	memcpy(dev->buffer + dev->bufe, buf, len);
-	if (dev->bufe == 0) {
-		memcpy(dev->buffer + BUF_SIZE, buf, fft_size * 2);
+	size_t space_left = dev->buf_size - dev->bufe;
+	if(space_left >= len) {
+		memcpy(dev->buffer + dev->bufe, buf, len);
+		if(dev->bufe == 0) {
+			memcpy(dev->buffer + dev->buf_size, dev->buffer, min(len, 2 * fft_size));
+			debug_print("tail_len=%zu\n", min(len, 2 * fft_size));
+		}
+	} else {
+		memcpy(dev->buffer + dev->bufe, buf, space_left);
+		memcpy(dev->buffer, buf + space_left, len - space_left);
+		memcpy(dev->buffer + dev->buf_size, dev->buffer, min(len - space_left, 2 * fft_size));
+		debug_print("buf wrap: space_left=%zu len=%zu bufe=%zu wrap_len=%zu tail_len=%zu\n",
+			space_left, len, dev->bufe, len - space_left, min(len - space_left, 2 * fft_size));
 	}
-	dev->bufe = dev->bufe + len;
-	if (dev->bufe == BUF_SIZE) dev->bufe = 0;
+	dev->bufe = (dev->bufe + len) % dev->buf_size;
 	pthread_mutex_unlock(&dev->buffer_lock);
 }
 
@@ -443,7 +460,7 @@ void demodulate() {
 		if(dev->bufe >= dev->bufs)
 			available = dev->bufe - dev->bufs;
 		else
-			available = BUF_SIZE - dev->bufs + dev->bufe;
+			available = dev->buf_size - dev->bufs + dev->bufe;
 		pthread_mutex_unlock(&dev->buffer_lock);
 
 		if(atomic_get(&device_opened)==0) {
@@ -477,7 +494,8 @@ void demodulate() {
 
 #if defined USE_BCM_VC
 		sample_fft_arg sfa = {fft_size / 4, fft->in};
-		for (int i = 0; i < FFT_BATCH; i++) {
+		for (size_t i = 0; i < FFT_BATCH; i++) {
+			debug_print("buf: %p bufs: %zu bufe: %zu i: %zu i*bps: %d\n", dev->buffer, dev->bufs, dev->bufe, i, i * bps);
 			samplefft(&sfa, dev->buffer + dev->bufs + i * bps, window, levels_ptr);
 			sfa.dest+= fft->step;
 		}
@@ -678,8 +696,7 @@ void demodulate() {
 			}
 		}
 
-		dev->bufs += bps * FFT_BATCH;
-		if (dev->bufs >= BUF_SIZE) dev->bufs -= BUF_SIZE;
+		dev->bufs = (dev->bufs + bps * FFT_BATCH) % dev->buf_size;
 		device_num = (device_num + 1) % device_count;
 	}
 }

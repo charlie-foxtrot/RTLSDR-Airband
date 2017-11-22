@@ -346,7 +346,7 @@ int parse_devices(libconfig::Setting &devs) {
 		}
 #endif
 		dev->correction = (int)devs[i]["correction"];
-// For the input buffer size use a base value of 2.5e6 bytes and round up to the nearest multiple
+// For the input buffer size use a base value and round it up to the nearest multiple
 // of FFT_BATCH blocks of input samples.
 // FIXME: base value shall probably depend on hardware type
 // FIXME: this assumes 8-bit I/Q samples

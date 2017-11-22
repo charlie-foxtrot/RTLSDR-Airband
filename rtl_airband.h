@@ -57,7 +57,7 @@
 #define DEBUG_PATH "rtl_airband_debug.log"
 #endif
 
-#define MIN_BUF_SIZE 2500000
+#define MIN_BUF_SIZE 2560000
 #define DEFAULT_SAMPLE_RATE 2560000
 #ifdef NFM
 #define WAVE_RATE 16000

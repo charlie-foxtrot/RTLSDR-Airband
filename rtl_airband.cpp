@@ -100,6 +100,7 @@ pthread_mutex_t	mp3_mutex = PTHREAD_MUTEX_INITIALIZER;
 void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx) {
 	if(do_exit) return;
 	device_t *dev = (device_t*)ctx;
+	size_t slen = (size_t)len;
 /* Write input data into circular buffer dev->buffer.
  * In general, dev->buffer_size is not an exact multiple of len,
  * so we have to take care about proper wrapping.
@@ -110,20 +111,20 @@ void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx) {
  * could handle the whole FFT batch without wrapping. */
 	pthread_mutex_lock(&dev->buffer_lock);
 	size_t space_left = dev->buf_size - dev->bufe;
-	if(space_left >= len) {
-		memcpy(dev->buffer + dev->bufe, buf, len);
+	if(space_left >= slen) {
+		memcpy(dev->buffer + dev->bufe, buf, slen);
 		if(dev->bufe == 0) {
-			memcpy(dev->buffer + dev->buf_size, dev->buffer, min(len, 2 * fft_size));
-			debug_print("tail_len=%zu\n", min(len, 2 * fft_size));
+			memcpy(dev->buffer + dev->buf_size, dev->buffer, min(slen, 2 * fft_size));
+			debug_print("tail_len=%zu\n", min(slen, 2 * fft_size));
 		}
 	} else {
 		memcpy(dev->buffer + dev->bufe, buf, space_left);
-		memcpy(dev->buffer, buf + space_left, len - space_left);
-		memcpy(dev->buffer + dev->buf_size, dev->buffer, min(len - space_left, 2 * fft_size));
+		memcpy(dev->buffer, buf + space_left, slen - space_left);
+		memcpy(dev->buffer + dev->buf_size, dev->buffer, min(slen - space_left, 2 * fft_size));
 		debug_print("buf wrap: space_left=%zu len=%zu bufe=%zu wrap_len=%zu tail_len=%zu\n",
-			space_left, len, dev->bufe, len - space_left, min(len - space_left, 2 * fft_size));
+			space_left, slen, dev->bufe, slen - space_left, min(slen - space_left, 2 * fft_size));
 	}
-	dev->bufe = (dev->bufe + len) % dev->buf_size;
+	dev->bufe = (dev->bufe + slen) % dev->buf_size;
 	pthread_mutex_unlock(&dev->buffer_lock);
 }
 

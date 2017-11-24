@@ -70,7 +70,6 @@
 #define MP3_RATE 8000
 #define MAX_SHOUT_QUEUELEN 32768
 #define TAG_QUEUE_LEN 16
-#define CHANNELS 8
 #define MAX_MIXINPUTS 32
 
 #define MIN_FFT_SIZE_LOG 8
@@ -236,9 +235,8 @@ struct device_t {
 	float alpha;
 #endif
 	int channel_count;
-	size_t base_bins[CHANNELS];
-	size_t bins[CHANNELS];
-	channel_t channels[CHANNELS];
+	size_t *base_bins, *bins;
+	channel_t *channels;
 // FIXME: size_t
 	int waveend;
 	int waveavail;

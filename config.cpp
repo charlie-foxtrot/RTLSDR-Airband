@@ -150,10 +150,6 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		if(chans[j].exists("disable") && (bool)chans[j]["disable"] == true) {
 			continue;
 		}
-		if(jj == CHANNELS) {
-			cerr<<"Configuration error: devices.["<<i<<"]: too many channels (max "<<CHANNELS<<" allowed)\n";
-			error();
-		}
 		channel_t* channel = dev->channels + jj;
 		for (int k = 0; k < AGC_EXTRA; k++) {
 			channel->wavein[k] = 20;
@@ -358,22 +354,30 @@ int parse_devices(libconfig::Setting &devs) {
 // FIXME: alignment
 		dev->buffer = (unsigned char *)XCALLOC(sizeof(unsigned char), dev->buf_size + 2 * fft_size);
 
-		memset(dev->bins, 0, sizeof(dev->bins));
-		memset(dev->base_bins, 0, sizeof(dev->base_bins));
 		dev->bufs = dev->bufe = dev->waveend = dev->waveavail = dev->row = dev->tq_head = dev->tq_tail = 0;
 		dev->last_frequency = -1;
 
 		libconfig::Setting &chans = devs[i]["channels"];
-		int chans_enabled = parse_channels(chans, dev, i);
-		if(chans_enabled < 1 || chans_enabled > 8) {
-			cerr<<"Configuration error: devices.["<<i<<"]: invalid channel count (min 1, max 8)\n";
+		if(chans.getLength() < 1) {
+			cerr<<"Configuration error: devices.["<<i<<"]: no channels configured\n";
 			error();
 		}
-		if(dev->mode == R_SCAN && chans_enabled > 1) {
-			cerr<<"Configuration error: devices.["<<i<<"]: only one channel section is allowed in scan mode\n";
+		dev->channels = (channel_t *)XCALLOC(chans.getLength(), sizeof(channel_t));
+		dev->bins = (size_t *)XCALLOC(chans.getLength(), sizeof(size_t));
+		dev->base_bins = (size_t *)XCALLOC(chans.getLength(), sizeof(size_t));
+		int channel_count = parse_channels(chans, dev, i);
+		if(channel_count < 1) {
+			cerr<<"Configuration error: devices.["<<i<<"]: no channels enabled\n";
 			error();
 		}
-		dev->channel_count = chans_enabled;
+		if(dev->mode == R_SCAN && channel_count > 1) {
+			cerr<<"Configuration error: devices.["<<i<<"]: only one channel is allowed in scan mode\n";
+			error();
+		}
+		dev->channels = (channel_t *)XREALLOC(dev->channels, channel_count * sizeof(channel_t));
+		dev->bins = (size_t *)XREALLOC(dev->bins, channel_count * sizeof(size_t));
+		dev->base_bins = (size_t *)XREALLOC(dev->bins, channel_count * sizeof(size_t));
+		dev->channel_count = channel_count;
 		devcnt++;
 	}
 	return devcnt;

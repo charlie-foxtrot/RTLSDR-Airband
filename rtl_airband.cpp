@@ -64,6 +64,9 @@
 #include <shout/shout.h>
 #include <lame/lame.h>
 #include <rtl-sdr.h>
+#ifdef WITH_MIRISDR
+#include "input-mirisdr.h"
+#endif
 #include "rtl_airband.h"
 
 using namespace std;
@@ -77,6 +80,8 @@ int rtlsdr_buffers = 10;
 int foreground = 0, do_syslog = 1, shout_metadata_delay = 3;
 volatile int do_exit = 0;
 bool use_localtime = false;
+size_t fft_size_log = DEFAULT_FFT_SIZE_LOG;
+size_t fft_size = 1 << fft_size_log;
 #ifdef NFM
 float alpha = exp(-1.0f/(WAVE_RATE * 2e-4));
 enum fm_demod_algo {
@@ -85,6 +90,7 @@ enum fm_demod_algo {
 };
 enum fm_demod_algo fm_demod = FM_FAST_ATAN2;
 #endif
+
 #if DEBUG
 char *debug_path;
 #endif
@@ -94,13 +100,31 @@ pthread_mutex_t	mp3_mutex = PTHREAD_MUTEX_INITIALIZER;
 void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx) {
 	if(do_exit) return;
 	device_t *dev = (device_t*)ctx;
+	size_t slen = (size_t)len;
+/* Write input data into circular buffer dev->buffer.
+ * In general, dev->buffer_size is not an exact multiple of len,
+ * so we have to take care about proper wrapping.
+ * dev->buffer_size is an exact multiple of FFT_BATCH * bps,
+ * and dev->buffer's real length is dev->buf_size + 2 * fft_size.
+ * On each wrap we copy 2 * fft_size bytes from the start of
+ * dev->buffer to its end, so that the signal windowing function
+ * could handle the whole FFT batch without wrapping. */
 	pthread_mutex_lock(&dev->buffer_lock);
-	memcpy(dev->buffer + dev->bufe, buf, len);
-	if (dev->bufe == 0) {
-		memcpy(dev->buffer + BUF_SIZE, buf, FFT_SIZE * 2);
+	size_t space_left = dev->buf_size - dev->bufe;
+	if(space_left >= slen) {
+		memcpy(dev->buffer + dev->bufe, buf, slen);
+		if(dev->bufe == 0) {
+			memcpy(dev->buffer + dev->buf_size, dev->buffer, min(slen, 2 * fft_size));
+			debug_print("tail_len=%zu\n", min(slen, 2 * fft_size));
+		}
+	} else {
+		memcpy(dev->buffer + dev->bufe, buf, space_left);
+		memcpy(dev->buffer, buf + space_left, slen - space_left);
+		memcpy(dev->buffer + dev->buf_size, dev->buffer, min(slen - space_left, 2 * fft_size));
+		debug_print("buf wrap: space_left=%zu len=%zu bufe=%zu wrap_len=%zu tail_len=%zu\n",
+			space_left, slen, dev->bufe, slen - space_left, min(slen - space_left, 2 * fft_size));
 	}
-	dev->bufe = dev->bufe + len;
-	if (dev->bufe == BUF_SIZE) dev->bufe = 0;
+	dev->bufe = (dev->bufe + slen) % dev->buf_size;
 	pthread_mutex_unlock(&dev->buffer_lock);
 }
 
@@ -162,7 +186,7 @@ void* rtlsdr_exec(void* params) {
 		error();
 		return NULL;
 	}
-	r = rtlsdr_set_sample_rate(dev->rtlsdr, SOURCE_RATE);
+	r = rtlsdr_set_sample_rate(dev->rtlsdr, dev->sample_rate);
 	if (r < 0) log(LOG_ERR, "Failed to set sample rate for device #%d. Error %d.\n", dev->device, r);
 	r = rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);
 	if (r < 0) log(LOG_ERR, "Failed to set center freq for device #%d. Error %d.\n", dev->device, r);
@@ -213,8 +237,18 @@ void* controller_thread(void* params) {
 			} else {
 				i++; i %= dev->channels[0].freq_count;
 				dev->channels[0].freq_idx = i;
-				dev->centerfreq = dev->channels[0].freqlist[i].frequency + 2 * (double)(SOURCE_RATE / FFT_SIZE);
-				rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);
+				dev->centerfreq = dev->channels[0].freqlist[i].frequency + 2 * (double)(dev->sample_rate / fft_size);
+// FIXME: make this hw-agnostic
+				switch(dev->type) {
+				case HW_RTLSDR:
+					rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);
+					break;
+#ifdef WITH_MIRISDR
+				case HW_MIRISDR:
+					mirisdr_set_center_freq(dev->mirisdr, dev->centerfreq - dev->correction);
+					break;
+#endif
+				}
 			}
 		} else {
 			if(consecutive_squelch_off == 10) {
@@ -278,18 +312,18 @@ class AFC
 	const char _prev_axcindicate;
 
 #ifdef USE_BCM_VC
-	float square(const GPU_FFT_COMPLEX *fft_results, int index)
+	float square(const GPU_FFT_COMPLEX *fft_results, size_t index)
 	{
 		return fft_results[index].re * fft_results[index].re + fft_results[index].im * fft_results[index].im;
 	}
 #else
-	float square(const fftwf_complex *fft_results, int index)
+	float square(const fftwf_complex *fft_results, size_t index)
 	{
 		return fft_results[index][0] * fft_results[index][0] + fft_results[index][1] * fft_results[index][1];
 	}
 #endif
 	template <class FFT_RESULTS, int STEP>
-		int check(const FFT_RESULTS* fft_results, const int base, const float base_value, unsigned char afc)
+		size_t check(const FFT_RESULTS* fft_results, const size_t base, const float base_value, unsigned char afc)
 	{
 		float threshold = 0;
 		int bin;
@@ -298,14 +332,14 @@ class AFC
 			if (bin < -STEP)
 				break;
 
-			} else if ( (bin + STEP) >= FFT_SIZE)
+			} else if ( (size_t)(bin + STEP) >= fft_size)
 				break;
 
-			const float value = square(fft_results, bin + STEP);
+			const float value = square(fft_results, (size_t)(bin + STEP));
 			if (value <= base_value)
 				break;
 
-			if (base == bin) {
+			if (base == (size_t)bin) {
 				threshold = (value - base_value) / (float)afc;
 			} else {
 				if ((value - base_value) < threshold)
@@ -331,15 +365,15 @@ public:
 
 		const char axcindicate = channel->axcindicate;
 		if (axcindicate != ' ' && _prev_axcindicate == ' ') {
-			const int base = dev->base_bins[index];
+			const size_t base = dev->base_bins[index];
 			const float base_value = square(fft_results, base);
-			int bin = check<FFT_RESULTS, -1>(fft_results, base, base_value, channel->afc);
+			size_t bin = check<FFT_RESULTS, -1>(fft_results, base, base_value, channel->afc);
 			if (bin == base)
 				bin = check<FFT_RESULTS, 1>(fft_results, base, base_value, channel->afc);
 
 			if (dev->bins[index] != bin) {
 #ifdef AFC_LOGGING
-				log(LOG_INFO, "AFC device=%d channel=%d: base=%d prev=%d now=%d\n", dev->device, index, base, dev->bins[index], bin);
+				log(LOG_INFO, "AFC device=%d channel=%d: base=%zu prev=%zu now=%zu\n", dev->device, index, base, dev->bins[index], bin);
 #endif
 				dev->bins[index] = bin;
 				if ( bin > base )
@@ -360,52 +394,56 @@ void demodulate() {
 	fftwf_plan fft;
 	fftwf_complex* fftin;
 	fftwf_complex* fftout;
-	fftin = fftwf_alloc_complex(FFT_SIZE);
-	fftout = fftwf_alloc_complex(FFT_SIZE);
-	fft = fftwf_plan_dft_1d(FFT_SIZE, fftin, fftout, FFTW_FORWARD, FFTW_MEASURE);
+	fftin = fftwf_alloc_complex(fft_size);
+	fftout = fftwf_alloc_complex(fft_size);
+	fft = fftwf_plan_dft_1d(fft_size, fftin, fftout, FFTW_FORWARD, FFTW_MEASURE);
 #else
 	int mb = mbox_open();
 	struct GPU_FFT *fft;
-	int ret = gpu_fft_prepare(mb, FFT_SIZE_LOG, GPU_FFT_FWD, FFT_BATCH, &fft);
+	int ret = gpu_fft_prepare(mb, fft_size_log, GPU_FFT_FWD, FFT_BATCH, &fft);
 	switch (ret) {
 		case -1: log(LOG_CRIT, "Unable to enable V3D. Please check your firmware is up to date.\n"); error();
-		case -2: log(LOG_CRIT, "log2_N=%d not supported. Try between 8 and 17.\n", FFT_SIZE_LOG); error();
+		case -2: log(LOG_CRIT, "log2_N=%d not supported. Try between 8 and 17.\n", fft_size_log); error();
 		case -3: log(LOG_CRIT, "Out of memory. Try a smaller batch or increase GPU memory.\n"); error();
 	}
 #endif
 
 #ifdef NFM
-	float rotated_r, rotated_j;
+	float derotated_r, derotated_j, swf, cwf;
 #endif
-	ALIGN float ALIGN2 levels[256];
+	ALIGN float ALIGN2 levels_u8[256], levels_s8[256];
+	float *levels_ptr = NULL;
+
 	for (int i=0; i<256; i++) {
-		levels[i] = i-127.5f;
+		levels_u8[i] = i-127.5f;
+	}
+	for (int16_t i=-127; i<128; i++) {
+		levels_s8[(uint8_t)i] = i;
 	}
 
 	// initialize fft window
 	// blackman 7
 	// the whole matrix is computed
-	ALIGN float ALIGN2 window[FFT_SIZE * 2];
+	ALIGN float ALIGN2 window[fft_size * 2];
 	const double a0 = 0.27105140069342f;
 	const double a1 = 0.43329793923448f;	const double a2 = 0.21812299954311f;
 	const double a3 = 0.06592544638803f;	const double a4 = 0.01081174209837f;
 	const double a5 = 0.00077658482522f;	const double a6 = 0.00001388721735f;
 
-	for (int i = 0; i < FFT_SIZE; i++) {
-		double x = a0 - (a1 * cos((2.0 * M_PI * i) / (FFT_SIZE-1)))
-			+ (a2 * cos((4.0 * M_PI * i) / (FFT_SIZE - 1)))
-			- (a3 * cos((6.0 * M_PI * i) / (FFT_SIZE - 1)))
-			+ (a4 * cos((8.0 * M_PI * i) / (FFT_SIZE - 1)))
-			- (a5 * cos((10.0 * M_PI * i) / (FFT_SIZE - 1)))
-			+ (a6 * cos((12.0 * M_PI * i) / (FFT_SIZE - 1)));
+	for (size_t i = 0; i < fft_size; i++) {
+		double x = a0 - (a1 * cos((2.0 * M_PI * i) / (fft_size-1)))
+			+ (a2 * cos((4.0 * M_PI * i) / (fft_size - 1)))
+			- (a3 * cos((6.0 * M_PI * i) / (fft_size - 1)))
+			+ (a4 * cos((8.0 * M_PI * i) / (fft_size - 1)))
+			- (a5 * cos((10.0 * M_PI * i) / (fft_size - 1)))
+			+ (a6 * cos((12.0 * M_PI * i) / (fft_size - 1)));
 		window[i * 2] = window[i * 2 + 1] = (float)x;
 	}
 
 	struct timeval ts, te;
 	if(DEBUG)
 		gettimeofday(&ts, NULL);
-	// speed2 = number of bytes per wave sample (x 2 for I and Q)
-	int speed2 = (SOURCE_RATE * 2) / WAVE_RATE;
+	size_t available;
 	int device_num = 0;
 	while (true) {
 
@@ -418,11 +456,12 @@ void demodulate() {
 		}
 
 		device_t* dev = devices + device_num;
+
 		pthread_mutex_lock(&dev->buffer_lock);
-		int available = dev->bufe - dev->bufs;
-		if (available < 0) {
-			available += BUF_SIZE;
-		}
+		if(dev->bufe >= dev->bufs)
+			available = dev->bufe - dev->bufs;
+		else
+			available = dev->buf_size - dev->bufs + dev->bufe;
 		pthread_mutex_unlock(&dev->buffer_lock);
 
 		if(atomic_get(&device_opened)==0) {
@@ -430,33 +469,47 @@ void demodulate() {
 			do_exit = 1;
 			continue;
 		}
+		// number of input bytes per output wave sample (x 2 for I and Q)
+		size_t bps = (dev->sample_rate * 2) / WAVE_RATE;
 		if (dev->failed) {
 			// move to next device
 			device_num = (device_num + 1) % device_count;
 			continue;
-		} else if (available < speed2 * FFT_BATCH + FFT_SIZE * 2) {
+		} else if (available < bps * FFT_BATCH + fft_size * 2) {
 			// move to next device
 			device_num = (device_num + 1) % device_count;
 			SLEEP(10);
 			continue;
 		}
+		switch(dev->sfmt) {
+		case SFMT_U8:
+			levels_ptr = levels_u8;
+			break;
+		case SFMT_S8:
+			levels_ptr = levels_s8;
+			break;
+		default:
+			log(LOG_CRIT, "Unhandled sample type");
+			error();
+		}
 
 #if defined USE_BCM_VC
-		sample_fft_arg sfa = {FFT_SIZE / 4, fft->in};
-		for (int i = 0; i < FFT_BATCH; i++) {
-			samplefft(&sfa, dev->buffer + dev->bufs + i * speed2, window, levels);
+		sample_fft_arg sfa = {fft_size / 4, fft->in};
+		for (size_t i = 0; i < FFT_BATCH; i++) {
+			debug_print("buf: %p bufs: %zu bufe: %zu i: %zu i*bps: %d\n", dev->buffer, dev->bufs, dev->bufe, i, i * bps);
+			samplefft(&sfa, dev->buffer + dev->bufs + i * bps, window, levels_ptr);
 			sfa.dest+= fft->step;
 		}
 #elif defined (__arm__) || defined (__aarch64__)
-		for (int i = 0; i < FFT_SIZE; i++) {
+		for (size_t i = 0; i < fft_size; i++) {
 			unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
-			fftin[i][0] = levels[*(buf2)] * window[i*2];
-			fftin[i][1] = levels[*(buf2+1)] * window[i*2];
+			fftin[i][0] = levels_ptr[*(buf2)] * window[i*2];
+			fftin[i][1] = levels_ptr[*(buf2+1)] * window[i*2];
 		}
 #else /* x86 */
-		for (int i = 0; i < FFT_SIZE; i += 2) {
+		for (size_t i = 0; i < fft_size; i += 2) {
 			unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
-			__m128 a = _mm_set_ps(levels[*(buf2 + 3)], levels[*(buf2 + 2)], levels[*(buf2 + 1)], levels[*(buf2)]);
+			__m128 a = _mm_set_ps(levels_ptr[*(buf2 + 3)], levels_ptr[*(buf2 + 2)], levels_ptr[*(buf2 + 1)], levels_ptr[*(buf2)]);
 			__m128 b = _mm_load_ps(&window[i * 2]);
 			a = _mm_mul_ps(a, b);
 			_mm_store_ps(&fftin[i][0], a);
@@ -580,19 +633,20 @@ void demodulate() {
 						}
 #ifdef NFM
 						else {	// NFM
+// remove phase rotation introduced by FFT sliding window
+							sincosf_lut(channel->dm_phi, &swf, &cwf);
 							multiply(channel->complex_samples[2*(j - AGC_EXTRA)], channel->complex_samples[2*(j - AGC_EXTRA)+1],
-// FIXME: use j instead of wavecnt?
-							channel->timeref_cos[channel->wavecnt],
-							channel->timeref_nsin[channel->wavecnt],
-							&rotated_r,
-							&rotated_j);
+							cwf, -swf, &derotated_r, &derotated_j);
+							channel->dm_phi += channel->dm_dphi;
+							channel->dm_phi &= 0xffffff;
+// FM demod
 							if(fm_demod == FM_FAST_ATAN2) {
-								channel->waveout[j] = polar_disc_fast(rotated_r, rotated_j, channel->pr, channel->pj);
+								channel->waveout[j] = polar_disc_fast(derotated_r, derotated_j, channel->pr, channel->pj);
 							} else if(fm_demod == FM_QUADRI_DEMOD) {
-								channel->waveout[j] = fm_quadri_demod(rotated_r, rotated_j, channel->pr, channel->pj);
+								channel->waveout[j] = fm_quadri_demod(derotated_r, derotated_j, channel->pr, channel->pj);
 							}
-							channel->pr = rotated_r;
-							channel->pj = rotated_j;
+							channel->pr = derotated_r;
+							channel->pj = derotated_j;
 // de-emphasis IIR + DC blocking
 							fparms->agcavgfast = fparms->agcavgfast * 0.995f + channel->waveout[j] * 0.005f;
 							channel->waveout[j] -= fparms->agcavgfast;
@@ -600,10 +654,6 @@ void demodulate() {
 						}
 #endif // NFM
 					}
-#ifdef NFM
-					if(channel->modulation == MOD_NFM)
-						channel->wavecnt = (channel->wavecnt + 1) % WAVE_RATE;
-#endif // NFM
 				}
 				memmove(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4);
 #ifdef NFM
@@ -647,8 +697,7 @@ void demodulate() {
 			}
 		}
 
-		dev->bufs += speed2 * FFT_BATCH;
-		if (dev->bufs >= BUF_SIZE) dev->bufs -= BUF_SIZE;
+		dev->bufs = (dev->bufs + bps * FFT_BATCH) % dev->buf_size;
 		device_num = (device_num + 1) % device_count;
 	}
 }
@@ -751,6 +800,22 @@ int main(int argc, char* argv[]) {
 			cerr<<"Configuration error: rtlsdr_buffers must be greater than 0\n";
 			error();
 		}
+		if(root.exists("fft_size")) {
+			int fsize = (int)(root["fft_size"]);
+			fft_size_log = 0;
+			for(size_t i = MIN_FFT_SIZE_LOG; i <= MAX_FFT_SIZE_LOG; i++) {
+				if(fsize == 1 << i) {
+					fft_size = (size_t)fsize;
+					fft_size_log = i;
+					break;
+				}
+			}
+			if(fft_size_log == 0) {
+				cerr<<"Configuration error: invalid fft_size value (must be a power of two in range "<<
+					(1<<MIN_FFT_SIZE_LOG)<<"-"<<(1<<MAX_FFT_SIZE_LOG)<<")\n";
+				error();
+			}
+		}
 		if(root.exists("shout_metadata_delay")) shout_metadata_delay = (int)(root["shout_metadata_delay"]);
 		if(shout_metadata_delay < 0 || shout_metadata_delay > 2*TAG_QUEUE_LEN) {
 			cerr<<"Configuration error: shout_metadata_delay is out of allowed range (0-"<<2 * TAG_QUEUE_LEN<<")\n";
@@ -779,7 +844,7 @@ int main(int argc, char* argv[]) {
 		sigaction(SIGINT, &sigact, NULL);
 		sigaction(SIGQUIT, &sigact, NULL);
 		sigaction(SIGTERM, &sigact, NULL);
-
+// FIXME: alignment needed for buffer only
 		uintptr_t tempptr = (uintptr_t)XCALLOC(1, device_count * sizeof(device_t)+31);
 		tempptr &= ~0x0F;
 		devices = (device_t *)tempptr;
@@ -808,22 +873,30 @@ int main(int argc, char* argv[]) {
 			mixer_t *m = &mixers[z];
 			debug_print("mixer[%d]: name=%s, input_count=%d, output_count=%d\n", z, m->name, m->input_count, m->channel.output_count);
 		}
-		uint32_t device_count2 = rtlsdr_get_device_count();
+// FIXME: make this hw-agnostic
+/*		uint32_t device_count2 = rtlsdr_get_device_count();
 		if (device_count2 < devs_enabled) {
 			cerr<<"Not enough devices ("<<devs_enabled<<" configured, "<<device_count2<<" detected)\n";
 			error();
-		}
+		} */
 		for(uint32_t i = 0; i < devs_enabled; i++) {
 			device_t* dev = devices + i;
 			if(dev->serial != NULL) {
-				if((dev->device = rtl_find_device_by_serial(dev->serial)) == RTL_DEV_INVALID) {
-					cerr<<"Device with serial number "<<dev->serial<<" not found\n";
+// FIXME: make this hw-agnostic
+				if(dev->type == HW_RTLSDR && (dev->device = rtl_find_device_by_serial(dev->serial)) == RTL_DEV_INVALID) {
+					cerr<<"RTLSDR device with serial number "<<dev->serial<<" not found\n";
 					error();
+#ifdef WITH_MIRISDR
+				} else if(dev->type == HW_MIRISDR && (dev->device = mirisdr_find_device_by_serial(dev->serial)) == RTL_DEV_INVALID) {
+					cerr<<"MiriSDR device with serial number "<<dev->serial<<" not found\n";
+					error();
+#endif
 				}
-			} else if(dev->device >= device_count2) {
+// FIXME
+			} /* else if(dev->device >= device_count2) {
 				cerr<<"Specified device id "<<(int)dev->device<<" is greater or equal than number of devices ("<<device_count2<<")\n";
 				error();
-			}
+			} */
 		}
 		device_count = devs_enabled;
 	} catch(FileIOException e) {
@@ -926,7 +999,17 @@ int main(int argc, char* argv[]) {
 				}
 			}
 		}
-		pthread_create(&dev->rtl_thread, NULL, &rtlsdr_exec, dev);
+		switch(dev->type) {
+		case HW_RTLSDR:
+			pthread_create(&dev->sdr_thread, NULL, &rtlsdr_exec, dev);
+			break;
+#ifdef WITH_MIRISDR
+		case HW_MIRISDR:
+			pthread_create(&dev->sdr_thread, NULL, &mirisdr_exec, dev);
+			break;
+#endif
+		}
+
 		if(dev->mode == R_SCAN) {
 			if(pthread_mutex_init(&dev->tag_queue_lock, NULL) != 0) {
 				cerr<<"Failed to initialize mutex - aborting\n";
@@ -972,17 +1055,31 @@ int main(int argc, char* argv[]) {
 #ifdef PULSE
 	pulse_start();
 #endif
+#ifdef NFM
+	sincosf_lut_init();
+#endif
 
 	demodulate();
 
 	log(LOG_INFO, "cleaning up\n");
 	for (int i = 0; i < device_count; i++) {
-		rtlsdr_cancel_async(devices[i].rtlsdr);
-		pthread_join(devices[i].rtl_thread, NULL);
+// FIXME: make this hw-agnostic
+		switch(devices[i].type) {
+		case HW_RTLSDR:
+			rtlsdr_cancel_async(devices[i].rtlsdr);
+			break;
+#ifdef WITH_MIRISDR
+		case HW_MIRISDR:
+			mirisdr_cancel_async(devices[i].mirisdr);
+			break;
+#endif
+		}
+
+		pthread_join(devices[i].sdr_thread, NULL);
 		if(devices[i].mode == R_SCAN)
 			pthread_join(devices[i].controller_thread, NULL);
 	}
-	log(LOG_INFO, "rtlsdr threads closed\n");
+	log(LOG_INFO, "SDR threads closed\n");
 	close_debug();
 // FIXME: pulseaudio cleanup
 	return 0;

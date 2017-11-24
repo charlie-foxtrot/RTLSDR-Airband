@@ -25,6 +25,7 @@
 #include <cstdarg>
 #include <cstring>
 #include <cerrno>
+#include <cmath>
 #include <shout/shout.h>
 #include <lame/lame.h>
 #include "rtl_airband.h"
@@ -133,4 +134,32 @@ void *xrealloc(void *ptr, size_t size, const char *file, const int line, const c
 	return ptr;
 }
 
+#ifdef NFM
+static float sin_lut[257], cos_lut[257];
+
+void sincosf_lut_init() {
+	for(uint32_t i = 0; i < 256; i++)
+		sincosf(2.0f * M_PI * (float)i / 256.0f, sin_lut + i, cos_lut + i);
+	sin_lut[256] = sin_lut[0];
+	cos_lut[256] = cos_lut[0];
+}
+
+// phi range must be (0..1), rescaled to 0x0-0xFFFFFF
+void sincosf_lut(uint32_t phi, float *sine, float *cosine) {
+	float v1, v2, fract;
+	uint32_t idx;
+// get LUT index
+	idx = phi >> 16;
+// cast fixed point fraction to float
+	fract = (float)(phi & 0xffff) / 65536.0f;
+// get two adjacent values from LUT and interpolate
+	v1 = sin_lut[idx];
+	v2 = sin_lut[idx+1];
+	*sine = v1 + (v2 - v1) * fract;
+	v1 = cos_lut[idx];
+	v2 = cos_lut[idx+1];
+	*cosine = v1 + (v2 - v1) * fract;
+}
+
+#endif
 // vim: ts=4

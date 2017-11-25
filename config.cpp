@@ -203,8 +203,8 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				}
 			}
 // Set initial frequency for scanning
-// We tune 2 FFT bins higher to avoid DC spike
-			dev->centerfreq = channel->freqlist[0].frequency + 2 * (double)(dev->sample_rate / fft_size);
+// We tune 20 FFT bins higher to avoid DC spike
+			dev->centerfreq = channel->freqlist[0].frequency + 20 * (double)(dev->sample_rate / fft_size);
 		}
 		if(chans[j].exists("squelch")) {
 			if(libconfig::Setting::TypeList == chans[j]["squelch"].getType()) {

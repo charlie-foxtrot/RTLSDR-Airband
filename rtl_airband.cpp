@@ -118,7 +118,7 @@ void* controller_thread(void* params) {
 			} else {
 				i++; i %= dev->channels[0].freq_count;
 				dev->channels[0].freq_idx = i;
-				dev->centerfreq = dev->channels[0].freqlist[i].frequency + 2 * (double)(dev->sample_rate / fft_size);
+				dev->centerfreq = dev->channels[0].freqlist[i].frequency + 20 * (double)(dev->sample_rate / fft_size);
 // FIXME: make this hw-agnostic
 				switch(dev->type) {
 #ifdef WITH_RTLSDR

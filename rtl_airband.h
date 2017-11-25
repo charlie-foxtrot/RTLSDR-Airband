@@ -26,7 +26,9 @@
 #include <shout/shout.h>
 #include <lame/lame.h>
 #include <libconfig.h++>
+#ifdef WITH_RTLSDR
 #include <rtl-sdr.h>
+#endif
 #ifdef WITH_MIRISDR
 #include <mirisdr.h>
 #endif
@@ -143,7 +145,10 @@ struct mixer_data {
 };
 
 enum hw_type {
-	HW_RTLSDR
+	HW_UNDEF
+#ifdef WITH_RTLSDR
+	, HW_RTLSDR
+#endif
 #ifdef WITH_MIRISDR
 	, HW_MIRISDR
 #endif
@@ -221,7 +226,9 @@ enum rec_modes { R_MULTICHANNEL, R_SCAN };
 struct device_t {
 	unsigned char *buffer;
 	size_t buf_size, bufs, bufe;
+#ifdef WITH_RTLSDR
 	rtlsdr_dev_t* rtlsdr;
+#endif
 #ifdef WITH_MIRISDR
 	mirisdr_dev_t  *mirisdr;	// FIXME: hw-agnostic pointer
 #endif

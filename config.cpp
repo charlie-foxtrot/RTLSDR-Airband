@@ -275,22 +275,34 @@ int parse_devices(libconfig::Setting &devs) {
 		device_t* dev = devices + devcnt;
 		if(!devs[i].exists("correction")) devs[i].add("correction", libconfig::Setting::TypeInt);
 		if(devs[i].exists("type")) {
+// FIXME: turn this into a lookup table
+#ifdef WITH_RTLSDR
 			if(!strcmp(devs[i]["type"], "rtlsdr")) {
 				dev->type = HW_RTLSDR;
 				dev->sfmt = SFMT_U8;
+				goto hwtype_set;
+			}
+#endif
 #ifdef WITH_MIRISDR
-			} else if(!strcmp(devs[i]["type"], "mirisdr")) {
+			if(!strcmp(devs[i]["type"], "mirisdr")) {
 				dev->type = HW_MIRISDR;
 				dev->sfmt = SFMT_S8;
-#endif
-			} else {
-				cerr<<"Configuration error: devices.["<<i<<"]: unknown hardware type specified\n";
-				error();
+				goto hwtype_set;
 			}
+#endif
+			cerr<<"Configuration error: devices.["<<i<<"]: unsupported device type\n";
+			error();
 		} else {
+#ifdef WITH_RTLSDR
+			cerr<<"Warning: devices.["<<i<<"]: assuming device type \"rtlsdr\", please set \"type\" in the device section.\n";
 			dev->type = HW_RTLSDR;
 			dev->sfmt = SFMT_U8;
+#else
+			cerr<<"Configuration error: devices.["<<i<<"]: mandatory parameter missing: type\n";
+			error();
+#endif
 		}
+hwtype_set:
 		if(devs[i].exists("serial")) {
 			dev->serial = strdup(devs[i]["serial"]);
 		} else if(devs[i].exists("index")) {

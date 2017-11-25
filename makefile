@@ -6,6 +6,7 @@ DEFCONFIG = config/basic_multichannel.conf
 CFG = rtl_airband.conf
 BINDIR = $(PREFIX)/bin
 export DEBUG ?= 0
+export WITH_RTLSDR ?= 1
 export CC = g++
 export CFLAGS = -O3 -g -Wall -DSYSCONFDIR=\"$(SYSCONFDIR)\" -DDEBUG=$(DEBUG)
 RTL_AIRBAND_VERSION:=\"$(shell git describe --always --tags --dirty)\"
@@ -13,7 +14,7 @@ ifneq ($(RTL_AIRBAND_VERSION), \"\")
   CFLAGS+=-DRTL_AIRBAND_VERSION=$(RTL_AIRBAND_VERSION)
 endif
 export CXXFLAGS = $(CFLAGS)
-LDLIBS = -lrt -lm -lvorbisenc -lmp3lame -lshout -lpthread -lrtlsdr -lconfig++
+LDLIBS = -lrt -lm -lvorbisenc -lmp3lame -lshout -lpthread -lconfig++
 INSTALL_USER = root
 INSTALL_GROUP = root
 
@@ -70,6 +71,12 @@ ifeq ($(PULSE), 1)
   DEPS += pulse.o
 endif
 
+ifeq ($(WITH_RTLSDR), 1)
+  CFLAGS += -DWITH_RTLSDR
+  DEPS += input-rtlsdr.o
+  LDLIBS += -lrtlsdr
+endif
+
 ifeq ($(WITH_MIRISDR), 1)
   CFLAGS += -DWITH_MIRISDR
   DEPS += input-mirisdr.o
@@ -101,9 +108,11 @@ config.o: rtl_airband.h
 
 input-mirisdr.o: rtl_airband.h input-mirisdr.h
 
+input-rtlsdr.o: rtl_airband.h input-rtlsdr.h
+
 mixer.o: rtl_airband.h
 
-rtl_airband.o: rtl_airband.h input-mirisdr.h
+rtl_airband.o: rtl_airband.h input-mirisdr.h input-rtlsdr.h
 
 output.o: rtl_airband.h
 

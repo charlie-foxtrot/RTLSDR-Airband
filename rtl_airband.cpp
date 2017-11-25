@@ -63,7 +63,9 @@
 #include <vorbis/vorbisenc.h>
 #include <shout/shout.h>
 #include <lame/lame.h>
-#include <rtl-sdr.h>
+#ifdef WITH_RTLSDR
+#include "input-rtlsdr.h"
+#endif
 #ifdef WITH_MIRISDR
 #include "input-mirisdr.h"
 #endif
@@ -76,7 +78,6 @@ device_t* devices;
 mixer_t* mixers;
 int device_count, mixer_count;
 volatile int device_opened = 0;
-int rtlsdr_buffers = 10;
 int foreground = 0, do_syslog = 1, shout_metadata_delay = 3;
 volatile int do_exit = 0;
 bool use_localtime = false;
@@ -97,129 +98,9 @@ char *debug_path;
 pthread_cond_t	mp3_cond = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t	mp3_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx) {
-	if(do_exit) return;
-	device_t *dev = (device_t*)ctx;
-	size_t slen = (size_t)len;
-/* Write input data into circular buffer dev->buffer.
- * In general, dev->buffer_size is not an exact multiple of len,
- * so we have to take care about proper wrapping.
- * dev->buffer_size is an exact multiple of FFT_BATCH * bps,
- * and dev->buffer's real length is dev->buf_size + 2 * fft_size.
- * On each wrap we copy 2 * fft_size bytes from the start of
- * dev->buffer to its end, so that the signal windowing function
- * could handle the whole FFT batch without wrapping. */
-	pthread_mutex_lock(&dev->buffer_lock);
-	size_t space_left = dev->buf_size - dev->bufe;
-	if(space_left >= slen) {
-		memcpy(dev->buffer + dev->bufe, buf, slen);
-		if(dev->bufe == 0) {
-			memcpy(dev->buffer + dev->buf_size, dev->buffer, min(slen, 2 * fft_size));
-			debug_print("tail_len=%zu\n", min(slen, 2 * fft_size));
-		}
-	} else {
-		memcpy(dev->buffer + dev->bufe, buf, space_left);
-		memcpy(dev->buffer, buf + space_left, slen - space_left);
-		memcpy(dev->buffer + dev->buf_size, dev->buffer, min(slen - space_left, 2 * fft_size));
-		debug_print("buf wrap: space_left=%zu len=%zu bufe=%zu wrap_len=%zu tail_len=%zu\n",
-			space_left, slen, dev->bufe, slen - space_left, min(slen - space_left, 2 * fft_size));
-	}
-	dev->bufe = (dev->bufe + slen) % dev->buf_size;
-	pthread_mutex_unlock(&dev->buffer_lock);
-}
-
 void sighandler(int sig) {
 	log(LOG_NOTICE, "Got signal %d, exiting\n", sig);
 	do_exit = 1;
-}
-
-/* taken from librtlsdr-keenerd, (c) Kyle Keen */
-static int nearest_gain(rtlsdr_dev_t *dev, int target_gain) {
-	int i, r, err1, err2, count, nearest;
-	int *gains;
-	r = rtlsdr_set_tuner_gain_mode(dev, 1);
-	if (r < 0)
-		return r;
-	count = rtlsdr_get_tuner_gains(dev, NULL);
-	if (count <= 0) {
-		return -1;
-	}
-	gains = (int *)XCALLOC(count, sizeof(int));
-	count = rtlsdr_get_tuner_gains(dev, gains);
-	nearest = gains[0];
-	for (i = 0; i < count; i++) {
-		err1 = abs(target_gain - nearest);
-		err2 = abs(target_gain - gains[i]);
-		if (err2 < err1) {
-			nearest = gains[i];
-		}
-	}
-	free(gains);
-	return nearest;
-}
-
-uint32_t rtl_find_device_by_serial(const char *s) {
-	uint32_t device_count, device;
-	char vendor[256] = {0}, product[256] = {0}, serial[256] = {0};
-	device_count = rtlsdr_get_device_count();
-	if(device_count < 1)
-		return RTL_DEV_INVALID;
-	for(uint32_t i = 0; i < device_count; i++) {
-		rtlsdr_get_device_usb_strings(i, vendor, product, serial);
-		if (strcmp(s, serial) != 0)
-			continue;
-		device = i;
-		return device;
-	}
-	return RTL_DEV_INVALID;
-}
-
-void* rtlsdr_exec(void* params) {
-	int r;
-	device_t *dev = (device_t*)params;
-
-	dev->rtlsdr = NULL;
-	rtlsdr_open(&dev->rtlsdr, dev->device);
-
-	if (NULL == dev->rtlsdr) {
-		log(LOG_ERR, "Failed to open rtlsdr device #%d.\n", dev->device);
-		error();
-		return NULL;
-	}
-	r = rtlsdr_set_sample_rate(dev->rtlsdr, dev->sample_rate);
-	if (r < 0) log(LOG_ERR, "Failed to set sample rate for device #%d. Error %d.\n", dev->device, r);
-	r = rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);
-	if (r < 0) log(LOG_ERR, "Failed to set center freq for device #%d. Error %d.\n", dev->device, r);
-	r = rtlsdr_set_freq_correction(dev->rtlsdr, dev->correction);
-	if (r < 0 && r != -2 ) log(LOG_ERR, "Failed to set freq correction for device #%d. Error %d.\n", dev->device, r);
-
-	int ngain = nearest_gain(dev->rtlsdr, dev->gain);
-	if(ngain < 0) {
-		log(LOG_ERR, "Failed to read supported gain list for device #%d: error %d\n", dev->device, ngain);
-		_exit(1);
-	}
-	r = rtlsdr_set_tuner_gain_mode(dev->rtlsdr, 1);
-	r |= rtlsdr_set_tuner_gain(dev->rtlsdr, ngain);
-	if (r < 0)
-		log(LOG_ERR, "Failed to set gain to %0.2f for device #%d: error %d\n",
-			(float)ngain / 10.f, dev->device, r);
-	else
-		log(LOG_INFO, "Device #%d: gain set to %0.2f dB\n", dev->device,
-			(float)rtlsdr_get_tuner_gain(dev->rtlsdr) / 10.f);
-
-	r = rtlsdr_set_agc_mode(dev->rtlsdr, 0);
-	if (r < 0) log(LOG_ERR, "Failed to disable AGC for device #%d. Error %d.\n", dev->device, r);
-	rtlsdr_reset_buffer(dev->rtlsdr);
-	log(LOG_INFO, "Device %d started.\n", dev->device);
-	atomic_inc(&device_opened);
-	dev->failed = 0;
-	if(rtlsdr_read_async(dev->rtlsdr, rtlsdr_callback, params, rtlsdr_buffers, 320000) < 0) {
-		log(LOG_WARNING, "Device #%d: async read failed, disabling\n", dev->device);
-		dev->failed = 1;
-		disable_device_outputs(dev);
-		atomic_dec(&device_opened);
-	}
-	return 0;
 }
 
 void* controller_thread(void* params) {
@@ -240,9 +121,11 @@ void* controller_thread(void* params) {
 				dev->centerfreq = dev->channels[0].freqlist[i].frequency + 2 * (double)(dev->sample_rate / fft_size);
 // FIXME: make this hw-agnostic
 				switch(dev->type) {
+#ifdef WITH_RTLSDR
 				case HW_RTLSDR:
 					rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);
 					break;
+#endif
 #ifdef WITH_MIRISDR
 				case HW_MIRISDR:
 					mirisdr_set_center_freq(dev->mirisdr, dev->centerfreq - dev->correction);
@@ -795,11 +678,13 @@ int main(int argc, char* argv[]) {
 		Setting &root = config.getRoot();
 		if(root.exists("syslog")) do_syslog = root["syslog"];
 		if(root.exists("pidfile")) pidfile = strdup(root["pidfile"]);
+#ifdef WITH_RTLSDR
 		if(root.exists("rtlsdr_buffers")) rtlsdr_buffers = (int)(root["rtlsdr_buffers"]);
 		if(rtlsdr_buffers < 1) {
 			cerr<<"Configuration error: rtlsdr_buffers must be greater than 0\n";
 			error();
 		}
+#endif
 		if(root.exists("fft_size")) {
 			int fsize = (int)(root["fft_size"]);
 			fft_size_log = 0;
@@ -883,15 +768,18 @@ int main(int argc, char* argv[]) {
 			device_t* dev = devices + i;
 			if(dev->serial != NULL) {
 // FIXME: make this hw-agnostic
-				if(dev->type == HW_RTLSDR && (dev->device = rtl_find_device_by_serial(dev->serial)) == RTL_DEV_INVALID) {
+#ifdef WITH_RTLSDR
+				if(dev->type == HW_RTLSDR && (dev->device = rtlsdr_find_device_by_serial(dev->serial)) == RTL_DEV_INVALID) {
 					cerr<<"RTLSDR device with serial number "<<dev->serial<<" not found\n";
 					error();
+				}
+#endif
 #ifdef WITH_MIRISDR
-				} else if(dev->type == HW_MIRISDR && (dev->device = mirisdr_find_device_by_serial(dev->serial)) == RTL_DEV_INVALID) {
+				if(dev->type == HW_MIRISDR && (dev->device = mirisdr_find_device_by_serial(dev->serial)) == RTL_DEV_INVALID) {
 					cerr<<"MiriSDR device with serial number "<<dev->serial<<" not found\n";
 					error();
-#endif
 				}
+#endif
 // FIXME
 			} /* else if(dev->device >= device_count2) {
 				cerr<<"Specified device id "<<(int)dev->device<<" is greater or equal than number of devices ("<<device_count2<<")\n";
@@ -1000,9 +888,11 @@ int main(int argc, char* argv[]) {
 			}
 		}
 		switch(dev->type) {
+#ifdef WITH_RTLSDR
 		case HW_RTLSDR:
 			pthread_create(&dev->sdr_thread, NULL, &rtlsdr_exec, dev);
 			break;
+#endif
 #ifdef WITH_MIRISDR
 		case HW_MIRISDR:
 			pthread_create(&dev->sdr_thread, NULL, &mirisdr_exec, dev);
@@ -1065,9 +955,11 @@ int main(int argc, char* argv[]) {
 	for (int i = 0; i < device_count; i++) {
 // FIXME: make this hw-agnostic
 		switch(devices[i].type) {
+#ifdef WITH_RTLSDR
 		case HW_RTLSDR:
 			rtlsdr_cancel_async(devices[i].rtlsdr);
 			break;
+#endif
 #ifdef WITH_MIRISDR
 		case HW_MIRISDR:
 			mirisdr_cancel_async(devices[i].mirisdr);

@@ -62,6 +62,20 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				(bool)(outs[o]["continuous"]) : false;
 			fdata->append = (!outs[o].exists("append")) || (bool)(outs[o]["append"]);
 			channel->need_mp3 = 1;
+		} else if(!strncmp(outs[o]["type"], "rawfile", 7)) {
+			if(parsing_mixers) {	// rawfile outputs not allowed for mixers
+				cerr<<"Configuration error: mixers.["<<i<<"] outputs["<<o<<"]: rawfile output is not allowed for mixers\n";
+				error();
+			}
+			channel->outputs[oo].data = XCALLOC(1, sizeof(struct file_data));
+			channel->outputs[oo].type = O_RAWFILE;
+			file_data *fdata = (file_data *)(channel->outputs[oo].data);
+			fdata->dir = strdup(outs[o]["directory"]);
+			fdata->prefix = strdup(outs[o]["filename_template"]);
+			fdata->continuous = outs[o].exists("continuous") ?
+				(bool)(outs[o]["continuous"]) : false;
+			fdata->append = (!outs[o].exists("append")) || (bool)(outs[o]["append"]);
+			channel->needs_raw_iq = channel->has_iq_outputs = 1;
 		} else if(!strncmp(outs[o]["type"], "mixer", 5)) {
 			if(parsing_mixers) {	// mixer outputs not allowed for mixers
 				cerr<<"Configuration error: mixers.["<<i<<"] outputs["<<o<<"]: mixer output is not allowed for mixers\n";
@@ -166,6 +180,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 #ifdef NFM
 			if(!strncmp(chans[j]["modulation"], "nfm", 3)) {
 				channel->modulation = MOD_NFM;
+				channel->needs_raw_iq = 1;
 			} else
 #endif
 			if(!strncmp(chans[j]["modulation"], "am", 2)) {

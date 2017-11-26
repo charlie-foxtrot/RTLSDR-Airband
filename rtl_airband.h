@@ -159,6 +159,7 @@ enum sample_format { SFMT_U8, SFMT_S8, SFMT_UNDEF };
 enum output_type {
 	O_ICECAST,
 	O_FILE,
+	O_RAWFILE,
 	O_MIXER
 #ifdef PULSE
 	, O_PULSE
@@ -197,16 +198,14 @@ struct channel_t {
 	float waveref[WAVE_LEN];	// for power level calculation
 	float waveout[WAVE_LEN];	// waveform after squelch + AGC (left/center channel mixer output)
 	float waveout_r[WAVE_LEN];	// right channel mixer output
+	float iq_in[2*WAVE_LEN];	// raw input samples for I/Q outputs and NFM demod
+	float iq_out[2*WAVE_LEN];	// raw output samples for I/Q outputs (FIXME: allocate only if required)
 #ifdef NFM
-	float complex_samples[2*WAVE_LEN];	// raw samples for NFM demod
-	float timeref_nsin[WAVE_RATE];
-	float timeref_cos[WAVE_RATE];
-// FIXME: get this from complex_samples?
 	float pr;					// previous sample - real part
 	float pj;					// previous sample - imaginary part
 	float alpha;
-	uint32_t dm_dphi, dm_phi;	// derotation frequency and current phase value
 #endif
+	uint32_t dm_dphi, dm_phi;	// derotation frequency and current phase value
 	enum modulations modulation;
 	enum mix_modes mode;		// mono or stereo
 	int agcsq;					// squelch status, 0 = signal, 1 = suppressed
@@ -217,6 +216,8 @@ struct channel_t {
 	int freq_idx;
 	int output_count;
 	int need_mp3;
+	int needs_raw_iq;
+	int has_iq_outputs;
 	enum ch_states state;		// mixer channel state flag
 	output_t *outputs;
 	lame_t lame;

@@ -413,28 +413,24 @@ void demodulate() {
 			for (int j = 0; j < FFT_BATCH; j++, ++wavein, fftout+= fft->step)
 				*wavein = sqrtf(fftout->im * fftout->im + fftout->re * fftout->re);
 		}
-# ifdef NFM
 		for (int j = 0; j < dev->channel_count; j++) {
-			if(dev->channels[j].modulation == MOD_NFM) {
+			if(dev->channels[j].needs_raw_iq) {
 				struct GPU_FFT_COMPLEX *ptr = fft->out;
 				for (int job = 0; job < FFT_BATCH; job++) {
-					dev->channels[j].complex_samples[2*(dev->waveend+job)] = ptr[dev->bins[j]].re;
-					dev->channels[j].complex_samples[2*(dev->waveend+job)+1] = ptr[dev->bins[j]].im;
+					dev->channels[j].iq_in[2*(dev->waveend+job)] = ptr[dev->bins[j]].re;
+					dev->channels[j].iq_in[2*(dev->waveend+job)+1] = ptr[dev->bins[j]].im;
 					ptr += fft->step;
 				}
 			}
 		}
-# endif // NFM
 #else
 		for (int j = 0; j < dev->channel_count; j++) {
 			dev->channels[j].wavein[dev->waveend] =
 			sqrtf(fftout[dev->bins[j]][0] * fftout[dev->bins[j]][0] + fftout[dev->bins[j]][1] * fftout[dev->bins[j]][1]);
-# ifdef NFM
-			if(dev->channels[j].modulation == MOD_NFM) {
-				dev->channels[j].complex_samples[2*dev->waveend] = fftout[dev->bins[j]][0];
-				dev->channels[j].complex_samples[2*dev->waveend+1] = fftout[dev->bins[j]][1];
+			if(dev->channels[j].needs_raw_iq) {
+				dev->channels[j].iq_in[2*dev->waveend] = fftout[dev->bins[j]][0];
+				dev->channels[j].iq_in[2*dev->waveend+1] = fftout[dev->bins[j]][1];
 			}
-# endif // NFM
 		}
 #endif // USE_BCM_VC
 
@@ -506,6 +502,10 @@ void demodulate() {
 					}
 					if(channel->agcsq != -1) {
 						channel->waveout[j] = 0;
+						if(channel->has_iq_outputs) {
+							channel->iq_out[2*(j - AGC_EXTRA)] = 0;
+							channel->iq_out[2*(j - AGC_EXTRA)+1] = 0;
+						}
 					} else {
 						if(channel->modulation == MOD_AM) {
 							channel->waveout[j] = (channel->wavein[j - AGC_EXTRA] - fparms->agcavgfast) / (fparms->agcavgfast * 1.5f);
@@ -518,7 +518,7 @@ void demodulate() {
 						else {	// NFM
 // remove phase rotation introduced by FFT sliding window
 							sincosf_lut(channel->dm_phi, &swf, &cwf);
-							multiply(channel->complex_samples[2*(j - AGC_EXTRA)], channel->complex_samples[2*(j - AGC_EXTRA)+1],
+							multiply(channel->iq_in[2*(j - AGC_EXTRA)], channel->iq_in[2*(j - AGC_EXTRA)+1],
 							cwf, -swf, &derotated_r, &derotated_j);
 							channel->dm_phi += channel->dm_dphi;
 							channel->dm_phi &= 0xffffff;
@@ -538,11 +538,13 @@ void demodulate() {
 #endif // NFM
 					}
 				}
-				memmove(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4);
-#ifdef NFM
-				if(channel->modulation == MOD_NFM)
-					memmove(channel->complex_samples, channel->complex_samples + 2 * WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4 * 2);
-#endif
+				memmove(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * sizeof(float));
+				if(channel->needs_raw_iq) {
+					memmove(channel->iq_in, channel->iq_in + 2 * WAVE_BATCH, (dev->waveend - WAVE_BATCH) * sizeof(float) * 2);
+					if(channel->has_iq_outputs) {
+						memcpy(channel->iq_out, channel->iq_in + 2 * AGC_EXTRA, WAVE_BATCH * sizeof(float) * 2);
+					}
+				}
 
 #ifdef USE_BCM_VC
 				afc.finalize(dev, i, fft->out);

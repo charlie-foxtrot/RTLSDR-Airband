@@ -320,7 +320,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 				}
 				free(filename);
 			}
-			size_t buflen, written;
+			size_t buflen = 0, written = 0;
 			void *dataptr = NULL;
 			if(channel->outputs[k].type == O_FILE) {
 				dataptr = lamebuf;

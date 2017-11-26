@@ -148,13 +148,13 @@ void* controller_thread(void* params) {
 	return 0;
 }
 
-#ifdef NFM
 void multiply(float ar, float aj, float br, float bj, float *cr, float *cj)
 {
 	*cr = ar*br - aj*bj;
 	*cj = aj*br + ar*bj;
 }
 
+#ifdef NFM
 float fast_atan2(float y, float x)
 {
 	float yabs, angle;

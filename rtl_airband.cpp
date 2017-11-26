@@ -291,9 +291,7 @@ void demodulate() {
 	}
 #endif
 
-#ifdef NFM
 	float derotated_r, derotated_j, swf, cwf;
-#endif
 	ALIGN float ALIGN2 levels_u8[256], levels_s8[256];
 	float *levels_ptr = NULL;
 
@@ -507,6 +505,18 @@ void demodulate() {
 							channel->iq_out[2*(j - AGC_EXTRA)+1] = 0;
 						}
 					} else {
+						if(channel->needs_raw_iq) {
+// remove phase rotation introduced by FFT sliding window
+							sincosf_lut(channel->dm_phi, &swf, &cwf);
+							multiply(channel->iq_in[2*(j - AGC_EXTRA)], channel->iq_in[2*(j - AGC_EXTRA)+1],
+							cwf, -swf, &derotated_r, &derotated_j);
+							channel->dm_phi += channel->dm_dphi;
+							channel->dm_phi &= 0xffffff;
+							if(channel->has_iq_outputs) {
+								channel->iq_out[2*(j - AGC_EXTRA)] = derotated_r;
+								channel->iq_out[2*(j - AGC_EXTRA)+1] = derotated_j;
+							}
+						}
 						if(channel->modulation == MOD_AM) {
 							channel->waveout[j] = (channel->wavein[j - AGC_EXTRA] - fparms->agcavgfast) / (fparms->agcavgfast * 1.5f);
 							if (abs(channel->waveout[j]) > 0.8f) {
@@ -515,13 +525,7 @@ void demodulate() {
 							}
 						}
 #ifdef NFM
-						else {	// NFM
-// remove phase rotation introduced by FFT sliding window
-							sincosf_lut(channel->dm_phi, &swf, &cwf);
-							multiply(channel->iq_in[2*(j - AGC_EXTRA)], channel->iq_in[2*(j - AGC_EXTRA)+1],
-							cwf, -swf, &derotated_r, &derotated_j);
-							channel->dm_phi += channel->dm_dphi;
-							channel->dm_phi &= 0xffffff;
+						else if(channel->modulation == MOD_NFM) {
 // FM demod
 							if(fm_demod == FM_FAST_ATAN2) {
 								channel->waveout[j] = polar_disc_fast(derotated_r, derotated_j, channel->pr, channel->pj);
@@ -541,9 +545,6 @@ void demodulate() {
 				memmove(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * sizeof(float));
 				if(channel->needs_raw_iq) {
 					memmove(channel->iq_in, channel->iq_in + 2 * WAVE_BATCH, (dev->waveend - WAVE_BATCH) * sizeof(float) * 2);
-					if(channel->has_iq_outputs) {
-						memcpy(channel->iq_out, channel->iq_in + 2 * AGC_EXTRA, WAVE_BATCH * sizeof(float) * 2);
-					}
 				}
 
 #ifdef USE_BCM_VC
@@ -947,9 +948,7 @@ int main(int argc, char* argv[]) {
 #ifdef PULSE
 	pulse_start();
 #endif
-#ifdef NFM
 	sincosf_lut_init();
-#endif
 
 	demodulate();
 

@@ -310,10 +310,8 @@ void log(int priority, const char *format, ...);
 void tag_queue_put(device_t *dev, int freq, struct timeval tv);
 void tag_queue_get(device_t *dev, struct freq_tag *tag);
 void tag_queue_advance(device_t *dev);
-#ifdef NFM
 void sincosf_lut_init();
 void sincosf_lut(uint32_t phi, float *sine, float *cosine);
-#endif
 void *xcalloc(size_t nmemb, size_t size, const char *file, const int line, const char *func);
 void *xrealloc(void *ptr, size_t size, const char *file, const int line, const char *func);
 void init_debug (char *file);

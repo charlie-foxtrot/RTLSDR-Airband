@@ -291,7 +291,7 @@ void demodulate() {
 	}
 #endif
 
-	float derotated_r, derotated_j, swf, cwf;
+	float derotated_r = 0.f, derotated_j = 0.f, swf = 0.f, cwf = 0.f;
 	ALIGN float ALIGN2 levels_u8[256], levels_s8[256];
 	float *levels_ptr = NULL;
 

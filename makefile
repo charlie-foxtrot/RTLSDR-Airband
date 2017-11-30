@@ -83,6 +83,12 @@ ifeq ($(WITH_MIRISDR), 1)
   LDLIBS += -lmirisdr
 endif
 
+ifeq ($(WITH_SOAPYSDR), 1)
+  CFLAGS += -DWITH_SOAPYSDR
+  DEPS += input-soapysdr.o
+  LDLIBS += -lSoapySDR
+endif
+
 $(BIN): $(DEPS)
 ifndef DEPS
 	@printf "\nPlease set PLATFORM variable to one of available platforms:\n \
@@ -94,6 +100,7 @@ ifndef DEPS
 	\tPLATFORM=x86-freebsd gmake\tbuild binary for x86 (FreeBSD)\n\n \
 	SDR Hardware options:\n \
 	\tWITH_MIRISDR=1\t\t\tEnable Mirics DVB-T chipset support (via libmirisdr)\n \
+	\tWITH_SOAPYSDR=1\t\t\tEnable SoapySDR support\n \
 	Additional options:\n \
 	\tNFM=1\t\t\t\tInclude support for Narrow FM demodulation\n \
 	\t\t\t\t\tWarning: this incurs noticeable performance penalty both for AM and FM\n \
@@ -110,9 +117,11 @@ input-mirisdr.o: rtl_airband.h input-mirisdr.h
 
 input-rtlsdr.o: rtl_airband.h input-rtlsdr.h
 
+input-soapysdr.o: rtl_airband.h input-soapysdr.h
+
 mixer.o: rtl_airband.h
 
-rtl_airband.o: rtl_airband.h input-mirisdr.h input-rtlsdr.h
+rtl_airband.o: rtl_airband.h input-mirisdr.h input-rtlsdr.h input-soapysdr.h
 
 output.o: rtl_airband.h
 

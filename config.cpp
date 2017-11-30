@@ -290,6 +290,13 @@ int parse_devices(libconfig::Setting &devs) {
 				goto hwtype_set;
 			}
 #endif
+#ifdef WITH_SOAPYSDR
+			if(!strcmp(devs[i]["type"], "soapysdr")) {
+				dev->type = HW_SOAPYSDR;
+				dev->sfmt = SFMT_S8;	// FIXME: configurable
+				goto hwtype_set;
+			}
+#endif
 			cerr<<"Configuration error: devices.["<<i<<"]: unsupported device type\n";
 			error();
 		} else {

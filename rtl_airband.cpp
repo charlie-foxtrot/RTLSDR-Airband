@@ -69,6 +69,9 @@
 #ifdef WITH_MIRISDR
 #include "input-mirisdr.h"
 #endif
+#ifdef WITH_SOAPYSDR
+#include "input-soapysdr.h"
+#endif
 #include "rtl_airband.h"
 
 using namespace std;
@@ -129,6 +132,11 @@ void* controller_thread(void* params) {
 #ifdef WITH_MIRISDR
 				case HW_MIRISDR:
 					mirisdr_set_center_freq(dev->mirisdr, dev->centerfreq - dev->correction);
+					break;
+#endif
+#ifdef WITH_SOAPYSDR
+				case HW_SOAPYSDR:
+					SoapySDRDevice_setFrequency(dev->soapysdr, SOAPY_SDR_RX, 0, dev->centerfreq, NULL);
 					break;
 #endif
 				}
@@ -768,6 +776,7 @@ int main(int argc, char* argv[]) {
 			device_t* dev = devices + i;
 			if(dev->serial != NULL) {
 // FIXME: make this hw-agnostic
+// FIXME: SOAPYSDR?
 #ifdef WITH_RTLSDR
 				if(dev->type == HW_RTLSDR && (dev->device = rtlsdr_find_device_by_serial(dev->serial)) == RTL_DEV_INVALID) {
 					cerr<<"RTLSDR device with serial number "<<dev->serial<<" not found\n";
@@ -898,6 +907,11 @@ int main(int argc, char* argv[]) {
 			pthread_create(&dev->sdr_thread, NULL, &mirisdr_exec, dev);
 			break;
 #endif
+#ifdef WITH_SOAPYSDR
+		case HW_SOAPYSDR:
+			pthread_create(&dev->sdr_thread, NULL, &soapysdr_exec, dev);
+			break;
+#endif
 		}
 
 		if(dev->mode == R_SCAN) {
@@ -965,6 +979,8 @@ int main(int argc, char* argv[]) {
 			mirisdr_cancel_async(devices[i].mirisdr);
 			break;
 #endif
+// no need to do this for soapy, as it's not using a callback and cleans up
+// by itself on do_exit = 1;
 		}
 
 		pthread_join(devices[i].sdr_thread, NULL);

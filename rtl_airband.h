@@ -32,6 +32,9 @@
 #ifdef WITH_MIRISDR
 #include <mirisdr.h>
 #endif
+#ifdef WITH_SOAPYSDR
+#include <SoapySDR/Device.h>
+#endif
 #ifdef USE_BCM_VC
 #include "hello_fft/gpu_fft.h"
 #endif
@@ -152,6 +155,9 @@ enum hw_type {
 #ifdef WITH_MIRISDR
 	, HW_MIRISDR
 #endif
+#ifdef WITH_SOAPYSDR
+	, HW_SOAPYSDR
+#endif
 };
 
 enum sample_format { SFMT_U8, SFMT_S8, SFMT_UNDEF };
@@ -231,6 +237,9 @@ struct device_t {
 #endif
 #ifdef WITH_MIRISDR
 	mirisdr_dev_t  *mirisdr;	// FIXME: hw-agnostic pointer
+#endif
+#ifdef WITH_SOAPYSDR
+	SoapySDRDevice *soapysdr;	// FIXME: hw-agnostic pointer
 #endif
 	char *serial;
 	uint32_t device;

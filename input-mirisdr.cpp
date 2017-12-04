@@ -172,6 +172,9 @@ void *mirisdr_exec(void *params) {
 	}
 	return 0;
 }
+
+//int mirisdr_set_centerfreq() { }	// subtract dev->correction
+
 /*
 void mirisdr_cancel() {
 	if(mirisdr != NULL)

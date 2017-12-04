@@ -17,12 +17,19 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <stdint.h>
-#include "rtl_airband.h"
+#include <rtl-sdr.h>		// rtlsdr_dev_t
+#include "input-common.h"	// input_t
 #define RTLSDR_BUFSIZE 320000
-#define RTLSDR_BUFCNT 32
-// input-rtlsdr.cpp
-extern int rtlsdr_buffers;
-uint32_t rtlsdr_find_device_by_serial(const char *s);
-void *rtlsdr_exec(void *params);
-void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx);
+#define RTLSDR_DEFAULT_LIBUSB_BUFFER_COUNT 10
+#define RTLSDR_DEFAULT_SAMPLE_RATE 2560000
+
+typedef struct {
+	rtlsdr_dev_t *dev;	// pointer to librtlsdr device struct
+	char *serial;		// dongle serial number
+	int index;		// dongle index
+	int correction;		// PPM correction
+	int gain;		// gain in tenths of dB
+	int bufcnt;		// libusb buffer count
+} rtlsdr_dev_data_t;
+
+input_t *rtlsdr_input_new();

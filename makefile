@@ -22,7 +22,7 @@ SUBDIRS = hello_fft
 CLEANDIRS = $(SUBDIRS:%=clean-%)
 
 BIN = rtl_airband
-OBJ = rtl_airband.o output.o config.o util.o mixer.o
+OBJ = rtl_airband.o input-common.o output.o config.o util.o mixer.o
 FFT = hello_fft/hello_fft.a
 
 .PHONY: all clean install $(SUBDIRS) $(CLEANDIRS)
@@ -113,17 +113,19 @@ $(FFT):	hello_fft ;
 
 config.o: rtl_airband.h
 
+input-common.o: input-common.h input-rtlsdr.h
+
 input-mirisdr.o: rtl_airband.h input-mirisdr.h
 
-input-rtlsdr.o: rtl_airband.h input-rtlsdr.h
+input-rtlsdr.o: rtl_airband.h input-common.h input-rtlsdr.h
 
 input-soapysdr.o: rtl_airband.h input-soapysdr.h
 
 mixer.o: rtl_airband.h
 
-rtl_airband.o: rtl_airband.h input-mirisdr.h input-rtlsdr.h input-soapysdr.h
+rtl_airband.o: rtl_airband.h input-common.h
 
-output.o: rtl_airband.h
+output.o: rtl_airband.h input-common.h
 
 pulse.o: rtl_airband.h
 

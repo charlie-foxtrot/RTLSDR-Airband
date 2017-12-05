@@ -127,7 +127,9 @@ int input_stop(input_t * const input) {
 int input_set_centerfreq(input_t * const input, int const centerfreq) {
 	assert(input != NULL);
 	assert(input->dev_data != NULL);
-	assert(input->state == INPUT_RUNNING);
+	if(input->state != INPUT_RUNNING) {
+		return -1;
+	}
 	if(input->set_centerfreq == NULL) {
 		return -1;
 	}

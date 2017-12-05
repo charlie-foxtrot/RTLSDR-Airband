@@ -116,8 +116,6 @@ void* controller_thread(void* params) {
 				dev->channels[0].freq_idx = i;
 				new_centerfreq = dev->channels[0].freqlist[i].frequency + 20 * (double)(dev->input->sample_rate / fft_size);
 				if(input_set_centerfreq(dev->input, new_centerfreq) < 0) {
-// FIXME: log ID of errored device
-					log(LOG_ERR, "scanning controller exiting due to error\n");
 					break;
 				}
 			}

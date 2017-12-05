@@ -225,6 +225,13 @@ int rtlsdr_parse_config(input_t * const input, libconfig::Setting &cfg) {
 	if(cfg.exists("correction")) {
 		dev_data->correction = (int)cfg["correction"];
 	}
+	if(cfg.exists("num_buffers")) {
+		dev_data->bufcnt = (int)(cfg["num_buffers"]);
+		if(dev_data->bufcnt < 1) {
+			cerr<<"RTLSDR configuration error: num_buffers must be greater than 0\n";
+			error();
+		}
+	}
 	return 0;
 }
 

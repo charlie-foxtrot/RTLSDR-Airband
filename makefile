@@ -14,7 +14,8 @@ ifneq ($(RTL_AIRBAND_VERSION), \"\")
   CFLAGS+=-DRTL_AIRBAND_VERSION=$(RTL_AIRBAND_VERSION)
 endif
 export CXXFLAGS = $(CFLAGS)
-LDLIBS = -lrt -lm -lvorbisenc -lmp3lame -lshout -lpthread -lconfig++
+export LDFLAGS = -rdynamic
+LDLIBS = -lrt -lm -ldl -lvorbisenc -lmp3lame -lshout -lpthread -lconfig++
 INSTALL_USER = root
 INSTALL_GROUP = root
 
@@ -32,14 +33,14 @@ ifeq ($(PLATFORM), rpiv1)
   CFLAGS += -I/opt/vc/include  -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux
   CFLAGS += -mcpu=arm1176jzf-s -mtune=arm1176jzf-s -march=armv6zk -mfpu=vfp -ffast-math 
   LDLIBS += -lbcm_host -ldl
-  export LDFLAGS = -L/opt/vc/lib
+  LDFLAGS += -L/opt/vc/lib
   DEPS = $(OBJ) $(FFT) rtl_airband_vfp.o
 else ifeq ($(PLATFORM), rpiv2)
   CFLAGS += -DUSE_BCM_VC
   CFLAGS += -I/opt/vc/include  -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux
   CFLAGS += -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -ffast-math 
   LDLIBS += -lbcm_host -ldl
-  export LDFLAGS = -L/opt/vc/lib
+  LDFLAGS += -L/opt/vc/lib
   DEPS = $(OBJ) $(FFT) rtl_airband_neon.o
 else ifeq ($(PLATFORM), armv7-generic)
   CFLAGS += -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -ffast-math 
@@ -113,7 +114,7 @@ $(FFT):	hello_fft ;
 
 config.o: rtl_airband.h
 
-input-common.o: input-common.h input-rtlsdr.h
+input-common.o: input-common.h
 
 input-mirisdr.o: rtl_airband.h input-mirisdr.h
 

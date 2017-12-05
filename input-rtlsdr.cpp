@@ -26,7 +26,7 @@
 #include <syslog.h> // FIXME: get rid of this
 #include <unistd.h>
 #include <rtl-sdr.h>
-#include "input-common.h"	// input_t, sample_format_t, input_state_t
+#include "input-common.h"	// input_t, sample_format_t, input_state_t, MODULE_EXPORT
 #include "input-rtlsdr.h"	// rtlsdr_dev_data_t
 #include "rtl_airband.h"	// do_exit, fft_size, debug_print, XCALLOC, error()
 
@@ -228,7 +228,7 @@ int rtlsdr_parse_config(input_t * const input, libconfig::Setting &cfg) {
 	return 0;
 }
 
-input_t *rtlsdr_input_new() {
+MODULE_EXPORT input_t *rtlsdr_input_new() {
 	rtlsdr_dev_data_t *dev_data = (rtlsdr_dev_data_t *)XCALLOC(1, sizeof(rtlsdr_dev_data_t));
 	dev_data->index = -1;	// invalid default receiver index
 	dev_data->gain = -1;	// invalid default gain value

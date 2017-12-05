@@ -32,4 +32,3 @@ typedef struct {
 	int bufcnt;		// libusb buffer count
 } rtlsdr_dev_data_t;
 
-input_t *rtlsdr_input_new();

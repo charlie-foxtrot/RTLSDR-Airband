@@ -20,37 +20,28 @@
 
 #include <iostream>
 #include <assert.h>
+#include <dlfcn.h>  		// dlopen, dlsym
 #include <errno.h>
 #include <pthread.h>
+#include <stdio.h>  		// asprintf
+#include <stdlib.h>		// free
 #include <string.h>
 #include "input-common.h"
-#ifdef WITH_RTLSDR
-#include "input-rtlsdr.h"
-#endif
 
 using namespace std;
 
-struct input_type {
-        char const * const type;
-        input_t *(*input_new)();
-};
-
-static struct input_type const input_table[] = {
-#ifdef WITH_RTLSDR
-	{ .type = "rtlsdr", .input_new = &rtlsdr_input_new },
-#endif
-	{ .type = NULL, .input_new = NULL }
-};
+typedef input_t *(*input_new_func_t)(void);
 
 input_t *input_new(char const * const type) {
 	assert(type != NULL);
-	for(struct input_type const *ptr = (struct input_type const *)input_table; ; ptr++) {
-		if(ptr->type == NULL) {
-			return NULL;
-		}
-		if(strcmp(type, ptr->type) == 0) {
-			return ptr->input_new();
-		}
+	void *dlhandle = dlopen(NULL, RTLD_NOW);
+	assert(dlhandle != NULL);
+	char *fname = NULL;
+	assert(asprintf(&fname, "%s_input_new", type) > 0);
+	input_new_func_t fptr = (input_new_func_t)dlsym(dlhandle, fname);
+	free(fname);
+	if(fptr != NULL) {
+		return (*fptr)();
 	}
 	return NULL;
 }

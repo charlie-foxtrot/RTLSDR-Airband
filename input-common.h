@@ -21,6 +21,7 @@
 #define _INPUT_COMMON_H 1
 #include <pthread.h>
 #include <libconfig.h++>
+#define MODULE_EXPORT extern "C"
 
 typedef enum {
 	SFMT_UNDEF = 0,

@@ -116,7 +116,7 @@ config.o: rtl_airband.h
 
 input-common.o: input-common.h
 
-input-mirisdr.o: rtl_airband.h input-mirisdr.h
+input-mirisdr.o: rtl_airband.h input-common.h input-mirisdr.h
 
 input-rtlsdr.o: rtl_airband.h input-common.h input-rtlsdr.h
 

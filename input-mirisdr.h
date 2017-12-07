@@ -17,11 +17,17 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <stdint.h>
-#include "rtl_airband.h"
+#include <mirisdr.h>		// mirisdr_dev_t
+#include "input-common.h"	// input_t
 #define MIRISDR_BUFSIZE 320000
-#define MIRISDR_BUFCNT 32
-// input-mirisdr.cpp
-uint32_t mirisdr_find_device_by_serial(const char *s);
-void *mirisdr_exec(void *params);
-void mirisdr_callback(unsigned char *buf, uint32_t len, void *ctx);
+#define MIRISDR_DEFAULT_LIBUSB_BUFFER_COUNT 10
+#define MIRISDR_DEFAULT_SAMPLE_RATE 2560000
+
+typedef struct {
+	mirisdr_dev_t *dev;	// pointer to libmirisdr device struct
+	char *serial;		// dongle serial number
+	int index;		// dongle index
+	int correction;		// correction in Hertz (PPM correction is not supported by libmirisdr)
+	int gain;		// gain in dB
+	int bufcnt;		// libusb buffer count
+} mirisdr_dev_data_t;

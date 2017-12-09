@@ -183,7 +183,7 @@ int mirisdr_set_centerfreq(input_t * const input, int const centerfreq) {
 	mirisdr_dev_data_t *dev_data = (mirisdr_dev_data_t *)input->dev_data;
 	assert(dev_data->dev != NULL);
 
-	int r = mirisdr_set_center_freq(dev_data->dev, input->centerfreq - dev_data->correction);
+	int r = mirisdr_set_center_freq(dev_data->dev, centerfreq - dev_data->correction);
 	if(r < 0) {
 		log(LOG_ERR, "Failed to set centerfreq for MiriSDR device #%d: error %d\n",
 			dev_data->index, r);

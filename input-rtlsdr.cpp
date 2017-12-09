@@ -189,7 +189,7 @@ int rtlsdr_set_centerfreq(input_t * const input, int const centerfreq) {
 	rtlsdr_dev_data_t *dev_data = (rtlsdr_dev_data_t *)input->dev_data;
 	assert(dev_data->dev != NULL);
 
-	int r = rtlsdr_set_center_freq(dev_data->dev, input->centerfreq);
+	int r = rtlsdr_set_center_freq(dev_data->dev, centerfreq);
 	if(r < 0) {
 		log(LOG_ERR, "Failed to set centerfreq for RTLSDR device #%d: error %d\n",
 			dev_data->index, r);

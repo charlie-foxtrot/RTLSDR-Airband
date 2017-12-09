@@ -40,15 +40,18 @@ input_t *input_new(char const * const type) {
 	assert(asprintf(&fname, "%s_input_new", type) > 0);
 	input_new_func_t fptr = (input_new_func_t)dlsym(dlhandle, fname);
 	free(fname);
-	if(fptr != NULL) {
-		return (*fptr)();
+	if(fptr == NULL) {
+		return NULL;
 	}
-	return NULL;
+	input_t *input = (*fptr)();
+	assert(input->init != NULL);
+	assert(input->run_rx_thread != NULL);
+	assert(input->set_centerfreq != NULL);
+	return input;
 }
 
 int input_init(input_t * const input) {
 	assert(input != NULL);
-	assert(input->init != NULL);
 	input_state_t new_state = INPUT_FAILED;	// fail-safe default
 	errno = 0;
 	int ret = input->init(input);
@@ -69,14 +72,9 @@ int input_start(input_t * const input) {
 	assert(input != NULL);
 	assert(input->dev_data != NULL);
 	assert(input->state == INPUT_INITIALIZED);
-	if(input->run_rx_thread != NULL) {
-		int err = pthread_create(&input->rx_thread, NULL, input->run_rx_thread, (void *)input);
-		if(err != 0) {
-			errno = err;
-			return -1;
-		}
-	} else {
-		errno = EINVAL;
+	int err = pthread_create(&input->rx_thread, NULL, input->run_rx_thread, (void *)input);
+	if(err != 0) {
+		errno = err;
 		return -1;
 	}
 	return 0;
@@ -91,7 +89,6 @@ int input_parse_config(input_t * const input, libconfig::Setting &cfg) {
 // variables, so it's legal not to have parse_config defined.
 		return 0;
 	}
-// FIXME: verify returned structure for completeness
 }
 
 int input_stop(input_t * const input) {
@@ -119,9 +116,6 @@ int input_set_centerfreq(input_t * const input, int const centerfreq) {
 	assert(input != NULL);
 	assert(input->dev_data != NULL);
 	if(input->state != INPUT_RUNNING) {
-		return -1;
-	}
-	if(input->set_centerfreq == NULL) {
 		return -1;
 	}
 	int ret = input->set_centerfreq(input, centerfreq);

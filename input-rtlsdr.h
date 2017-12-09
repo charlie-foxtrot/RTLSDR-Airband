@@ -18,7 +18,6 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include <rtl-sdr.h>		// rtlsdr_dev_t
-#include "input-common.h"	// input_t
 #define RTLSDR_BUFSIZE 320000
 #define RTLSDR_DEFAULT_LIBUSB_BUFFER_COUNT 10
 #define RTLSDR_DEFAULT_SAMPLE_RATE 2560000

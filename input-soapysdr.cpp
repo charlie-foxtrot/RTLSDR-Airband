@@ -23,6 +23,7 @@
 #include <stdlib.h>		// calloc
 #include <string.h>		// memcpy
 #include <syslog.h>		// LOG_* macros
+#include <libconfig.h++>	// Setting
 #include <SoapySDR/Device.h>
 #include <SoapySDR/Formats.h>
 #include "input-common.h"	// input_t, sample_format_t, input_state_t, MODULE_EXPORT

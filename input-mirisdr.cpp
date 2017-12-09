@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h> // FIXME: get rid of this
-#include <unistd.h>
+#include <libconfig.h++>	// Setting
 #include <mirisdr.h>
 #include "input-common.h"	// input_t, sample_format_t, input_state_t, MODULE_EXPORT
 #include "input-mirisdr.h"	// mirisdr_dev_data_t

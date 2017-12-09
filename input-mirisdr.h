@@ -18,7 +18,6 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include <mirisdr.h>		// mirisdr_dev_t
-#include "input-common.h"	// input_t
 #define MIRISDR_BUFSIZE 320000
 #define MIRISDR_DEFAULT_LIBUSB_BUFFER_COUNT 10
 #define MIRISDR_DEFAULT_SAMPLE_RATE 2560000

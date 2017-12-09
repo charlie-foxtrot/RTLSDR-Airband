@@ -82,26 +82,6 @@ int soapysdr_init(input_t * const input) {
 	}
 	SoapySDRDevice *sdr = dev_data->dev;
 
-	//query device info
-/*	char** names = SoapySDRDevice_listAntennas(sdr, SOAPY_SDR_RX, 0, &length);
-	printf("Rx antennas: ");
-	for (size_t i = 0; i < length; i++) printf("%s, ", names[i]);
-	printf("\n");
-	SoapySDRStrings_clear(&names, length);
-
-	names = SoapySDRDevice_listGains(sdr, SOAPY_SDR_RX, 0, &length);
-	printf("Rx gains: ");
-	for (size_t i = 0; i < length; i++) printf("%s, ", names[i]);
-	printf("\n");
-	SoapySDRStrings_clear(&names, length);
-
-	SoapySDRRange *ranges = SoapySDRDevice_getFrequencyRange(sdr, SOAPY_SDR_RX, 0, &length);
-	printf("Rx freq ranges: ");
-	for (size_t i = 0; i < length; i++) printf("[%g Hz -> %g Hz], ", ranges[i].minimum, ranges[i].maximum);
-	printf("\n");
-	free(ranges);
-*/
-
 	if(SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_RX, 0, input->sample_rate) != 0) {
 		log(LOG_ERR, "Failed to set sample rate for SoapySDR device '%s': %s\n",
 			dev_data->device_string, SoapySDRDevice_lastError());
@@ -169,7 +149,6 @@ void *soapysdr_rx_thread(void *ctx) {
 			input->state = INPUT_FAILED;
 			goto cleanup;
 		}
-//		debug_print("num_samples: %d\n", num_samples);
 // FIXME: this assumes 8 bit samples
 		size_t slen = (size_t)num_samples * 2;
 		pthread_mutex_lock(&input->buffer_lock);

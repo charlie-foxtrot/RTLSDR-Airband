@@ -17,9 +17,14 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <stdint.h>
-#include "rtl_airband.h"
+#include <SoapySDR/Device.h>	// SoapySDRDevice
+#define SOAPYSDR_DEFAULT_SAMPLE_RATE 2560000
 #define SOAPYSDR_BUFSIZE 320000
-//#define SOAPYSDR_BUFCNT 32
-// input-soapysdr.cpp
-void *soapysdr_exec(void *params);
+
+typedef struct {
+	SoapySDRDevice *dev;	// pointer to device struct
+	char *serial;		// dongle serial number
+	int index;		// dongle index
+	double correction;	// PPM correction
+	double gain;		// gain in dB
+} soapysdr_dev_data_t;

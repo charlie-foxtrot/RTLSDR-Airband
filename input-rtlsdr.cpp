@@ -27,6 +27,7 @@
 #include <libconfig.h++>	// Setting
 #include <rtl-sdr.h>
 #include "input-common.h"	// input_t, sample_format_t, input_state_t, MODULE_EXPORT
+#include "input-helpers.h"	// circbuffer_append
 #include "input-rtlsdr.h"	// rtlsdr_dev_data_t
 #include "rtl_airband.h"	// do_exit, fft_size, debug_print, XCALLOC, error()
 
@@ -35,32 +36,7 @@ using namespace std;
 static void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx) {
 	if(do_exit) return;
 	input_t *input = (input_t *)ctx;
-	size_t slen = (size_t)len;
-/* Write input data into circular buffer dev->buffer.
- * In general, dev->buffer_size is not an exact multiple of len,
- * so we have to take care about proper wrapping.
- * dev->buffer_size is an exact multiple of FFT_BATCH * bps,
- * and dev->buffer's real length is dev->buf_size + 2 * fft_size.
- * On each wrap we copy 2 * fft_size bytes from the start of
- * dev->buffer to its end, so that the signal windowing function
- * could handle the whole FFT batch without wrapping. */
-	pthread_mutex_lock(&input->buffer_lock);
-	size_t space_left = input->buf_size - input->bufe;
-	if(space_left >= slen) {
-		memcpy(input->buffer + input->bufe, buf, slen);
-		if(input->bufe == 0) {
-			memcpy(input->buffer + input->buf_size, input->buffer, min(slen, 2 * fft_size));
-			debug_print("tail_len=%zu\n", min(slen, 2 * fft_size));
-		}
-	} else {
-		memcpy(input->buffer + input->bufe, buf, space_left);
-		memcpy(input->buffer, buf + space_left, slen - space_left);
-		memcpy(input->buffer + input->buf_size, input->buffer, min(slen - space_left, 2 * fft_size));
-		debug_print("buf wrap: space_left=%zu len=%zu bufe=%zu wrap_len=%zu tail_len=%zu\n",
-			space_left, slen, input->bufe, slen - space_left, min(slen - space_left, 2 * fft_size));
-	}
-	input->bufe = (input->bufe + slen) % input->buf_size;
-	pthread_mutex_unlock(&input->buffer_lock);
+	circbuffer_append(input, buf, (size_t)len);
 }
 
 /* taken from librtlsdr-keenerd, (c) Kyle Keen */

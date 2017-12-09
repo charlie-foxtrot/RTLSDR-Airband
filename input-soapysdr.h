@@ -24,7 +24,6 @@
 typedef struct {
 	SoapySDRDevice *dev;	// pointer to device struct
 	char const *device_string;	// SoapySDR device arg string
-	int index;		// dongle index
 	double correction;	// PPM correction
 	double gain;		// gain in dB
 } soapysdr_dev_data_t;

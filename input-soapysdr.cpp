@@ -24,7 +24,7 @@
 #include <string.h>		// memcpy
 #include <syslog.h>		// LOG_* macros
 #include <libconfig.h++>	// Setting
-#include <SoapySDR/Device.h>
+#include <SoapySDR/Device.h>	// SoapySDRDevice, SoapySDRDevice_makeStrArgs
 #include <SoapySDR/Formats.h>
 #include "input-common.h"	// input_t, sample_format_t, input_state_t, MODULE_EXPORT
 #include "input-soapysdr.h"	// soapysdr_dev_data_t
@@ -35,11 +35,17 @@ using namespace std;
 int soapysdr_parse_config(input_t * const input, libconfig::Setting &cfg) {
 	soapysdr_dev_data_t *dev_data = (soapysdr_dev_data_t *)input->dev_data;
 
+	if(cfg.exists("device_string")) {
+		dev_data->device_string = strdup(cfg["device_string"]);
+	} else {
+		cerr<<"SoapySDR configuration error: mandatory parameter missing: device_string\n";
+		error();
+	}
 	if(cfg.exists("gain")) {
 		if(cfg["gain"].getType() == libconfig::Setting::TypeInt) {
 			dev_data->gain = (double)((int)cfg["gain"]);
 		} else if(cfg["gain"].getType() == libconfig::Setting::TypeFloat) {
-			dev_data->gain = (float)cfg["gain"];
+			dev_data->gain = (double)cfg["gain"];
 		}
 	} else {
 		cerr<<"SoapySDR configuration error: gain is not configured\n";
@@ -65,30 +71,9 @@ int soapysdr_parse_config(input_t * const input, libconfig::Setting &cfg) {
 int soapysdr_init(input_t * const input) {
 	soapysdr_dev_data_t *dev_data = (soapysdr_dev_data_t *)input->dev_data;
 
-	//enumerate devices
-//	SoapySDRKwargs *results = SoapySDRDevice_enumerate(NULL, &length);
-//	for (size_t i = 0; i < length; i++)
-//	{
-//		printf("Found device #%d: ", (int)i);
-//		for (size_t j = 0; j < results[i].size; j++)
-//		{
-//			printf("%s=%s, ", results[i].keys[j], results[i].vals[j]);
-//		}
-//		printf("\n");
-//	}
-//	SoapySDRKwargsList_clear(results, length);
-
-	//create device instance
-	//args can be user defined or from the enumeration result
-	SoapySDRKwargs args = {};
-	SoapySDRKwargs_set(&args, "driver", "rtlsdr");	// FIXME: configurable
-//	SoapySDRKwargs_set(&args, "rtl", dev_data->index);  // FIXME; char *
-	SoapySDRKwargs_set(&args, "rtl", "0");
-	dev_data->dev = SoapySDRDevice_make(&args);
-	SoapySDRKwargs_clear(&args);
-
+	dev_data->dev = SoapySDRDevice_makeStrArgs(dev_data->device_string);
 	if (dev_data->dev == NULL) {
-		log(LOG_ERR, "SoapySDRDevice_make fail: %s\n", SoapySDRDevice_lastError());
+		log(LOG_ERR, "Failed to open SoapySDR device: %s\n", SoapySDRDevice_lastError());
 		error();
 	}
 	SoapySDRDevice *sdr = dev_data->dev;

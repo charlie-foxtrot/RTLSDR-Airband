@@ -727,10 +727,8 @@ int main(int argc, char* argv[]) {
 		sigaction(SIGINT, &sigact, NULL);
 		sigaction(SIGQUIT, &sigact, NULL);
 		sigaction(SIGTERM, &sigact, NULL);
-// FIXME: alignment needed for buffer only
-		uintptr_t tempptr = (uintptr_t)XCALLOC(1, device_count * sizeof(device_t)+31);
-		tempptr &= ~0x0F;
-		devices = (device_t *)tempptr;
+
+		devices = (device_t *)XCALLOC(device_count, sizeof(device_t));
 		shout_init();
 		if(do_syslog) openlog("rtl_airband", LOG_PID, LOG_DAEMON);
 

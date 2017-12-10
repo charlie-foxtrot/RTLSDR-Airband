@@ -362,7 +362,7 @@ int parse_devices(libconfig::Setting &devs) {
 		}
 		dev->channels = (channel_t *)XREALLOC(dev->channels, channel_count * sizeof(channel_t));
 		dev->bins = (size_t *)XREALLOC(dev->bins, channel_count * sizeof(size_t));
-		dev->base_bins = (size_t *)XREALLOC(dev->bins, channel_count * sizeof(size_t));
+		dev->base_bins = (size_t *)XREALLOC(dev->base_bins, channel_count * sizeof(size_t));
 		dev->channel_count = channel_count;
 		devcnt++;
 	}

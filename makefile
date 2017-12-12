@@ -14,7 +14,8 @@ ifneq ($(RTL_AIRBAND_VERSION), \"\")
   CFLAGS+=-DRTL_AIRBAND_VERSION=$(RTL_AIRBAND_VERSION)
 endif
 export CXXFLAGS = $(CFLAGS)
-LDLIBS = -lrt -lm -lvorbisenc -lmp3lame -lshout -lpthread -lconfig++
+export LDFLAGS = -rdynamic
+LDLIBS = -lrt -lm -ldl -lvorbisenc -lmp3lame -lshout -lpthread -lconfig++
 INSTALL_USER = root
 INSTALL_GROUP = root
 
@@ -22,7 +23,7 @@ SUBDIRS = hello_fft
 CLEANDIRS = $(SUBDIRS:%=clean-%)
 
 BIN = rtl_airband
-OBJ = rtl_airband.o output.o config.o util.o mixer.o
+OBJ = rtl_airband.o input-common.o input-helpers.o output.o config.o util.o mixer.o
 FFT = hello_fft/hello_fft.a
 
 .PHONY: all clean install $(SUBDIRS) $(CLEANDIRS)
@@ -32,14 +33,14 @@ ifeq ($(PLATFORM), rpiv1)
   CFLAGS += -I/opt/vc/include  -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux
   CFLAGS += -mcpu=arm1176jzf-s -mtune=arm1176jzf-s -march=armv6zk -mfpu=vfp -ffast-math 
   LDLIBS += -lbcm_host -ldl
-  export LDFLAGS = -L/opt/vc/lib
+  LDFLAGS += -L/opt/vc/lib
   DEPS = $(OBJ) $(FFT) rtl_airband_vfp.o
 else ifeq ($(PLATFORM), rpiv2)
   CFLAGS += -DUSE_BCM_VC
   CFLAGS += -I/opt/vc/include  -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux
   CFLAGS += -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -ffast-math 
   LDLIBS += -lbcm_host -ldl
-  export LDFLAGS = -L/opt/vc/lib
+  LDFLAGS += -L/opt/vc/lib
   DEPS = $(OBJ) $(FFT) rtl_airband_neon.o
 else ifeq ($(PLATFORM), armv7-generic)
   CFLAGS += -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -ffast-math 
@@ -83,6 +84,12 @@ ifeq ($(WITH_MIRISDR), 1)
   LDLIBS += -lmirisdr
 endif
 
+ifeq ($(WITH_SOAPYSDR), 1)
+  CFLAGS += -DWITH_SOAPYSDR
+  DEPS += input-soapysdr.o
+  LDLIBS += -lSoapySDR
+endif
+
 $(BIN): $(DEPS)
 ifndef DEPS
 	@printf "\nPlease set PLATFORM variable to one of available platforms:\n \
@@ -94,6 +101,7 @@ ifndef DEPS
 	\tPLATFORM=x86-freebsd gmake\tbuild binary for x86 (FreeBSD)\n\n \
 	SDR Hardware options:\n \
 	\tWITH_MIRISDR=1\t\t\tEnable Mirics DVB-T chipset support (via libmirisdr)\n \
+	\tWITH_SOAPYSDR=1\t\t\tEnable SoapySDR support\n \
 	Additional options:\n \
 	\tNFM=1\t\t\t\tInclude support for Narrow FM demodulation\n \
 	\t\t\t\t\tWarning: this incurs noticeable performance penalty both for AM and FM\n \
@@ -106,15 +114,21 @@ $(FFT):	hello_fft ;
 
 config.o: rtl_airband.h
 
-input-mirisdr.o: rtl_airband.h input-mirisdr.h
+input-common.o: input-common.h
 
-input-rtlsdr.o: rtl_airband.h input-rtlsdr.h
+input-helpers.o: rtl_airband.h
+
+input-mirisdr.o: rtl_airband.h input-common.h input-helpers.h input-mirisdr.h
+
+input-rtlsdr.o: rtl_airband.h input-common.h input-helpers.h input-rtlsdr.h
+
+input-soapysdr.o: rtl_airband.h input-common.h input-helpers.h input-soapysdr.h
 
 mixer.o: rtl_airband.h
 
-rtl_airband.o: rtl_airband.h input-mirisdr.h input-rtlsdr.h
+rtl_airband.o: rtl_airband.h input-common.h
 
-output.o: rtl_airband.h
+output.o: rtl_airband.h input-common.h
 
 pulse.o: rtl_airband.h
 

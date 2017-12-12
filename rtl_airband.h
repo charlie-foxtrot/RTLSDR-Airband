@@ -26,12 +26,6 @@
 #include <shout/shout.h>
 #include <lame/lame.h>
 #include <libconfig.h++>
-#ifdef WITH_RTLSDR
-#include <rtl-sdr.h>
-#endif
-#ifdef WITH_MIRISDR
-#include <mirisdr.h>
-#endif
 #ifdef USE_BCM_VC
 #include "hello_fft/gpu_fft.h"
 #endif
@@ -39,6 +33,7 @@
 #include <pulse/context.h>
 #include <pulse/stream.h>
 #endif
+#include "input-common.h"	// input_t
 
 #ifndef RTL_AIRBAND_VERSION
 #define RTL_AIRBAND_VERSION "2.4.0"
@@ -80,7 +75,6 @@
 
 #define LAMEBUF_SIZE 22000 //todo: calculate
 #define MIX_DIVISOR 2
-#define RTL_DEV_INVALID 0xFFFFFFFF
 
 #define ONES(x) ~(~0 << (x))
 #define SET_BIT(a, x) (a) |= (1 << (x))
@@ -143,18 +137,6 @@ struct mixer_data {
 	struct mixer_t *mixer;
 	int input;
 };
-
-enum hw_type {
-	HW_UNDEF
-#ifdef WITH_RTLSDR
-	, HW_RTLSDR
-#endif
-#ifdef WITH_MIRISDR
-	, HW_MIRISDR
-#endif
-};
-
-enum sample_format { SFMT_U8, SFMT_S8, SFMT_UNDEF };
 
 enum output_type {
 	O_ICECAST,
@@ -224,20 +206,7 @@ struct channel_t {
 
 enum rec_modes { R_MULTICHANNEL, R_SCAN };
 struct device_t {
-	unsigned char *buffer;
-	size_t buf_size, bufs, bufe;
-#ifdef WITH_RTLSDR
-	rtlsdr_dev_t* rtlsdr;
-#endif
-#ifdef WITH_MIRISDR
-	mirisdr_dev_t  *mirisdr;	// FIXME: hw-agnostic pointer
-#endif
-	char *serial;
-	uint32_t device;
-	uint32_t sample_rate;
-	int centerfreq;
-	int correction;
-	int gain;
+	input_t *input;
 #ifdef NFM
 	float alpha;
 #endif
@@ -247,18 +216,14 @@ struct device_t {
 // FIXME: size_t
 	int waveend;
 	int waveavail;
-	THREAD sdr_thread;
 	THREAD controller_thread;
 	struct freq_tag tag_queue[TAG_QUEUE_LEN];
 	int tq_head, tq_tail;
 	int last_frequency;
 	pthread_mutex_t tag_queue_lock;
-	pthread_mutex_t buffer_lock;
 	int row;
 	int failed;
 	enum rec_modes mode;
-	enum hw_type type;
-	enum sample_format sfmt;
 };
 
 struct mixinput_t {

@@ -63,12 +63,7 @@
 #include <vorbis/vorbisenc.h>
 #include <shout/shout.h>
 #include <lame/lame.h>
-#ifdef WITH_RTLSDR
-#include "input-rtlsdr.h"
-#endif
-#ifdef WITH_MIRISDR
-#include "input-mirisdr.h"
-#endif
+#include "input-common.h"
 #include "rtl_airband.h"
 
 using namespace std;
@@ -77,7 +72,7 @@ using namespace libconfig;
 device_t* devices;
 mixer_t* mixers;
 int device_count, mixer_count;
-volatile int device_opened = 0;
+static int devices_running = 0;
 int foreground = 0, do_syslog = 1, shout_metadata_delay = 3;
 volatile int do_exit = 0;
 bool use_localtime = false;
@@ -107,6 +102,7 @@ void* controller_thread(void* params) {
 	device_t *dev = (device_t*)params;
 	int i = 0;
 	int consecutive_squelch_off = 0;
+	int new_centerfreq = 0;
 	struct timeval tv;
 
 	if(dev->channels[0].freq_count < 2) return 0;
@@ -118,19 +114,9 @@ void* controller_thread(void* params) {
 			} else {
 				i++; i %= dev->channels[0].freq_count;
 				dev->channels[0].freq_idx = i;
-				dev->centerfreq = dev->channels[0].freqlist[i].frequency + 20 * (double)(dev->sample_rate / fft_size);
-// FIXME: make this hw-agnostic
-				switch(dev->type) {
-#ifdef WITH_RTLSDR
-				case HW_RTLSDR:
-					rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);
+				new_centerfreq = dev->channels[0].freqlist[i].frequency + 20 * (double)(dev->input->sample_rate / fft_size);
+				if(input_set_centerfreq(dev->input, new_centerfreq) < 0) {
 					break;
-#endif
-#ifdef WITH_MIRISDR
-				case HW_MIRISDR:
-					mirisdr_set_center_freq(dev->mirisdr, dev->centerfreq - dev->correction);
-					break;
-#endif
 				}
 			}
 		} else {
@@ -340,31 +326,40 @@ void demodulate() {
 
 		device_t* dev = devices + device_num;
 
-		pthread_mutex_lock(&dev->buffer_lock);
-		if(dev->bufe >= dev->bufs)
-			available = dev->bufe - dev->bufs;
+		pthread_mutex_lock(&dev->input->buffer_lock);
+		if(dev->input->bufe >= dev->input->bufs)
+			available = dev->input->bufe - dev->input->bufs;
 		else
-			available = dev->buf_size - dev->bufs + dev->bufe;
-		pthread_mutex_unlock(&dev->buffer_lock);
+			available = dev->input->buf_size - dev->input->bufs + dev->input->bufe;
+		pthread_mutex_unlock(&dev->input->buffer_lock);
 
-		if(atomic_get(&device_opened)==0) {
+		if(devices_running == 0) {
 			log(LOG_ERR, "All receivers failed, exiting\n");
 			do_exit = 1;
 			continue;
 		}
-		// number of input bytes per output wave sample (x 2 for I and Q)
-		size_t bps = (dev->sample_rate * 2) / WAVE_RATE;
-		if (dev->failed) {
-			// move to next device
+
+		if (dev->input->state != INPUT_RUNNING) {
+			if(dev->input->state == INPUT_FAILED) {
+				dev->input->state = INPUT_DISABLED;
+				disable_device_outputs(dev);
+				devices_running--;
+			}
 			device_num = (device_num + 1) % device_count;
 			continue;
-		} else if (available < bps * FFT_BATCH + fft_size * 2) {
+		}
+
+// number of input bytes per output wave sample (x 2 for I and Q)
+		size_t bps = (dev->input->sample_rate * 2) / WAVE_RATE;
+		if (available < bps * FFT_BATCH + fft_size * 2) {
 			// move to next device
 			device_num = (device_num + 1) % device_count;
 			SLEEP(10);
 			continue;
 		}
-		switch(dev->sfmt) {
+
+// FIXME: set this pointer in dev at config stage
+		switch(dev->input->sfmt) {
 		case SFMT_U8:
 			levels_ptr = levels_u8;
 			break;
@@ -379,19 +374,19 @@ void demodulate() {
 #if defined USE_BCM_VC
 		sample_fft_arg sfa = {fft_size / 4, fft->in};
 		for (size_t i = 0; i < FFT_BATCH; i++) {
-			debug_print("buf: %p bufs: %zu bufe: %zu i: %zu i*bps: %d\n", dev->buffer, dev->bufs, dev->bufe, i, i * bps);
-			samplefft(&sfa, dev->buffer + dev->bufs + i * bps, window, levels_ptr);
+			debug_print("buf: %p bufs: %zu bufe: %zu i: %zu i*bps: %d\n", dev->input->buffer, dev->input->bufs, dev->input->bufe, i, i * bps);
+			samplefft(&sfa, dev->input->buffer + dev->input->bufs + i * bps, window, levels_ptr);
 			sfa.dest+= fft->step;
 		}
 #elif defined (__arm__) || defined (__aarch64__)
 		for (size_t i = 0; i < fft_size; i++) {
-			unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
+			unsigned char* buf2 = dev->input->buffer + dev->input->bufs + i * 2;
 			fftin[i][0] = levels_ptr[*(buf2)] * window[i*2];
 			fftin[i][1] = levels_ptr[*(buf2+1)] * window[i*2];
 		}
 #else /* x86 */
 		for (size_t i = 0; i < fft_size; i += 2) {
-			unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
+			unsigned char* buf2 = dev->input->buffer + dev->input->bufs + i * 2;
 			__m128 a = _mm_set_ps(levels_ptr[*(buf2 + 3)], levels_ptr[*(buf2 + 2)], levels_ptr[*(buf2 + 1)], levels_ptr[*(buf2)]);
 			__m128 b = _mm_load_ps(&window[i * 2]);
 			a = _mm_mul_ps(a, b);
@@ -580,7 +575,7 @@ void demodulate() {
 			}
 		}
 
-		dev->bufs = (dev->bufs + bps * FFT_BATCH) % dev->buf_size;
+		dev->input->bufs = (dev->input->bufs + bps * FFT_BATCH) % dev->input->buf_size;
 		device_num = (device_num + 1) % device_count;
 	}
 }
@@ -598,6 +593,16 @@ void usage() {
 	cout<<"\t-c <config_file_path>\tUse non-default configuration file\n\t\t\t\t(default: "<<CFGFILE<<")\n\
 \t-v\t\t\tDisplay version and exit\n";
 	exit(EXIT_SUCCESS);
+}
+
+static int count_devices_running() {
+	int ret = 0;
+	for(int i = 0; i < device_count; i++) {
+		if(devices[i].input->state == INPUT_RUNNING) {
+			ret++;
+		}
+	}
+	return ret;
 }
 
 int main(int argc, char* argv[]) {
@@ -678,13 +683,6 @@ int main(int argc, char* argv[]) {
 		Setting &root = config.getRoot();
 		if(root.exists("syslog")) do_syslog = root["syslog"];
 		if(root.exists("pidfile")) pidfile = strdup(root["pidfile"]);
-#ifdef WITH_RTLSDR
-		if(root.exists("rtlsdr_buffers")) rtlsdr_buffers = (int)(root["rtlsdr_buffers"]);
-		if(rtlsdr_buffers < 1) {
-			cerr<<"Configuration error: rtlsdr_buffers must be greater than 0\n";
-			error();
-		}
-#endif
 		if(root.exists("fft_size")) {
 			int fsize = (int)(root["fft_size"]);
 			fft_size_log = 0;
@@ -729,10 +727,8 @@ int main(int argc, char* argv[]) {
 		sigaction(SIGINT, &sigact, NULL);
 		sigaction(SIGQUIT, &sigact, NULL);
 		sigaction(SIGTERM, &sigact, NULL);
-// FIXME: alignment needed for buffer only
-		uintptr_t tempptr = (uintptr_t)XCALLOC(1, device_count * sizeof(device_t)+31);
-		tempptr &= ~0x0F;
-		devices = (device_t *)tempptr;
+
+		devices = (device_t *)XCALLOC(device_count, sizeof(device_t));
 		shout_init();
 		if(do_syslog) openlog("rtl_airband", LOG_PID, LOG_DAEMON);
 
@@ -753,40 +749,12 @@ int main(int argc, char* argv[]) {
 			cerr<<"Configuration error: no devices defined\n";
 			error();
 		}
+		device_count = devs_enabled;
 		debug_print("mixer_count=%d\n", mixer_count);
 		for(int z = 0; z < mixer_count; z++) {
 			mixer_t *m = &mixers[z];
 			debug_print("mixer[%d]: name=%s, input_count=%d, output_count=%d\n", z, m->name, m->input_count, m->channel.output_count);
 		}
-// FIXME: make this hw-agnostic
-/*		uint32_t device_count2 = rtlsdr_get_device_count();
-		if (device_count2 < devs_enabled) {
-			cerr<<"Not enough devices ("<<devs_enabled<<" configured, "<<device_count2<<" detected)\n";
-			error();
-		} */
-		for(uint32_t i = 0; i < devs_enabled; i++) {
-			device_t* dev = devices + i;
-			if(dev->serial != NULL) {
-// FIXME: make this hw-agnostic
-#ifdef WITH_RTLSDR
-				if(dev->type == HW_RTLSDR && (dev->device = rtlsdr_find_device_by_serial(dev->serial)) == RTL_DEV_INVALID) {
-					cerr<<"RTLSDR device with serial number "<<dev->serial<<" not found\n";
-					error();
-				}
-#endif
-#ifdef WITH_MIRISDR
-				if(dev->type == HW_MIRISDR && (dev->device = mirisdr_find_device_by_serial(dev->serial)) == RTL_DEV_INVALID) {
-					cerr<<"MiriSDR device with serial number "<<dev->serial<<" not found\n";
-					error();
-				}
-#endif
-// FIXME
-			} /* else if(dev->device >= device_count2) {
-				cerr<<"Specified device id "<<(int)dev->device<<" is greater or equal than number of devices ("<<device_count2<<")\n";
-				error();
-			} */
-		}
-		device_count = devs_enabled;
 	} catch(FileIOException e) {
 			cerr<<"Cannot read configuration file "<<cfgfile<<"\n";
 			error();
@@ -866,10 +834,6 @@ int main(int argc, char* argv[]) {
 	}
 	for (int i = 0; i < device_count; i++) {
 		device_t* dev = devices + i;
-		if(pthread_mutex_init(&dev->buffer_lock, NULL) != 0) {
-			cerr<<"Failed to initialize buffer mutex for device "<<i<<" - aborting\n";
-			error();
-		}
 		for (int j = 0; j < dev->channel_count; j++) {
 			channel_t* channel = dev->channels + j;
 
@@ -887,20 +851,20 @@ int main(int argc, char* argv[]) {
 				}
 			}
 		}
-		switch(dev->type) {
-#ifdef WITH_RTLSDR
-		case HW_RTLSDR:
-			pthread_create(&dev->sdr_thread, NULL, &rtlsdr_exec, dev);
-			break;
-#endif
-#ifdef WITH_MIRISDR
-		case HW_MIRISDR:
-			pthread_create(&dev->sdr_thread, NULL, &mirisdr_exec, dev);
-			break;
-#endif
+		if(input_init(dev->input) != 0 || dev->input->state != INPUT_INITIALIZED) {
+			if(errno != 0) {
+				cerr<<"Failed to initialize input device "<<i<<": "<<strerror(errno)<<" - aborting\n";
+			} else {
+				cerr<<"Failed to initialize input device "<<i<<" - aborting\n";
+			}
+			error();
 		}
-
+		if(input_start(dev->input) != 0) {
+			cerr<<"Failed to start input on device "<<i<<": "<<strerror(errno)<<" - aborting\n";
+			error();
+		}
 		if(dev->mode == R_SCAN) {
+// FIXME: set errno
 			if(pthread_mutex_init(&dev->tag_queue_lock, NULL) != 0) {
 				cerr<<"Failed to initialize mutex - aborting\n";
 				error();
@@ -911,12 +875,12 @@ int main(int argc, char* argv[]) {
 	}
 
 	int timeout = 50;		// 5 seconds
-	while (atomic_get(&device_opened) != device_count && timeout > 0) {
+	while ((devices_running = count_devices_running()) != device_count && timeout > 0) {
 		SLEEP(100);
 		timeout--;
 	}
-	if(atomic_get(&device_opened) != device_count) {
-		cerr<<"Some devices failed to initialize - aborting\n";
+	if((devices_running = count_devices_running()) != device_count) {
+		log(LOG_ERR, "%d device(s) failed to initialize - aborting\n", device_count - devices_running);
 		error();
 	}
 	if (foreground) {
@@ -951,27 +915,19 @@ int main(int argc, char* argv[]) {
 
 	demodulate();
 
-	log(LOG_INFO, "cleaning up\n");
+	log(LOG_INFO, "Cleaning up\n");
 	for (int i = 0; i < device_count; i++) {
-// FIXME: make this hw-agnostic
-		switch(devices[i].type) {
-#ifdef WITH_RTLSDR
-		case HW_RTLSDR:
-			rtlsdr_cancel_async(devices[i].rtlsdr);
-			break;
-#endif
-#ifdef WITH_MIRISDR
-		case HW_MIRISDR:
-			mirisdr_cancel_async(devices[i].mirisdr);
-			break;
-#endif
+		if(input_stop(devices[i].input) != 0 || devices[i].input->state != INPUT_STOPPED) {
+			if(errno != 0) {
+				log(LOG_ERR, "Failed do stop device #%d: %s\n", i, strerror(errno));
+			} else {
+				log(LOG_ERR, "Failed do stop device #%d\n", i);
+			}
 		}
-
-		pthread_join(devices[i].sdr_thread, NULL);
 		if(devices[i].mode == R_SCAN)
 			pthread_join(devices[i].controller_thread, NULL);
 	}
-	log(LOG_INFO, "SDR threads closed\n");
+	log(LOG_INFO, "Input threads closed\n");
 	close_debug();
 // FIXME: pulseaudio cleanup
 	return 0;

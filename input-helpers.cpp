@@ -20,6 +20,7 @@
 
 #include <string.h>		// memcpy
 #include <pthread.h>		// pthread_mutex_lock, unlock
+#include "input-common.h"	// input_t
 #include "rtl_airband.h"	// debug_print
 
 /* Write input data into circular buffer input->buffer.

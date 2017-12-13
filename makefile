@@ -112,11 +112,11 @@ endif
 
 $(FFT):	hello_fft ;
 
-config.o: rtl_airband.h
+config.o: rtl_airband.h input-common.h
 
 input-common.o: input-common.h
 
-input-helpers.o: rtl_airband.h
+input-helpers.o: rtl_airband.h input-common.h
 
 input-mirisdr.o: rtl_airband.h input-common.h input-helpers.h input-mirisdr.h
 

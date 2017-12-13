@@ -25,6 +25,7 @@
 #include <assert.h>
 #include <syslog.h>
 #include <libconfig.h++>
+#include "input-common.h"			// input_t
 #include "rtl_airband.h"
 
 using namespace std;

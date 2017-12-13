@@ -20,6 +20,7 @@
 
 #include <assert.h>
 #include <iostream>
+#include <limits.h>		// SCHAR_MAX
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -228,6 +229,8 @@ MODULE_EXPORT input_t *mirisdr_input_new() {
 	input->dev_data = dev_data;
 	input->state = INPUT_UNKNOWN;
 	input->sfmt = SFMT_S8;
+	input->fullscale = (float)SCHAR_MAX - 0.5f;
+	input->bytes_per_sample = sizeof(char);
 	input->sample_rate = MIRISDR_DEFAULT_SAMPLE_RATE;
 	input->parse_config = &mirisdr_parse_config;
 	input->init = &mirisdr_init;

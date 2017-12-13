@@ -26,9 +26,10 @@
 typedef enum {
 	SFMT_UNDEF = 0,
 	SFMT_U8,
-	SFMT_S8
+	SFMT_S8,
+	SFMT_S16
 } sample_format_t;
-#define SAMPLE_FORMAT_CNT 3
+#define SAMPLE_FORMAT_CNT 4
 
 typedef enum {
 	INPUT_UNKNOWN = 0,
@@ -48,9 +49,10 @@ struct input_t {
 	size_t buf_size, bufs, bufe;
 	input_state_t state;
 	sample_format_t sfmt;
+	float fullscale;
+	int bytes_per_sample;
 	int sample_rate;
 	int centerfreq;
-	int failed;
 	int (*parse_config)(input_t * const input, libconfig::Setting &cfg);
 	int (*init)(input_t * const input);
 	void *(*run_rx_thread)(void *input_ptr);	// to be launched via pthread_create()

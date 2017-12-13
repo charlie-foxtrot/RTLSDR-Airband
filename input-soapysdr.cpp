@@ -20,6 +20,7 @@
 
 #include <iostream>
 #include <assert.h>
+#include <limits.h>		// SCHAR_MAX, SHRT_MAX
 #include <stdlib.h>		// calloc
 #include <string.h>		// memcpy
 #include <syslog.h>		// LOG_* macros
@@ -189,6 +190,8 @@ MODULE_EXPORT input_t *soapysdr_input_new() {
 	input->dev_data = dev_data;
 	input->state = INPUT_UNKNOWN;
 	input->sfmt = SFMT_S8;
+	input->fullscale = (float)SHRT_MAX - 0.5f;
+	input->bytes_per_sample = sizeof(short);
 	input->sample_rate = SOAPYSDR_DEFAULT_SAMPLE_RATE;
 	input->parse_config = &soapysdr_parse_config;
 	input->init = &soapysdr_init;

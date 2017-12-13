@@ -327,18 +327,22 @@ int parse_devices(libconfig::Setting &devs) {
 			// FIXME: get and display error string from input_parse_config
 			// Right now it exits the program on failure.
 		}
+// Some basic sanity checks for crucial parameters which have to be set
+// (or can be modified) by the input driver
+		assert(dev->input->sfmt != SFMT_UNDEF);
+		assert(dev->input->fullscale > 0);
+		assert(dev->input->bytes_per_sample > 0);
+		assert(dev->input->sample_rate > WAVE_RATE);
 
 // For the input buffer size use a base value and round it up to the nearest multiple
 // of FFT_BATCH blocks of input samples.
-// FIXME: base value shall probably depend on hardware type
-// FIXME: this assumes 8-bit I/Q samples
-		size_t fft_batch_len = FFT_BATCH * (2 * dev->input->sample_rate / WAVE_RATE);
+		size_t fft_batch_len = FFT_BATCH * (2 * dev->input->bytes_per_sample * dev->input->sample_rate / WAVE_RATE);
 		dev->input->buf_size = MIN_BUF_SIZE;
 		if(dev->input->buf_size % fft_batch_len != 0)
 			dev->input->buf_size += fft_batch_len - dev->input->buf_size % fft_batch_len;
 		debug_print("dev->input->buf_size: %zu\n", dev->input->buf_size);
-// FIXME: alignment
-		dev->input->buffer = (unsigned char *)XCALLOC(sizeof(unsigned char), dev->input->buf_size + 2 * fft_size);
+		dev->input->buffer = (unsigned char *)XCALLOC(sizeof(unsigned char),
+			dev->input->buf_size + 2 * dev->input->bytes_per_sample * fft_size);
 		dev->input->bufs = dev->input->bufe = 0;
 		dev->waveend = dev->waveavail = dev->row = dev->tq_head = dev->tq_tail = 0;
 		dev->last_frequency = -1;

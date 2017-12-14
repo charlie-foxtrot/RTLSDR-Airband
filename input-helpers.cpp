@@ -20,6 +20,7 @@
 
 #include <string.h>		// memcpy
 #include <pthread.h>		// pthread_mutex_lock, unlock
+#include "input-common.h"	// input_t
 #include "rtl_airband.h"	// debug_print
 
 /* Write input data into circular buffer input->buffer.
@@ -27,9 +28,10 @@
  * so we have to take care about proper wrapping.
  * input->buffer_size is an exact multiple of FFT_BATCH * bps
  * (input bytes per output audio sample) and input->buffer's real length
- * is input->buf_size + 2 * fft_size. On each wrap we copy 2 * fft_size
- * bytes from the start of input->buffer to its end, so that the signal
- * windowing function could handle the whole FFT batch without wrapping.
+ * is input->buf_size + 2 * bytes_per_input-sample * fft_size. On each
+ * wrap we copy 2 * fft_size bytes from the start of input->buffer to its end,
+ * so that the signal windowing function could handle the whole FFT batch
+ * without wrapping.
  */
 void circbuffer_append(input_t * const input, unsigned char *buf, size_t len) {
 	pthread_mutex_lock(&input->buffer_lock);
@@ -37,15 +39,19 @@ void circbuffer_append(input_t * const input, unsigned char *buf, size_t len) {
 	if(space_left >= len) {
 		memcpy(input->buffer + input->bufe, buf, len);
 		if(input->bufe == 0) {
-			memcpy(input->buffer + input->buf_size, input->buffer, std::min(len, 2 * fft_size));
-			debug_print("tail_len=%zu\n", std::min(len, 2 * fft_size));
+			memcpy(input->buffer + input->buf_size, input->buffer,
+				std::min(len, 2 * input->bytes_per_sample * fft_size));
+			debug_print("tail_len=%zu bytes\n",
+				std::min(len, 2 * input->bytes_per_sample * fft_size));
 		}
 	} else {
 		memcpy(input->buffer + input->bufe, buf, space_left);
 		memcpy(input->buffer, buf + space_left, len - space_left);
-		memcpy(input->buffer + input->buf_size, input->buffer, std::min(len - space_left, 2 * fft_size));
+		memcpy(input->buffer + input->buf_size, input->buffer,
+			std::min(len - space_left, 2 * input->bytes_per_sample * fft_size));
 		debug_print("buf wrap: space_left=%zu len=%zu bufe=%zu wrap_len=%zu tail_len=%zu\n",
-			space_left, len, input->bufe, len - space_left, std::min(len - space_left, 2 * fft_size));
+			space_left, len, input->bufe, len - space_left,
+			std::min(len - space_left, 2 * input->bytes_per_sample * fft_size));
 	}
 	input->bufe = (input->bufe + len) % input->buf_size;
 	pthread_mutex_unlock(&input->buffer_lock);

@@ -350,49 +350,56 @@ void demodulate() {
 		}
 
 // number of input bytes per output wave sample (x 2 for I and Q)
-		size_t bps = (dev->input->sample_rate * 2) / WAVE_RATE;
-		if (available < bps * FFT_BATCH + fft_size * 2) {
+		size_t bps = (dev->input->sample_rate * dev->input->bytes_per_sample * 2) / WAVE_RATE;
+		if (available < bps * FFT_BATCH + fft_size * dev->input->bytes_per_sample * 2) {
 			// move to next device
 			device_num = (device_num + 1) % device_count;
 			SLEEP(10);
 			continue;
 		}
 
-// FIXME: set this pointer in dev at config stage
-		switch(dev->input->sfmt) {
-		case SFMT_U8:
-			levels_ptr = levels_u8;
-			break;
-		case SFMT_S8:
-			levels_ptr = levels_s8;
-			break;
-		default:
-			log(LOG_CRIT, "Unhandled sample type");
-			error();
-		}
-
-#if defined USE_BCM_VC
-		sample_fft_arg sfa = {fft_size / 4, fft->in};
-		for (size_t i = 0; i < FFT_BATCH; i++) {
-			debug_print("buf: %p bufs: %zu bufe: %zu i: %zu i*bps: %d\n", dev->input->buffer, dev->input->bufs, dev->input->bufe, i, i * bps);
-			samplefft(&sfa, dev->input->buffer + dev->input->bufs + i * bps, window, levels_ptr);
-			sfa.dest+= fft->step;
-		}
-#elif defined (__arm__) || defined (__aarch64__)
-		for (size_t i = 0; i < fft_size; i++) {
-			unsigned char* buf2 = dev->input->buffer + dev->input->bufs + i * 2;
-			fftin[i][0] = levels_ptr[*(buf2)] * window[i*2];
-			fftin[i][1] = levels_ptr[*(buf2+1)] * window[i*2];
-		}
-#else /* x86 */
-		for (size_t i = 0; i < fft_size; i += 2) {
-			unsigned char* buf2 = dev->input->buffer + dev->input->bufs + i * 2;
-			__m128 a = _mm_set_ps(levels_ptr[*(buf2 + 3)], levels_ptr[*(buf2 + 2)], levels_ptr[*(buf2 + 1)], levels_ptr[*(buf2)]);
-			__m128 b = _mm_load_ps(&window[i * 2]);
-			a = _mm_mul_ps(a, b);
-			_mm_store_ps(&fftin[i][0], a);
-		}
+		if(dev->input->sfmt == SFMT_S16) {
+#ifdef USE_BCM_VC
+			struct GPU_FFT_COMPLEX *ptr = fft->in;
+			for(size_t b = 0; b < FFT_BATCH; b++, ptr += fft->step) {
+				for(size_t i = 0; i < fft_size; i++) {
+					short *buf2 = (short *)(dev->input->buffer + dev->input->bufs + b * bps + i * dev->input->bytes_per_sample * 2);
+					ptr[i].re = (float)buf2[0] / dev->input->fullscale * 127.5f * window[i*2];
+					ptr[i].im = (float)buf2[1] / dev->input->fullscale * 127.5f * window[i*2];
+				}
+			}
+#else
+			for(size_t i = 0; i < fft_size; i++) {
+				short *buf2 = (short *)(dev->input->buffer + dev->input->bufs + i * dev->input->bytes_per_sample * 2);
+				fftin[i][0] = (float)buf2[0] / dev->input->fullscale * 127.5f * window[i*2];
+				fftin[i][1] = (float)buf2[1] / dev->input->fullscale * 127.5f * window[i*2];
+			}
 #endif
+		} else {	// S8 or U8
+			levels_ptr = (dev->input->sfmt == SFMT_U8 ? levels_u8 : levels_s8);
+#if defined USE_BCM_VC
+			sample_fft_arg sfa = {fft_size / 4, fft->in};
+			for (size_t i = 0; i < FFT_BATCH; i++) {
+				debug_print("buf: %p bufs: %zu bufe: %zu i: %zu i*bps: %d\n", dev->input->buffer, dev->input->bufs, dev->input->bufe, i, i * bps);
+				samplefft(&sfa, dev->input->buffer + dev->input->bufs + i * bps, window, levels_ptr);
+				sfa.dest+= fft->step;
+			}
+#elif defined (__arm__) || defined (__aarch64__)
+			for (size_t i = 0; i < fft_size; i++) {
+				unsigned char* buf2 = dev->input->buffer + dev->input->bufs + i * dev->input->bytes_per_sample * 2;
+				fftin[i][0] = levels_ptr[*(buf2)] * window[i*2];
+				fftin[i][1] = levels_ptr[*(buf2+1)] * window[i*2];
+			}
+#else /* x86 */
+			for (size_t i = 0; i < fft_size; i += 2) {
+				unsigned char* buf2 = dev->input->buffer + dev->input->bufs + i * dev->input->bytes_per_sample * 2;
+				__m128 a = _mm_set_ps(levels_ptr[*(buf2 + 3)], levels_ptr[*(buf2 + 2)], levels_ptr[*(buf2 + 1)], levels_ptr[*(buf2)]);
+				__m128 b = _mm_load_ps(&window[i * 2]);
+				a = _mm_mul_ps(a, b);
+				_mm_store_ps(&fftin[i][0], a);
+			}
+#endif
+		}
 #ifdef USE_BCM_VC
 		gpu_fft_execute(fft);
 #else

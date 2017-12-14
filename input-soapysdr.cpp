@@ -36,6 +36,7 @@ using namespace std;
 
 // Map SoapySDR sample format string to our internal sample format
 // and set bytes_per_sample and fullscale values appropriately.
+// We prefer U8 and S8 over S16 to minimize CPU load.
 // If fullscale is > 0, it means it has been read by
 // SoapySDRDevice_getNativeStreamFormat, so we treat this value as valid.
 // Otherwise, guess a suitable default value.
@@ -44,23 +45,26 @@ static bool soapysdr_match_sfmt(input_t * const input, char const * const fmt, d
 		input->sfmt = SFMT_U8;
 		input->bytes_per_sample = sizeof(unsigned char);
 		input->fullscale = (fullscale > 0 ? fullscale : (float)SCHAR_MAX - 0.5f);
-		return true;
+		goto matched;
 	} else if(strcmp(fmt, SOAPY_SDR_CS8) == 0) {
 		input->sfmt = SFMT_S8;
 		input->bytes_per_sample = sizeof(char);
 		input->fullscale = (fullscale > 0 ? fullscale : (float)SCHAR_MAX - 0.5f);
-		return true;
+		goto matched;
 	} else if(strcmp(fmt, SOAPY_SDR_CS16) == 0) {
 		input->sfmt = SFMT_S16;
 		input->bytes_per_sample = sizeof(short);
 		input->fullscale = (fullscale > 0 ? fullscale : (float)SHRT_MAX - 0.5f);
-		return true;
+		goto matched;
 	}
 	return false;
+matched:
+	soapysdr_dev_data_t *dev_data = (soapysdr_dev_data_t *)input->dev_data;
+	dev_data->sample_format = strdup(fmt);
+	return true;
 }
 
 // Open the device and choose a suitable sample format.
-// We prefer U8 and S8 over S16 to minimize CPU load.
 // Bail out if no supported sample format is found.
 static bool soapysdr_choose_sample_format(input_t * const input) {
 	bool ret = false;
@@ -203,8 +207,7 @@ void *soapysdr_rx_thread(void *ctx) {
 	assert(sdr != NULL);
 
 	SoapySDRStream *rxStream = NULL;
-// FIXME: configurable sample type
-	if(SoapySDRDevice_setupStream(sdr, &rxStream, SOAPY_SDR_RX, SOAPY_SDR_CS8, NULL, 0, NULL) != 0) {
+	if(SoapySDRDevice_setupStream(sdr, &rxStream, SOAPY_SDR_RX, dev_data->sample_format, NULL, 0, NULL) != 0) {
 		log(LOG_ERR, "Failed to set up stream for SoapySDR device '%s': %s\n",
 			dev_data->device_string, SoapySDRDevice_lastError());
 		input->state = INPUT_FAILED;

@@ -206,6 +206,10 @@ void *soapysdr_rx_thread(void *ctx) {
 	SoapySDRDevice *sdr = dev_data->dev;
 	assert(sdr != NULL);
 
+	unsigned char buf[SOAPYSDR_BUFSIZE];
+// size of the buffer in number of I/Q sample pairs
+	size_t num_elems = SOAPYSDR_BUFSIZE / (2 * input->bytes_per_sample);
+
 	SoapySDRStream *rxStream = NULL;
 	if(SoapySDRDevice_setupStream(sdr, &rxStream, SOAPY_SDR_RX, dev_data->sample_format, NULL, 0, NULL) != 0) {
 		log(LOG_ERR, "Failed to set up stream for SoapySDR device '%s': %s\n",
@@ -222,20 +226,18 @@ void *soapysdr_rx_thread(void *ctx) {
 	input->state = INPUT_RUNNING;
 	log(LOG_NOTICE, "SoapySDR: device '%s' started\n", dev_data->device_string);
 
-	int8_t buf[SOAPYSDR_BUFSIZE];
 	while(!do_exit) {
-		void *bufs[] = {buf};		// array of buffers
+		void *bufs[] = { buf };		// array of buffers
 		int flags;			// flags set by receive operation
 		long long timeNs;		// timestamp for receive buffer
-// FIXME: this assumes 8 bit samples
-		int num_samples = SoapySDRDevice_readStream(sdr, rxStream, bufs, SOAPYSDR_BUFSIZE / 2, &flags, &timeNs, 100000);
-		if(num_samples < 0) {
+		int samples_read = SoapySDRDevice_readStream(sdr, rxStream, bufs, num_elems, &flags, &timeNs, 100000);
+		if(samples_read < 0) {	// when it's negative, it's the error code
 			log(LOG_ERR, "SoapySDR device '%s': readStream failed: %s, disabling\n",
-				dev_data->device_string, SoapySDR_errToStr(num_samples));
+				dev_data->device_string, SoapySDR_errToStr(samples_read));
 			input->state = INPUT_FAILED;
 			goto cleanup;
 		}
-		circbuffer_append(input, (unsigned char *)buf, (size_t)(num_samples * 2));
+		circbuffer_append(input, buf, (size_t)(samples_read * 2 * input->bytes_per_sample));
 	}
 cleanup:
 	SoapySDRDevice_deactivateStream(sdr, rxStream, 0, 0);

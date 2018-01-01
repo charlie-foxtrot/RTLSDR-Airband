@@ -49,6 +49,8 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				idata->name = strdup(outs[o]["name"]);
 			if(outs[o].exists("genre"))
 				idata->genre = strdup(outs[o]["genre"]);
+			if(outs[o].exists("description"))
+				idata->description = strdup(outs[o]["description"]);
 			if(outs[o].exists("send_scan_freq_tags"))
 				idata->send_scan_freq_tags = (bool)outs[o]["send_scan_freq_tags"];
 			else

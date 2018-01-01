@@ -106,6 +106,7 @@ struct icecast_data {
 	const char *mountpoint;
 	const char *name;
 	const char *genre;
+	const char *description;
 	bool send_scan_freq_tags;
 	shout_t *shout;
 };

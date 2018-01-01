@@ -74,6 +74,9 @@ void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 	if(icecast->genre && shout_set_genre(shouttemp, icecast->genre) != SHOUTERR_SUCCESS) {
 		shout_free(shouttemp); return;
 	}
+	if(icecast->description && shout_set_description(shouttemp, icecast->description) != SHOUTERR_SUCCESS) {
+		shout_free(shouttemp); return;
+	}
 	char samplerates[20];
 	sprintf(samplerates, "%d", MP3_RATE);
 	shout_set_audio_info(shouttemp, SHOUT_AI_SAMPLERATE, samplerates);

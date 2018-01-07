@@ -21,6 +21,7 @@
 #include <iostream>
 #include <assert.h>
 #include <limits.h>		// SCHAR_MAX, SHRT_MAX
+#include <math.h>		// round
 #include <stdlib.h>		// calloc
 #include <string.h>		// memcpy, strcmp
 #include <syslog.h>		// LOG_* macros
@@ -64,19 +65,13 @@ matched:
 	return true;
 }
 
-// Open the device and choose a suitable sample format.
+// Choose a suitable sample format.
 // Bail out if no supported sample format is found.
-static bool soapysdr_choose_sample_format(input_t * const input) {
+static bool soapysdr_choose_sample_format(SoapySDRDevice * const sdr, input_t * const input) {
 	bool ret = false;
 	size_t len = 0;
 	char **formats = NULL;
 	soapysdr_dev_data_t *dev_data = (soapysdr_dev_data_t *)input->dev_data;
-	SoapySDRDevice *sdr = SoapySDRDevice_makeStrArgs(dev_data->device_string);
-	if (sdr == NULL) {
-		log(LOG_ERR, "Failed to open SoapySDR device '%s': %s\n", dev_data->device_string,
-			SoapySDRDevice_lastError());
-		error();
-	}
 	input->sfmt = SFMT_UNDEF;
 // First try device's native format to avoid extra conversion
 	double fullscale = 0.0;
@@ -107,8 +102,46 @@ static bool soapysdr_choose_sample_format(input_t * const input) {
 // Nothing found; we can't use this device.
 	log(LOG_ERR, "SoapySDR: device '%s': no supported sample format found\n", dev_data->device_string);
 end:
-	SoapySDRDevice_unmake(sdr);
 	return ret;
+}
+
+static int sdrplay_get_nearest_sample_rate(SoapySDRDevice *sdr, int sample_rate) {
+	size_t len = 0;
+	double sr = (double)sample_rate;
+	SoapySDRRange *range = SoapySDRDevice_getSampleRateRange(sdr, SOAPY_SDR_RX, 0, &len);
+	if(range == NULL) {
+		log(LOG_ERR, "SoapySDR: failed to read supported sampling rate ranges from the device\n");
+		return -1;
+	}
+	debug_print("Got %lu ranges\n", len);
+	double nearest_rate = range[0].minimum;
+	double offset1, offset2;
+	for(size_t i = 0; i < len; i++) {
+		debug_print("sr=%.1f min=%.1f max=%.1f step=%.1f\n", sr, range[i].minimum, range[i].maximum, range[i].step);
+		if(sr >= range[i].minimum && sr <= range[i].maximum) {
+			debug_print("Found suitable range: min=%.0f max=%0.f step=%0.f\n",
+				range[i].minimum, range[i].maximum, range[i].step);
+			if(range[i].step == 0.0 || range[i].step >= (range[i].maximum - range[i].minimum)) {
+				return (int)(range[i].maximum - sr > sr - range[i].minimum ?
+					range[i].minimum : range[i].maximum);
+			}
+			sr = (int)(range[i].minimum + range[i].step * round((sr - range[i].minimum) / range[i].step));
+			if(sr > range[i].maximum) {
+				sr = (int)range[i].maximum;
+			}
+			return (int)sr;
+		} else {
+			offset1 = abs(sr - nearest_rate);
+			offset2 = abs(sr - range[i].minimum);
+			if(offset2 < offset1)
+				nearest_rate = range[i].minimum;
+			offset1 = abs(sr - nearest_rate);
+			offset2 = abs(sr - range[i].maximum);
+			if(offset2 < offset1)
+				nearest_rate = range[i].maximum;
+		}
+	}
+	return (int)nearest_rate;
 }
 
 int soapysdr_parse_config(input_t * const input, libconfig::Setting &cfg) {
@@ -147,14 +180,33 @@ int soapysdr_parse_config(input_t * const input, libconfig::Setting &cfg) {
 			error();
 		}
 	}
+// Find a suitable sample format and sample rate (unless set in the config)
+// based on device capabilities.
 // We have to do this here and not in soapysdr_init, because parse_devices()
-// needs correct bytes_per_sample value to calculate the size of the sample buffer and
-// this is done before soapysdr_init() is run.
-	if(soapysdr_choose_sample_format(input) == false) {
+// requires sample_rate and bytes_per_sample to be set correctly in order to
+// calculate the size of the sample buffer, which has to be done before
+// soapysdr_init() is run.
+	SoapySDRDevice *sdr = SoapySDRDevice_makeStrArgs(dev_data->device_string);
+	if (sdr == NULL) {
+		log(LOG_ERR, "Failed to open SoapySDR device '%s': %s\n", dev_data->device_string,
+			SoapySDRDevice_lastError());
+		error();
+	}
+	if(soapysdr_choose_sample_format(sdr, input) == false) {
 		cerr<<"SoapySDR configuration error: device '"<<dev_data->device_string<<
 			"': no suitable sample format found\n";
 		error();
 	}
+	if(input->sample_rate < 0) {
+		input->sample_rate = sdrplay_get_nearest_sample_rate(sdr, SOAPYSDR_DEFAULT_SAMPLE_RATE);
+		if(input->sample_rate < 0) {
+			log(LOG_ERR, "Failed to find a suitable sample rate for SoapySDR device '%s'\n",
+				dev_data->device_string);
+			log(LOG_ERR, "Specify a supported value using \"sample_rate\" option in the device configuration\n");
+			error();
+		}
+	}
+	SoapySDRDevice_unmake(sdr);
 	return 0;
 }
 
@@ -174,6 +226,8 @@ int soapysdr_init(input_t * const input) {
 			dev_data->device_string, SoapySDRDevice_lastError());
 		error();
 	}
+	log(LOG_INFO, "SoapySDR: device '%s': sample rate set to %.0f sps\n",
+		dev_data->device_string, SoapySDRDevice_getSampleRate(sdr, SOAPY_SDR_RX, 0));
 	if(SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_RX, 0, input->centerfreq, NULL) != 0) {
 		log(LOG_ERR, "Failed to set frequency for SoapySDR device '%s': %s\n",
 			dev_data->device_string, SoapySDRDevice_lastError());
@@ -265,7 +319,7 @@ MODULE_EXPORT input_t *soapysdr_input_new() {
 		.dev_data = dev_data,
 		.state = INPUT_UNKNOWN,
 		.sfmt = SFMT_U8,
-		.sample_rate = SOAPYSDR_DEFAULT_SAMPLE_RATE,
+		.sample_rate = -1,
 		.parse_config = &soapysdr_parse_config,
 		.init = &soapysdr_init,
 		.run_rx_thread = &soapysdr_rx_thread,
@@ -279,8 +333,8 @@ MODULE_EXPORT input_t *soapysdr_input_new() {
 	input->sfmt = SFMT_UNDEF;
 	input->fullscale = 0.0f;
 	input->bytes_per_sample = 0;
+	input->sample_rate = -1;
 
-	input->sample_rate = SOAPYSDR_DEFAULT_SAMPLE_RATE;
 	input->parse_config = &soapysdr_parse_config;
 	input->init = &soapysdr_init;
 	input->run_rx_thread = &soapysdr_rx_thread;

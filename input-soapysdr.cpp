@@ -304,7 +304,7 @@ int soapysdr_set_centerfreq(input_t * const input, int const centerfreq) {
 	soapysdr_dev_data_t *dev_data = (soapysdr_dev_data_t *)input->dev_data;
 	assert(dev_data->dev != NULL);
 
-	if(SoapySDRDevice_setFrequency(dev_data->dev, SOAPY_SDR_RX, 0, input->centerfreq, NULL) != 0) {
+	if(SoapySDRDevice_setFrequency(dev_data->dev, SOAPY_SDR_RX, 0, centerfreq, NULL) != 0) {
 		log(LOG_ERR, "Failed to set frequency for SoapySDR device '%s': %s\n",
 			dev_data->device_string, SoapySDRDevice_lastError());
 		return -1;

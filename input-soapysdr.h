@@ -20,6 +20,7 @@
 #include <SoapySDR/Device.h>	// SoapySDRDevice
 #define SOAPYSDR_DEFAULT_SAMPLE_RATE 2560000
 #define SOAPYSDR_BUFSIZE 320000
+#define SOAPYSDR_READSTREAM_TIMEOUT_US 1000000L
 
 typedef struct {
 	SoapySDRDevice *dev;	// pointer to device struct

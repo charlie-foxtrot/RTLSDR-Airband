@@ -113,7 +113,7 @@ static int sdrplay_get_nearest_sample_rate(SoapySDRDevice *sdr, int sample_rate)
 		log(LOG_ERR, "SoapySDR: failed to read supported sampling rate ranges from the device\n");
 		return -1;
 	}
-	debug_print("Got %lu ranges\n", len);
+	debug_print("Got %zu ranges\n", len);
 	double nearest_rate = range[0].minimum;
 	double offset1, offset2;
 	for(size_t i = 0; i < len; i++) {

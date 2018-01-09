@@ -134,7 +134,6 @@ void *xrealloc(void *ptr, size_t size, const char *file, const int line, const c
 	return ptr;
 }
 
-#ifdef NFM
 static float sin_lut[257], cos_lut[257];
 
 void sincosf_lut_init() {
@@ -161,5 +160,4 @@ void sincosf_lut(uint32_t phi, float *sine, float *cosine) {
 	*cosine = v1 + (v2 - v1) * fract;
 }
 
-#endif
 // vim: ts=4

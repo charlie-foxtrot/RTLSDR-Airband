@@ -270,18 +270,20 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		channel->outputs = (output_t *)XREALLOC(channel->outputs, outputs_enabled * sizeof(struct output_t));
 		channel->output_count = outputs_enabled;
 
-		dev->base_bins[jj] = dev->bins[jj] = (size_t)ceil((channel->freqlist[0].frequency + dev->input->sample_rate - dev->input->centerfreq) / (double)(dev->input->sample_rate / fft_size) - 1.0f) % fft_size;
-#ifdef NFM
-		if(channel->modulation == MOD_NFM) {
-// Calculate mixing frequency for removing phase rotation introduced by FFT sliding window
-// This equals bin_width_Hz * (distance_from_DC_bin) translated to uint32_t range 0x00000000-0x00ffffff
-// (Cast it to signed int first, because casting negative float to uint is not portable)
-			channel->dm_dphi = (uint32_t)(int)(((float)dev->input->sample_rate / (float)fft_size *
-				(float)(dev->bins[jj] < (fft_size / 2) ? dev->bins[jj] + 1 : fft_size - dev->bins[jj] - 1)) /
+		dev->base_bins[jj] = dev->bins[jj] = (size_t)ceil(
+			   (channel->freqlist[0].frequency + dev->input->sample_rate - dev->input->centerfreq)
+			 / (double)(dev->input->sample_rate / fft_size) - 1.0
+		) % fft_size;
+
+		if(channel->needs_raw_iq) {
+// Calculate channel downmixing frequency and translate it to uint32_t range 0x00000000-0x00ffffff
+// (Cast it to signed int first, because casting negative float to uint is not portable).
+// Downmixing is done only for NFM and raw IQ outputs. It's not critical to have some residual
+// freq offset in AM, as it doesn't affect sound quality significantly.
+			channel->dm_dphi = (uint32_t)(int)((float)(channel->freqlist[0].frequency - dev->input->centerfreq) /
 				(float)WAVE_RATE * 256.0f * 65536.0f);
 			channel->dm_phi = 0.f;
 		}
-#endif
 		jj++;
 	}
 	return jj;

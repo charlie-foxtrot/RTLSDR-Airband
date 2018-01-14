@@ -37,6 +37,7 @@
 #include <ctime>
 #include <cerrno>
 #include "rtl_airband.h"
+#include "input-common.h"
 
 void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 	int ret;
@@ -71,6 +72,9 @@ void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 		shout_free(shouttemp); return;
 	}
 	if(icecast->genre && shout_set_genre(shouttemp, icecast->genre) != SHOUTERR_SUCCESS) {
+		shout_free(shouttemp); return;
+	}
+	if(icecast->description && shout_set_description(shouttemp, icecast->description) != SHOUTERR_SUCCESS) {
 		shout_free(shouttemp); return;
 	}
 	char samplerates[20];
@@ -420,7 +424,7 @@ void* output_thread(void* params) {
 		}
 		for (int i = 0; i < device_count; i++) {
 			device_t* dev = devices + i;
-			if (!dev->failed && dev->waveavail) {
+			if (dev->input->state == INPUT_RUNNING && dev->waveavail) {
 				dev->waveavail = 0;
 				if(dev->mode == R_SCAN) {
 					tag_queue_get(dev, &tag);
@@ -457,7 +461,7 @@ void* output_check_thread(void* params) {
 				for (int k = 0; k < dev->channels[j].output_count; k++) {
 					if(dev->channels[j].outputs[k].type == O_ICECAST) {
 						icecast_data *icecast = (icecast_data *)(dev->channels[j].outputs[k].data);
-						if(dev->failed) {
+						if(dev->input->state == INPUT_FAILED) {
 							if(icecast->shout) {
 								log(LOG_WARNING, "Device #%d failed, disconnecting stream %s:%d/%s\n",
 									i, icecast->hostname, icecast->port, icecast->mountpoint);
@@ -465,7 +469,7 @@ void* output_check_thread(void* params) {
 								shout_free(icecast->shout);
 								icecast->shout = NULL;
 							}
-						} else {
+						} else if(dev->input->state == INPUT_RUNNING) {
 							if (icecast->shout == NULL){
 								log(LOG_NOTICE, "Trying to reconnect to %s:%d/%s...\n",
 									icecast->hostname, icecast->port, icecast->mountpoint);
@@ -475,11 +479,11 @@ void* output_check_thread(void* params) {
 #ifdef PULSE
 					} else if(dev->channels[j].outputs[k].type == O_PULSE) {
 						pulse_data *pdata = (pulse_data *)(dev->channels[j].outputs[k].data);
-						if(dev->failed) {
+						if(dev->input->state == INPUT_FAILED) {
 							if(pdata->context) {
 								pulse_shutdown(pdata);
 							}
-						} else {
+						} else if(dev->input->state == INPUT_RUNNING) {
 							if (pdata->context == NULL){
 								pulse_setup(pdata, dev->channels[j].mode);
 							}

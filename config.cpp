@@ -22,8 +22,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
+#include <assert.h>
 #include <syslog.h>
 #include <libconfig.h++>
+#include "input-common.h"			// input_t
 #include "rtl_airband.h"
 
 using namespace std;
@@ -47,6 +49,8 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				idata->name = strdup(outs[o]["name"]);
 			if(outs[o].exists("genre"))
 				idata->genre = strdup(outs[o]["genre"]);
+			if(outs[o].exists("description"))
+				idata->description = strdup(outs[o]["description"]);
 			if(outs[o].exists("send_scan_freq_tags"))
 				idata->send_scan_freq_tags = (bool)outs[o]["send_scan_freq_tags"];
 			else
@@ -219,7 +223,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			}
 // Set initial frequency for scanning
 // We tune 20 FFT bins higher to avoid DC spike
-			dev->centerfreq = channel->freqlist[0].frequency + 20 * (double)(dev->sample_rate / fft_size);
+			dev->input->centerfreq = channel->freqlist[0].frequency + 20 * (double)(dev->input->sample_rate / fft_size);
 		}
 		if(chans[j].exists("squelch")) {
 			if(libconfig::Setting::TypeList == chans[j]["squelch"].getType()) {
@@ -232,7 +236,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			} else if(libconfig::Setting::TypeInt == chans[j]["squelch"].getType()) {
 				// Legacy (single squelch for all frequencies)
 				int sqlevel = (int)chans[j]["squelch"];
-				if(sqlevel <= 0) {
+				if(sqlevel < 0) {
 					cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch must be greater than 0\n";
 					error();
 				}
@@ -266,18 +270,23 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		channel->outputs = (output_t *)XREALLOC(channel->outputs, outputs_enabled * sizeof(struct output_t));
 		channel->output_count = outputs_enabled;
 
-		dev->base_bins[jj] = dev->bins[jj] = (size_t)ceil((channel->freqlist[0].frequency + dev->sample_rate - dev->centerfreq) / (double)(dev->sample_rate / fft_size) - 1.0f) % fft_size;
-#ifdef NFM
-		if(channel->modulation == MOD_NFM) {
-// Calculate mixing frequency for removing phase rotation introduced by FFT sliding window
-// This equals bin_width_Hz * (distance_from_DC_bin) translated to uint32_t range 0x00000000-0x00ffffff
-// (Cast it to signed int first, because casting negative float to uint is not portable)
-			channel->dm_dphi = (uint32_t)(int)(((float)dev->sample_rate / (float)fft_size *
-				(float)(dev->bins[jj] < (fft_size / 2) ? dev->bins[jj] + 1 : fft_size - dev->bins[jj] - 1)) /
-				(float)WAVE_RATE * 256.0f * 65536.0f);
+		dev->base_bins[jj] = dev->bins[jj] = (size_t)ceil(
+			   (channel->freqlist[0].frequency + dev->input->sample_rate - dev->input->centerfreq)
+			 / (double)(dev->input->sample_rate / fft_size) - 1.0
+		) % fft_size;
+
+		if(channel->needs_raw_iq) {
+// Downmixing is done only for NFM and raw IQ outputs. It's not critical to have some residual
+// freq offset in AM, as it doesn't affect sound quality significantly.
+			double dm_dphi = (double)(channel->freqlist[0].frequency - dev->input->centerfreq) / (double)WAVE_RATE;
+// Unalias it, to prevent overflow of int during cast
+			dm_dphi -= trunc(dm_dphi);
+// Translate this to uint32_t range 0x00000000-0x00ffffff
+			dm_dphi *= 256.0 * 65536.0;
+// Cast it to signed int first, because casting negative float to uint is not portable
+			channel->dm_dphi = (uint32_t)((int)dm_dphi);
 			channel->dm_phi = 0.f;
 		}
-#endif
 		jj++;
 	}
 	return jj;
@@ -288,65 +297,29 @@ int parse_devices(libconfig::Setting &devs) {
 	for (int i = 0; i < devs.getLength(); i++) {
 		if(devs[i].exists("disable") && (bool)devs[i]["disable"] == true) continue;
 		device_t* dev = devices + devcnt;
-		if(!devs[i].exists("correction")) devs[i].add("correction", libconfig::Setting::TypeInt);
 		if(devs[i].exists("type")) {
-// FIXME: turn this into a lookup table
-#ifdef WITH_RTLSDR
-			if(!strcmp(devs[i]["type"], "rtlsdr")) {
-				dev->type = HW_RTLSDR;
-				dev->sfmt = SFMT_U8;
-				goto hwtype_set;
+			dev->input = input_new(devs[i]["type"]);
+			if(dev->input == NULL) {
+				cerr<<"Configuration error: devices.["<<i<<"]: unsupported device type\n";
+				error();
 			}
-#endif
-#ifdef WITH_MIRISDR
-			if(!strcmp(devs[i]["type"], "mirisdr")) {
-				dev->type = HW_MIRISDR;
-				dev->sfmt = SFMT_S8;
-				goto hwtype_set;
-			}
-#endif
-			cerr<<"Configuration error: devices.["<<i<<"]: unsupported device type\n";
-			error();
 		} else {
 #ifdef WITH_RTLSDR
 			cerr<<"Warning: devices.["<<i<<"]: assuming device type \"rtlsdr\", please set \"type\" in the device section.\n";
-			dev->type = HW_RTLSDR;
-			dev->sfmt = SFMT_U8;
+			dev->input = input_new("rtlsdr");
 #else
 			cerr<<"Configuration error: devices.["<<i<<"]: mandatory parameter missing: type\n";
 			error();
 #endif
 		}
-hwtype_set:
-		if(devs[i].exists("serial")) {
-			dev->serial = strdup(devs[i]["serial"]);
-		} else if(devs[i].exists("index")) {
-			dev->device = (int)devs[i]["index"];
-		} else {
-			cerr<<"Configuration error: devices.["<<i<<"]: no index and no serial number given\n";
-			error();
-		}
-		dev->channel_count = 0;
-		dev->gain = -1;
-		dev->sample_rate = DEFAULT_SAMPLE_RATE;		// FIXME: not all receiver types can handle arbitrary sample rate
-// FIXME: pass unmodified float gain value to the hw-specific routine
-		if(devs[i].exists("gain")) {
-			if(devs[i]["gain"].getType() == libconfig::Setting::TypeInt)	// backward compatibility
-				dev->gain = (int)devs[i]["gain"] * 10;
-			else if(devs[i]["gain"].getType() == libconfig::Setting::TypeFloat)
-				dev->gain = (int)((float)devs[i]["gain"] * 10.0f);
-		}
-		if(dev->gain < 0) {
-			cerr<<"Configuration error: devices.["<<i<<"]: gain is not configured\n";
-			error();
-		}
+		assert(dev->input != NULL);
 		if(devs[i].exists("sample_rate")) {
 			int sample_rate = (int)(devs[i]["sample_rate"]);
 			if(sample_rate < WAVE_RATE) {
 				cerr<<"Configuration error: devices.["<<i<<"]: sample_rate must be greater than "<<WAVE_RATE<<"\n";
 				error();
 			}
-			dev->sample_rate = (uint32_t)sample_rate;
+			dev->input->sample_rate = sample_rate;
 		}
 		if(devs[i].exists("mode")) {
 			if(!strncmp(devs[i]["mode"], "multichannel", 12)) {
@@ -360,7 +333,9 @@ hwtype_set:
 		} else {
 			dev->mode = R_MULTICHANNEL;
 		}
-		if(dev->mode == R_MULTICHANNEL) dev->centerfreq = (int)devs[i]["centerfreq"];
+		if(dev->mode == R_MULTICHANNEL) {
+			dev->input->centerfreq = (int)devs[i]["centerfreq"];
+		}	// centerfreq for R_SCAN will be set by parse_channels() after frequency list has been read
 #ifdef NFM
 		if(devs[i].exists("tau")) {
 			dev->alpha = ((int)devs[i]["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)devs[i]["tau"])));
@@ -368,20 +343,30 @@ hwtype_set:
 			dev->alpha = alpha;
 		}
 #endif
-		dev->correction = (int)devs[i]["correction"];
+
+// Parse hardware-dependent configuration parameters
+		if(input_parse_config(dev->input, devs[i]) < 0) {
+			// FIXME: get and display error string from input_parse_config
+			// Right now it exits the program on failure.
+		}
+// Some basic sanity checks for crucial parameters which have to be set
+// (or can be modified) by the input driver
+		assert(dev->input->sfmt != SFMT_UNDEF);
+		assert(dev->input->fullscale > 0);
+		assert(dev->input->bytes_per_sample > 0);
+		assert(dev->input->sample_rate > WAVE_RATE);
+
 // For the input buffer size use a base value and round it up to the nearest multiple
 // of FFT_BATCH blocks of input samples.
-// FIXME: base value shall probably depend on hardware type
-// FIXME: this assumes 8-bit I/Q samples
-		size_t fft_batch_len = FFT_BATCH * (2 * dev->sample_rate / WAVE_RATE);
-		dev->buf_size = MIN_BUF_SIZE;
-		if(dev->buf_size % fft_batch_len != 0)
-			dev->buf_size += fft_batch_len - dev->buf_size % fft_batch_len;
-		log(LOG_INFO, "dev->buf_size: %zu\n", dev->buf_size);
-// FIXME: alignment
-		dev->buffer = (unsigned char *)XCALLOC(sizeof(unsigned char), dev->buf_size + 2 * fft_size);
-
-		dev->bufs = dev->bufe = dev->waveend = dev->waveavail = dev->row = dev->tq_head = dev->tq_tail = 0;
+		size_t fft_batch_len = FFT_BATCH * (2 * dev->input->bytes_per_sample * dev->input->sample_rate / WAVE_RATE);
+		dev->input->buf_size = MIN_BUF_SIZE;
+		if(dev->input->buf_size % fft_batch_len != 0)
+			dev->input->buf_size += fft_batch_len - dev->input->buf_size % fft_batch_len;
+		debug_print("dev->input->buf_size: %zu\n", dev->input->buf_size);
+		dev->input->buffer = (unsigned char *)XCALLOC(sizeof(unsigned char),
+			dev->input->buf_size + 2 * dev->input->bytes_per_sample * fft_size);
+		dev->input->bufs = dev->input->bufe = 0;
+		dev->waveend = dev->waveavail = dev->row = dev->tq_head = dev->tq_tail = 0;
 		dev->last_frequency = -1;
 
 		libconfig::Setting &chans = devs[i]["channels"];
@@ -392,6 +377,7 @@ hwtype_set:
 		dev->channels = (channel_t *)XCALLOC(chans.getLength(), sizeof(channel_t));
 		dev->bins = (size_t *)XCALLOC(chans.getLength(), sizeof(size_t));
 		dev->base_bins = (size_t *)XCALLOC(chans.getLength(), sizeof(size_t));
+		dev->channel_count = 0;
 		int channel_count = parse_channels(chans, dev, i);
 		if(channel_count < 1) {
 			cerr<<"Configuration error: devices.["<<i<<"]: no channels enabled\n";
@@ -403,7 +389,7 @@ hwtype_set:
 		}
 		dev->channels = (channel_t *)XREALLOC(dev->channels, channel_count * sizeof(channel_t));
 		dev->bins = (size_t *)XREALLOC(dev->bins, channel_count * sizeof(size_t));
-		dev->base_bins = (size_t *)XREALLOC(dev->bins, channel_count * sizeof(size_t));
+		dev->base_bins = (size_t *)XREALLOC(dev->base_bins, channel_count * sizeof(size_t));
 		dev->channel_count = channel_count;
 		devcnt++;
 	}

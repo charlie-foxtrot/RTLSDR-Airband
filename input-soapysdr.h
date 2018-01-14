@@ -1,6 +1,6 @@
 /*
- *  input-rtlsdr.h
- *  RTLSDR-specific declarations
+ *  input-soapysdr.h
+ *  SoapySDR-specific declarations
  *
  *  Copyright (c) 2015-2017 Tomasz Lemiech <szpajder@gmail.com>
  *
@@ -17,17 +17,15 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <rtl-sdr.h>		// rtlsdr_dev_t
-#define RTLSDR_BUFSIZE 320000
-#define RTLSDR_DEFAULT_LIBUSB_BUFFER_COUNT 10
-#define RTLSDR_DEFAULT_SAMPLE_RATE 2560000
+#include <SoapySDR/Device.h>	// SoapySDRDevice
+#define SOAPYSDR_DEFAULT_SAMPLE_RATE 2560000
+#define SOAPYSDR_BUFSIZE 320000
+#define SOAPYSDR_READSTREAM_TIMEOUT_US 1000000L
 
 typedef struct {
-	rtlsdr_dev_t *dev;	// pointer to librtlsdr device struct
-	char *serial;		// dongle serial number
-	int index;		// dongle index
-	int correction;		// PPM correction
-	int gain;		// gain in tenths of dB
-	int bufcnt;		// libusb buffer count
-} rtlsdr_dev_data_t;
-
+	SoapySDRDevice *dev;	// pointer to device struct
+	char const *device_string;	// SoapySDR device arg string
+	char const *sample_format;	// sample format
+	double correction;	// PPM correction
+	double gain;		// gain in dB
+} soapysdr_dev_data_t;

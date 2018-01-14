@@ -465,7 +465,7 @@ void demodulate() {
 					// average power
 					fparms->agcavgslow = fparms->agcavgslow * 0.99f + channel->waveref[j] * 0.01f;
 
-					float sqlevel = fparms->sqlevel > 0 ? (float)fparms->sqlevel : 3.0f * fparms->agcmin;
+					float sqlevel = fparms->sqlevel >= 0 ? (float)fparms->sqlevel : 3.0f * fparms->agcmin;
 					if (channel->agcsq > 0) {
 						channel->agcsq = max(channel->agcsq - 1, 1);
 						if (channel->agcsq == 1 && fparms->agcavgslow > sqlevel) {
@@ -559,13 +559,13 @@ void demodulate() {
 					if(dev->mode == R_SCAN)
 						printf("%4.0f/%3.0f%c %7.3f",
 							fparms->agcavgslow,
-							(fparms->sqlevel > 0 ? fparms->sqlevel : fparms->agcmin),
+							(fparms->sqlevel >= 0 ? fparms->sqlevel : fparms->agcmin),
 							channel->axcindicate,
 							(dev->channels[0].freqlist[channel->freq_idx].frequency / 1000000.0));
 					else
 						printf("%4.0f/%3.0f%c ",
 							fparms->agcavgslow,
-							(fparms->sqlevel > 0 ? fparms->sqlevel : fparms->agcmin),
+							(fparms->sqlevel >= 0 ? fparms->sqlevel : fparms->agcmin),
 							channel->axcindicate);
 					fflush(stdout);
 				}

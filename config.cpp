@@ -236,7 +236,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			} else if(libconfig::Setting::TypeInt == chans[j]["squelch"].getType()) {
 				// Legacy (single squelch for all frequencies)
 				int sqlevel = (int)chans[j]["squelch"];
-				if(sqlevel <= 0) {
+				if(sqlevel < 0) {
 					cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch must be greater than 0\n";
 					error();
 				}

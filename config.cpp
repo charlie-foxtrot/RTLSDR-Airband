@@ -276,12 +276,15 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		) % fft_size;
 
 		if(channel->needs_raw_iq) {
-// Calculate channel downmixing frequency and translate it to uint32_t range 0x00000000-0x00ffffff
-// (Cast it to signed int first, because casting negative float to uint is not portable).
 // Downmixing is done only for NFM and raw IQ outputs. It's not critical to have some residual
 // freq offset in AM, as it doesn't affect sound quality significantly.
-			channel->dm_dphi = (uint32_t)(int)((float)(channel->freqlist[0].frequency - dev->input->centerfreq) /
-				(float)WAVE_RATE * 256.0f * 65536.0f);
+			double dm_dphi = (double)(channel->freqlist[0].frequency - dev->input->centerfreq) / (double)WAVE_RATE;
+// Unalias it, to prevent overflow of int during cast
+			dm_dphi -= trunc(dm_dphi);
+// Translate this to uint32_t range 0x00000000-0x00ffffff
+			dm_dphi *= 256.0 * 65536.0;
+// Cast it to signed int first, because casting negative float to uint is not portable
+			channel->dm_dphi = (uint32_t)((int)dm_dphi);
 			channel->dm_phi = 0.f;
 		}
 		jj++;

@@ -274,17 +274,42 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			   (channel->freqlist[0].frequency + dev->input->sample_rate - dev->input->centerfreq)
 			 / (double)(dev->input->sample_rate / fft_size) - 1.0
 		) % fft_size;
+		debug_print("bins[%d]: %zu\n", jj, dev->bins[jj]);
 
 		if(channel->needs_raw_iq) {
 // Downmixing is done only for NFM and raw IQ outputs. It's not critical to have some residual
 // freq offset in AM, as it doesn't affect sound quality significantly.
-			double dm_dphi = (double)(channel->freqlist[0].frequency - dev->input->centerfreq) / (double)WAVE_RATE;
+			double dm_dphi = (double)(channel->freqlist[0].frequency - dev->input->centerfreq); // downmix freq in Hz
+
+// In general, sample_rate is not required to be an integer multiple of WAVE_RATE.
+// However the FFT window may only slide by an integer number of input samples. A non-zero rounding error
+// introduces additional phase rotation which we have to compensate in order to shift the channel of interest
+// to the center of the spectrum of the output I/Q stream. This is important for correct NFM demodulation.
+// The error value (in Hz):
+// - has an absolute value 0..WAVE_RATE/2
+// - is linear with the error introduced by rounding the value of sample_rate/WAVE_RATE to the nearest integer
+//   (range of -0.5..0.5)
+// - is linear with the distance between center frequency and the channel frequency, normalized to 0..1
+			double decimation_factor = ((double)dev->input->sample_rate / (double)WAVE_RATE);
+			double dm_dphi_correction = (double)WAVE_RATE / 2.0;
+			dm_dphi_correction *= (decimation_factor - round(decimation_factor));
+			dm_dphi_correction *= (double)(channel->freqlist[0].frequency - dev->input->centerfreq) /
+				((double)dev->input->sample_rate/2.0);
+
+			debug_print("dev[%d].chan[%d]: dm_dphi: %f Hz dm_dphi_correction: %f Hz\n",
+				i, jj, dm_dphi, dm_dphi_correction);
+			dm_dphi -= dm_dphi_correction;
+			debug_print("dev[%d].chan[%d]: dm_dphi_corrected: %f Hz\n", i, jj, dm_dphi);
+// Normalize
+			dm_dphi /= (double)WAVE_RATE;
 // Unalias it, to prevent overflow of int during cast
 			dm_dphi -= trunc(dm_dphi);
+			debug_print("dev[%d].chan[%d]: dm_dphi_normalized=%f\n", i, jj, dm_dphi);
 // Translate this to uint32_t range 0x00000000-0x00ffffff
 			dm_dphi *= 256.0 * 65536.0;
 // Cast it to signed int first, because casting negative float to uint is not portable
 			channel->dm_dphi = (uint32_t)((int)dm_dphi);
+			debug_print("dev[%d].chan[%d]: dm_dphi_scaled=%f cast=0x%x\n", i, jj, dm_dphi, channel->dm_dphi);
 			channel->dm_phi = 0.f;
 		}
 		jj++;
@@ -358,7 +383,9 @@ int parse_devices(libconfig::Setting &devs) {
 
 // For the input buffer size use a base value and round it up to the nearest multiple
 // of FFT_BATCH blocks of input samples.
-		size_t fft_batch_len = FFT_BATCH * (2 * dev->input->bytes_per_sample * dev->input->sample_rate / WAVE_RATE);
+// ceil is required here because sample rate is not guaranteed to be an integer multiple of WAVE_RATE.
+		size_t fft_batch_len = FFT_BATCH * (2 * dev->input->bytes_per_sample *
+			(size_t)ceil((double)dev->input->sample_rate / (double)WAVE_RATE));
 		dev->input->buf_size = MIN_BUF_SIZE;
 		if(dev->input->buf_size % fft_batch_len != 0)
 			dev->input->buf_size += fft_batch_len - dev->input->buf_size % fft_batch_len;

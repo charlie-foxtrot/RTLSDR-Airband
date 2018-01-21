@@ -348,7 +348,7 @@ void demodulate() {
 		}
 
 // number of input bytes per output wave sample (x 2 for I and Q)
-		size_t bps = (dev->input->sample_rate * dev->input->bytes_per_sample * 2) / WAVE_RATE;
+		size_t bps = 2 * dev->input->bytes_per_sample * (size_t)round((double)dev->input->sample_rate / (double)WAVE_RATE);
 		if (available < bps * FFT_BATCH + fft_size * dev->input->bytes_per_sample * 2) {
 			// move to next device
 			device_num = (device_num + 1) % device_count;

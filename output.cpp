@@ -301,8 +301,9 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 				tmp = gmtime(&t);
 
 			char suffix[32];
-// FIXME: add extension according to file contents/encoding
-			if(strftime(suffix, sizeof(suffix), "_%Y%m%d_%H.mp3", tmp) == 0) {
+			if(strftime(suffix, sizeof(suffix),
+				channel->outputs[k].type == O_FILE ? "_%Y%m%d_%H.mp3" : "_%Y%m%d_%H.cs16",
+			tmp) == 0) {
 				log(LOG_NOTICE, "strftime returned 0\n");
 				continue;
 			}

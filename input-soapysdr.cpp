@@ -188,6 +188,9 @@ int soapysdr_parse_config(input_t * const input, libconfig::Setting &cfg) {
 			error();
 		}
 	}
+	if(cfg.exists("antenna")) {
+		dev_data->antenna = strdup(cfg["antenna"]);
+	}
 // Find a suitable sample format and sample rate (unless set in the config)
 // based on device capabilities.
 // We have to do this here and not in soapysdr_init, because parse_devices()
@@ -245,6 +248,15 @@ int soapysdr_init(input_t * const input) {
 		log(LOG_ERR, "Failed to set frequency correction for SoapySDR device '%s': %s\n",
 			dev_data->device_string, SoapySDRDevice_lastError());
 		error();
+	}
+	if(dev_data->antenna != NULL) {
+		if(SoapySDRDevice_setAntenna(sdr, SOAPY_SDR_RX, dev_data->channel, dev_data->antenna) != 0) {
+			log(LOG_ERR, "Failed to set antenna to '%s' for SoapySDR device '%s': %s\n",
+				dev_data->device_string, dev_data->antenna, SoapySDRDevice_lastError());
+			error();
+		}
+		log(LOG_INFO, "SoapySDR: device '%s': antenna set to '%s'\n",
+		dev_data->device_string, SoapySDRDevice_getAntenna(sdr, SOAPY_SDR_RX, dev_data->channel));
 	}
 	if(SoapySDRDevice_setGainMode(sdr, SOAPY_SDR_RX, dev_data->channel, false) != 0) {
 		log(LOG_ERR, "Failed to set gain mode to manual for SoapySDR device '%s': %s\n",
@@ -326,6 +338,7 @@ MODULE_EXPORT input_t *soapysdr_input_new() {
 	soapysdr_dev_data_t *dev_data = (soapysdr_dev_data_t *)XCALLOC(1, sizeof(soapysdr_dev_data_t));
 	dev_data->gain = -1.0;	// invalid default gain value
 	dev_data->channel = 0;
+	dev_data->antenna = NULL;
 /*	return &( input_t ){
 		.dev_data = dev_data,
 		.state = INPUT_UNKNOWN,

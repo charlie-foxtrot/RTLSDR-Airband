@@ -26,6 +26,7 @@ typedef struct {
 	SoapySDRDevice *dev;	// pointer to device struct
 	char const *device_string;	// SoapySDR device arg string
 	char const *sample_format;	// sample format
+	char const *antenna;		// antenna name
 	double correction;	// PPM correction
 	double gain;		// gain in dB
 	int channel;		// HW channel number

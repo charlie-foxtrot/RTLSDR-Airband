@@ -28,4 +28,5 @@ typedef struct {
 	char const *sample_format;	// sample format
 	double correction;	// PPM correction
 	double gain;		// gain in dB
+	int channel;		// HW channel number
 } soapysdr_dev_data_t;

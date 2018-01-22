@@ -75,7 +75,7 @@ static bool soapysdr_choose_sample_format(SoapySDRDevice * const sdr, input_t * 
 	input->sfmt = SFMT_UNDEF;
 // First try device's native format to avoid extra conversion
 	double fullscale = 0.0;
-	char *fmt = SoapySDRDevice_getNativeStreamFormat(sdr, SOAPY_SDR_RX, 0, &fullscale);
+	char *fmt = SoapySDRDevice_getNativeStreamFormat(sdr, SOAPY_SDR_RX, dev_data->channel, &fullscale);
 
 	if(soapysdr_match_sfmt(input, fmt, fullscale) == true) {
 		log(LOG_NOTICE, "SoapySDR: device '%s': using native sample format '%s' (fullScale=%.1f)\n",
@@ -84,7 +84,7 @@ static bool soapysdr_choose_sample_format(SoapySDRDevice * const sdr, input_t * 
 		goto end;
 	}
 // Native format is not supported by rtl_airband; find out if there is anything else.
-	formats = SoapySDRDevice_getStreamFormats(sdr, SOAPY_SDR_RX, 0, &len);
+	formats = SoapySDRDevice_getStreamFormats(sdr, SOAPY_SDR_RX, dev_data->channel, &len);
 	if(formats == NULL || len == 0) {
 		log(LOG_ERR, "SoapySDR: device '%s': failed to read supported sample formats\n",
 			dev_data->device_string);
@@ -105,10 +105,10 @@ end:
 	return ret;
 }
 
-static int sdrplay_get_nearest_sample_rate(SoapySDRDevice *sdr, int sample_rate) {
+static int sdrplay_get_nearest_sample_rate(SoapySDRDevice *sdr, int channel, int sample_rate) {
 	size_t len = 0;
 	double sr = (double)sample_rate;
-	SoapySDRRange *range = SoapySDRDevice_getSampleRateRange(sdr, SOAPY_SDR_RX, 0, &len);
+	SoapySDRRange *range = SoapySDRDevice_getSampleRateRange(sdr, SOAPY_SDR_RX, channel, &len);
 	if(range == NULL) {
 		log(LOG_ERR, "SoapySDR: failed to read supported sampling rate ranges from the device\n");
 		return -1;
@@ -180,6 +180,14 @@ int soapysdr_parse_config(input_t * const input, libconfig::Setting &cfg) {
 			error();
 		}
 	}
+	if(cfg.exists("channel")) {
+		dev_data->channel = (int)cfg["channel"];
+		if(dev_data->channel < 0) {
+			cerr<<"SoapySDR configuration error: device '"<<dev_data->device_string<<
+				"': channel number must be positive\n";
+			error();
+		}
+	}
 // Find a suitable sample format and sample rate (unless set in the config)
 // based on device capabilities.
 // We have to do this here and not in soapysdr_init, because parse_devices()
@@ -198,7 +206,7 @@ int soapysdr_parse_config(input_t * const input, libconfig::Setting &cfg) {
 		error();
 	}
 	if(input->sample_rate < 0) {
-		input->sample_rate = sdrplay_get_nearest_sample_rate(sdr, SOAPYSDR_DEFAULT_SAMPLE_RATE);
+		input->sample_rate = sdrplay_get_nearest_sample_rate(sdr, dev_data->channel, SOAPYSDR_DEFAULT_SAMPLE_RATE);
 		if(input->sample_rate < 0) {
 			log(LOG_ERR, "Failed to find a suitable sample rate for SoapySDR device '%s'\n",
 				dev_data->device_string);
@@ -221,35 +229,35 @@ int soapysdr_init(input_t * const input) {
 	}
 	SoapySDRDevice *sdr = dev_data->dev;
 
-	if(SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_RX, 0, input->sample_rate) != 0) {
+	if(SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_RX, dev_data->channel, input->sample_rate) != 0) {
 		log(LOG_ERR, "Failed to set sample rate for SoapySDR device '%s': %s\n",
 			dev_data->device_string, SoapySDRDevice_lastError());
 		error();
 	}
 	log(LOG_INFO, "SoapySDR: device '%s': sample rate set to %.0f sps\n",
-		dev_data->device_string, SoapySDRDevice_getSampleRate(sdr, SOAPY_SDR_RX, 0));
-	if(SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_RX, 0, input->centerfreq, NULL) != 0) {
+		dev_data->device_string, SoapySDRDevice_getSampleRate(sdr, SOAPY_SDR_RX, dev_data->channel));
+	if(SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_RX, dev_data->channel, input->centerfreq, NULL) != 0) {
 		log(LOG_ERR, "Failed to set frequency for SoapySDR device '%s': %s\n",
 			dev_data->device_string, SoapySDRDevice_lastError());
 		error();
 	}
-	if(SoapySDRDevice_setFrequencyCorrection(sdr, SOAPY_SDR_RX, 0, dev_data->correction) != 0) {
+	if(SoapySDRDevice_setFrequencyCorrection(sdr, SOAPY_SDR_RX, dev_data->channel, dev_data->correction) != 0) {
 		log(LOG_ERR, "Failed to set frequency correction for SoapySDR device '%s': %s\n",
 			dev_data->device_string, SoapySDRDevice_lastError());
 		error();
 	}
-	if(SoapySDRDevice_setGainMode(sdr, SOAPY_SDR_RX, 0, false) != 0) {
+	if(SoapySDRDevice_setGainMode(sdr, SOAPY_SDR_RX, dev_data->channel, false) != 0) {
 		log(LOG_ERR, "Failed to set gain mode to manual for SoapySDR device '%s': %s\n",
 			dev_data->device_string, SoapySDRDevice_lastError());
 		error();
 	}
-	if(SoapySDRDevice_setGain(sdr, SOAPY_SDR_RX, 0, dev_data->gain) != 0) {
+	if(SoapySDRDevice_setGain(sdr, SOAPY_SDR_RX, dev_data->channel, dev_data->gain) != 0) {
 		log(LOG_ERR, "Failed to set gain for SoapySDR device '%s': %s\n",
 			dev_data->device_string, SoapySDRDevice_lastError());
 		error();
 	}
 	log(LOG_INFO, "SoapySDR: device '%s': gain set to %.1f dB\n",
-		dev_data->device_string, SoapySDRDevice_getGain(sdr, SOAPY_SDR_RX, 0));
+		dev_data->device_string, SoapySDRDevice_getGain(sdr, SOAPY_SDR_RX, dev_data->channel));
 	log(LOG_INFO, "SoapySDR: device '%s' initialized\n", dev_data->device_string);
 	return 0;
 }
@@ -265,7 +273,8 @@ void *soapysdr_rx_thread(void *ctx) {
 	size_t num_elems = SOAPYSDR_BUFSIZE / (2 * input->bytes_per_sample);
 
 	SoapySDRStream *rxStream = NULL;
-	if(SoapySDRDevice_setupStream(sdr, &rxStream, SOAPY_SDR_RX, dev_data->sample_format, NULL, 0, NULL) != 0) {
+	if(SoapySDRDevice_setupStream(sdr, &rxStream, SOAPY_SDR_RX, dev_data->sample_format,
+	(size_t * const)&dev_data->channel, 1, NULL) != 0) {
 		log(LOG_ERR, "Failed to set up stream for SoapySDR device '%s': %s\n",
 			dev_data->device_string, SoapySDRDevice_lastError());
 		input->state = INPUT_FAILED;
@@ -305,7 +314,7 @@ int soapysdr_set_centerfreq(input_t * const input, int const centerfreq) {
 	soapysdr_dev_data_t *dev_data = (soapysdr_dev_data_t *)input->dev_data;
 	assert(dev_data->dev != NULL);
 
-	if(SoapySDRDevice_setFrequency(dev_data->dev, SOAPY_SDR_RX, 0, centerfreq, NULL) != 0) {
+	if(SoapySDRDevice_setFrequency(dev_data->dev, SOAPY_SDR_RX, dev_data->channel, centerfreq, NULL) != 0) {
 		log(LOG_ERR, "Failed to set frequency for SoapySDR device '%s': %s\n",
 			dev_data->device_string, SoapySDRDevice_lastError());
 		return -1;
@@ -316,6 +325,7 @@ int soapysdr_set_centerfreq(input_t * const input, int const centerfreq) {
 MODULE_EXPORT input_t *soapysdr_input_new() {
 	soapysdr_dev_data_t *dev_data = (soapysdr_dev_data_t *)XCALLOC(1, sizeof(soapysdr_dev_data_t));
 	dev_data->gain = -1.0;	// invalid default gain value
+	dev_data->channel = 0;
 /*	return &( input_t ){
 		.dev_data = dev_data,
 		.state = INPUT_UNKNOWN,

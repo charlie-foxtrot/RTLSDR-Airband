@@ -73,7 +73,10 @@ device_t* devices;
 mixer_t* mixers;
 int device_count, mixer_count;
 static int devices_running = 0;
-int foreground = 0, do_syslog = 1, shout_metadata_delay = 3;
+int foreground = 0;			// daemonize
+int tui = 0;				// do not display textual user interface
+int do_syslog = 1;
+int shout_metadata_delay = 3;
 volatile int do_exit = 0;
 bool use_localtime = false;
 size_t fft_size_log = DEFAULT_FFT_SIZE_LOG;
@@ -437,7 +440,7 @@ void demodulate() {
 		dev->waveend += FFT_BATCH;
 
 		if (dev->waveend >= WAVE_BATCH + AGC_EXTRA) {
-			if (foreground) {
+			if (tui) {
 				GOTOXY(0, device_num * 17 + dev->row + 3);
 			}
 			for (int i = 0; i < dev->channel_count; i++) {
@@ -555,7 +558,7 @@ void demodulate() {
 				afc.finalize(dev, i, fftout);
 #endif
 
-				if (foreground) {
+				if (tui) {
 					if(dev->mode == R_SCAN)
 						printf("%4.0f/%3.0f%c %7.3f",
 							fparms->agcavgslow,
@@ -593,7 +596,8 @@ void demodulate() {
 void usage() {
 	cout<<"Usage: rtl_airband [options] [-c <config_file_path>]\n\
 \t-h\t\t\tDisplay this help text\n\
-\t-f\t\t\tRun in foreground, display textual waterfalls\n";
+\t-f\t\t\tRun in foreground, display textual waterfalls\n\
+\t-F\t\t\tRun in foreground, do not display waterfalls (for running as a systemd service)\n";
 #ifdef NFM
 	cout<<"\t-Q\t\t\tUse quadri correlator for FM demodulation (default is atan2)\n";
 #endif
@@ -621,7 +625,7 @@ int main(int argc, char* argv[]) {
 	char *pidfile = PIDFILE;
 #pragma GCC diagnostic warning "-Wwrite-strings"
 	int opt;
-	char optstring[16] = "fhvc:";
+	char optstring[16] = "fFhvc:";
 
 #ifdef NFM
 	strcat(optstring, "Q");
@@ -644,6 +648,11 @@ int main(int argc, char* argv[]) {
 #endif
 			case 'f':
 				foreground = 1;
+				tui = 1;
+				break;
+			case 'F':
+				foreground = 1;
+				tui = 0;
 				break;
 			case 'c':
 				cfgfile = optarg;
@@ -893,7 +902,7 @@ int main(int argc, char* argv[]) {
 		log(LOG_ERR, "%d device(s) failed to initialize - aborting\n", device_count - devices_running);
 		error();
 	}
-	if (foreground) {
+	if (tui) {
 		printf("\e[1;1H\e[2J");
 
 		GOTOXY(0, 0);

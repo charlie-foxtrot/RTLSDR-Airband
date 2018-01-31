@@ -604,6 +604,7 @@ void usage() {
 #if DEBUG
 	cout<<"\t-d <file>\t\tLog debugging information to <file> (default is "<<DEBUG_PATH<<")\n";
 #endif
+	cout<<"\t-e\t\t\tPrint messages to standard error (disables syslog logging\n";
 	cout<<"\t-c <config_file_path>\tUse non-default configuration file\n\t\t\t\t(default: "<<CFGFILE<<")\n\
 \t-v\t\t\tDisplay version and exit\n";
 	exit(EXIT_SUCCESS);
@@ -625,7 +626,7 @@ int main(int argc, char* argv[]) {
 	char *pidfile = PIDFILE;
 #pragma GCC diagnostic warning "-Wwrite-strings"
 	int opt;
-	char optstring[16] = "fFhvc:";
+	char optstring[16] = "efFhvc:";
 
 #ifdef NFM
 	strcat(optstring, "Q");
@@ -646,6 +647,9 @@ int main(int argc, char* argv[]) {
 				debug_path = strdup(optarg);
 				break;
 #endif
+			case 'e':
+				do_syslog = 0;
+				break;
 			case 'f':
 				foreground = 1;
 				tui = 1;
@@ -700,7 +704,6 @@ int main(int argc, char* argv[]) {
 		Config config;
 		config.readFile(cfgfile);
 		Setting &root = config.getRoot();
-		if(root.exists("syslog")) do_syslog = root["syslog"];
 		if(root.exists("pidfile")) pidfile = strdup(root["pidfile"]);
 		if(root.exists("fft_size")) {
 			int fsize = (int)(root["fft_size"]);

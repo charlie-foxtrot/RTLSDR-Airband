@@ -80,11 +80,11 @@ static void stream_state_cb(pa_stream *stream, void *userdata) {
 	case PA_STREAM_CREATING:
 		break;
 	case PA_STREAM_FAILED:
-		log(LOG_WARNING, "pulse: %s: stream \"%s\" failed: %s", SERVER_IFNOTNULL(pdata->server), pdata->stream_name,
+		log(LOG_WARNING, "pulse: %s: stream \"%s\" failed: %s\n", SERVER_IFNOTNULL(pdata->server), pdata->stream_name,
 		pa_strerror(pa_context_errno(pdata->context)));
 		break;
 	case PA_STREAM_TERMINATED:
-		log(LOG_WARNING, "pulse: %s: stream \"%s\" terminated", SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
+		log(LOG_WARNING, "pulse: %s: stream \"%s\" terminated\n", SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
 		break;
 	break;
 	}
@@ -94,7 +94,7 @@ static pa_stream *pulse_setup_stream(pulse_data *pdata, const pa_sample_spec *ss
 	pa_stream *stream = NULL;
 	PA_LOOP_LOCK(mainloop);
 	if(!(stream = pa_stream_new(pdata->context, pdata->stream_name, ss, cmap))) {
-		log(LOG_ERR, "pulse: %s: failed to create stream \"%s\": %s",
+		log(LOG_ERR, "pulse: %s: failed to create stream \"%s\": %s\n",
 			SERVER_IFNOTNULL(pdata->server), pdata->stream_name, pa_strerror(pa_context_errno(pdata->context)));
 		goto fail;
 	}
@@ -110,11 +110,11 @@ static pa_stream *pulse_setup_stream(pulse_data *pdata, const pa_sample_spec *ss
 				      |PA_STREAM_ADJUST_LATENCY
 				      |PA_STREAM_START_CORKED
 				      |PA_STREAM_AUTO_TIMING_UPDATE), NULL, sync_stream) < 0) {
-		log(LOG_ERR, "pulse: %s: failed to connect stream \"%s\": %s",
+		log(LOG_ERR, "pulse: %s: failed to connect stream \"%s\": %s\n",
 			SERVER_IFNOTNULL(pdata->server), pdata->stream_name, pa_strerror(pa_context_errno(pdata->context)));
 		goto fail;
 	}
-	log(LOG_INFO, "pulse: %s: stream \"%s\" connected", SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
+	log(LOG_INFO, "pulse: %s: stream \"%s\" connected\n", SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
 	PA_LOOP_UNLOCK(mainloop);
 	return stream;
 fail:
@@ -151,19 +151,19 @@ static void pulse_ctx_state_cb(pa_context *c, void *userdata) {
 	pulse_data *pdata = (pulse_data *)userdata;
 	switch (pa_context_get_state(c)) {
 	case PA_CONTEXT_READY:
-		log(LOG_INFO, "pulse: %s: connected", SERVER_IFNOTNULL(pdata->server));
+		log(LOG_INFO, "pulse: %s: connected\n", SERVER_IFNOTNULL(pdata->server));
 		pulse_setup_streams(pdata);
 		break;
 	case PA_CONTEXT_TERMINATED:
-		log(LOG_INFO, "pulse: %s: connection terminated", SERVER_IFNOTNULL(pdata->server));
+		log(LOG_INFO, "pulse: %s: connection terminated\n", SERVER_IFNOTNULL(pdata->server));
 		break;
 	case PA_CONTEXT_FAILED:
-		log(LOG_ERR, "pulse: %s: connection failed: %s", SERVER_IFNOTNULL(pdata->server),
+		log(LOG_ERR, "pulse: %s: connection failed: %s\n", SERVER_IFNOTNULL(pdata->server),
 			 pa_strerror(pa_context_errno(pdata->context)));
 		pulse_shutdown(pdata);
 		break;
 	case PA_CONTEXT_CONNECTING:
-		log(LOG_INFO, "pulse: %s: connecting...", SERVER_IFNOTNULL(pdata->server));
+		log(LOG_INFO, "pulse: %s: connecting...\n", SERVER_IFNOTNULL(pdata->server));
 		break;
 	case PA_CONTEXT_UNCONNECTED:
 	case PA_CONTEXT_AUTHORIZING:
@@ -189,7 +189,7 @@ int pulse_setup(pulse_data *pdata, mix_modes mixmode) {
 	int ret = 0;
 	pa_context_set_state_callback(pdata->context, &pulse_ctx_state_cb, pdata);
 	if(pa_context_connect(pdata->context, pdata->server, PA_CONTEXT_NOFLAGS, NULL) < 0) {
-		log(LOG_WARNING, "pulse: %s: failed to connect: %s", SERVER_IFNOTNULL(pdata->server),
+		log(LOG_WARNING, "pulse: %s: failed to connect: %s\n", SERVER_IFNOTNULL(pdata->server),
 			pa_strerror(pa_context_errno(pdata->context)));
 		// Don't clean up things here, context state is now set to PA_CONTEXT_FAILED,
 		// so pulse_ctx_state_cb will take care of that.

@@ -84,7 +84,7 @@ void tag_queue_put(device_t *dev, int freq, struct timeval tv) {
 	pthread_mutex_lock(&dev->tag_queue_lock);
 	dev->tq_head++; dev->tq_head %= TAG_QUEUE_LEN;
 	if(dev->tq_head == dev->tq_tail) {
-		log(LOG_WARNING, "tag_queue_put: queue overrun");
+		log(LOG_WARNING, "tag_queue_put: queue overrun\n");
 		dev->tq_tail++;
 	}
 	dev->tag_queue[dev->tq_head].freq = freq;

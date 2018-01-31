@@ -32,11 +32,11 @@ using namespace std;
 pa_threaded_mainloop *mainloop = NULL;
 
 void pulse_shutdown(pulse_data *pdata) {
+	if(!pdata)
+		return;
 	log(LOG_NOTICE, "pulse: %s: disconnecting context for stream \"%s\"\n",
 		SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
 	PA_LOOP_LOCK(mainloop);
-	if(!pdata)
-		return;
 	if(pdata->left) {
 		pa_stream_disconnect(pdata->left);
 		pa_stream_unref(pdata->left);
@@ -185,15 +185,18 @@ int pulse_setup(pulse_data *pdata, mix_modes mixmode) {
 		return -1;
 	}
 	pdata->mode = mixmode;
+	PA_LOOP_LOCK(mainloop);
+	int ret = 0;
 	pa_context_set_state_callback(pdata->context, &pulse_ctx_state_cb, pdata);
 	if(pa_context_connect(pdata->context, pdata->server, PA_CONTEXT_NOFLAGS, NULL) < 0) {
 		log(LOG_WARNING, "pulse: %s: failed to connect: %s", SERVER_IFNOTNULL(pdata->server),
 			pa_strerror(pa_context_errno(pdata->context)));
 		// Don't clean up things here, context state is now set to PA_CONTEXT_FAILED,
 		// so pulse_ctx_state_cb will take care of that.
-		return -1;
+		ret = -1;
 	}
-	return 0;
+	PA_LOOP_UNLOCK(mainloop);
+	return ret;
 }
 
 void pulse_start() {

@@ -59,6 +59,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <libconfig.h++>
+#include <stdint.h>			// uint8_t
 #include <ogg/ogg.h>
 #include <vorbis/vorbisenc.h>
 #include <shout/shout.h>

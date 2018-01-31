@@ -21,6 +21,7 @@
 #ifndef _RTL_AIRBAND_H
 #define _RTL_AIRBAND_H 1
 #include <cstdio>
+#include <stdint.h>		// uint32_t
 #include <pthread.h>
 #include <sys/time.h>
 #include <shout/shout.h>

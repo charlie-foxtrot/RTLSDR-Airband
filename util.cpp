@@ -19,6 +19,7 @@
  */
 
 #include <unistd.h>
+#include <stdint.h>			// uint32_t
 #include <syslog.h>
 #include <iostream>
 #include <cstdlib>

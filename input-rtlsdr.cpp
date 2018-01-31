@@ -22,6 +22,7 @@
 #include <iostream>
 #include <limits.h>		// SCHAR_MAX
 #include <stdio.h>
+#include <stdint.h>		// uint32_t
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h> // FIXME: get rid of this

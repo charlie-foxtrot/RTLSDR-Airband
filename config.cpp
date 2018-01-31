@@ -23,6 +23,7 @@
 #include <cstring>
 #include <cmath>
 #include <assert.h>
+#include <stdint.h>				// uint32_t
 #include <syslog.h>
 #include <libconfig.h++>
 #include "input-common.h"			// input_t

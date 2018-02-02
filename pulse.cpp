@@ -34,8 +34,6 @@ pa_threaded_mainloop *mainloop = NULL;
 void pulse_shutdown(pulse_data *pdata) {
 	if(!pdata)
 		return;
-	log(LOG_NOTICE, "pulse: %s: disconnecting context for stream \"%s\"\n",
-		SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
 	PA_LOOP_LOCK(mainloop);
 	if(pdata->left) {
 		pa_stream_disconnect(pdata->left);
@@ -151,11 +149,9 @@ static void pulse_ctx_state_cb(pa_context *c, void *userdata) {
 	pulse_data *pdata = (pulse_data *)userdata;
 	switch (pa_context_get_state(c)) {
 	case PA_CONTEXT_READY:
-		log(LOG_INFO, "pulse: %s: connected\n", SERVER_IFNOTNULL(pdata->server));
 		pulse_setup_streams(pdata);
 		break;
 	case PA_CONTEXT_TERMINATED:
-		log(LOG_INFO, "pulse: %s: connection terminated\n", SERVER_IFNOTNULL(pdata->server));
 		break;
 	case PA_CONTEXT_FAILED:
 		log(LOG_ERR, "pulse: %s: connection failed: %s\n", SERVER_IFNOTNULL(pdata->server),

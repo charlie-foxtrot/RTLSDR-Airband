@@ -161,4 +161,30 @@ void sincosf_lut(uint32_t phi, float *sine, float *cosine) {
 	*cosine = v1 + (v2 - v1) * fract;
 }
 
+/* librtlsdr-keenerd, (c) Kyle Keen */
+double atofs(char *s) {
+	char last;
+	int len;
+	double suff = 1.0;
+	len = strlen(s);
+	last = s[len-1];
+	s[len-1] = '\0';
+	switch (last) {
+		case 'g':
+		case 'G':
+			suff *= 1e3;
+		case 'm':
+		case 'M':
+			suff *= 1e3;
+		case 'k':
+		case 'K':
+			suff *= 1e3;
+			suff *= atof(s);
+			s[len-1] = last;
+			return suff;
+	}
+	s[len-1] = last;
+	return atof(s);
+}
+
 // vim: ts=4

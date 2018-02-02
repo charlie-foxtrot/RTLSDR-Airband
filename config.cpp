@@ -173,6 +173,20 @@ static void warn_if_freq_not_in_range(int devidx, int chanidx, int freq, int cen
 	}
 }
 
+static int parse_anynum2int(libconfig::Setting& f) {
+	int ret = 0;
+	if(f.getType() == libconfig::Setting::TypeInt) {
+		ret = (int)f;
+	} else if(f.getType() == libconfig::Setting::TypeFloat) {
+		ret = (int)((double)f * 1e6);
+	} else if(f.getType() == libconfig::Setting::TypeString) {
+		char *s = strdup((char const *)f);
+		ret = (int)atofs(s);
+		free(s);
+	}
+	return ret;
+}
+
 static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 	int jj = 0;
 	for (int j = 0; j < chans.getLength(); j++) {
@@ -208,7 +222,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		channel->afc = chans[j].exists("afc") ? (unsigned char) (unsigned int)chans[j]["afc"] : 0;
 		if(dev->mode == R_MULTICHANNEL) {
 			channel->freqlist = mk_freqlist( 1 );
-			channel->freqlist[0].frequency = chans[j]["freq"];
+			channel->freqlist[0].frequency = parse_anynum2int(chans[j]["freq"]);
 			warn_if_freq_not_in_range(i, j, channel->freqlist[0].frequency, dev->input->centerfreq, dev->input->sample_rate);
 		} else { /* R_SCAN */
 			channel->freq_count = chans[j]["freqs"].getLength();
@@ -228,7 +242,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				error();
 			}
 			for(int f = 0; f<channel->freq_count; f++) {
-				channel->freqlist[f].frequency = (int)(chans[j]["freqs"][f]);
+				channel->freqlist[f].frequency = parse_anynum2int((chans[j]["freqs"][f]));
 				if(chans[j].exists("labels")) {
 					channel->freqlist[f].label = strdup(chans[j]["labels"][f]);
 				}
@@ -351,7 +365,7 @@ int parse_devices(libconfig::Setting &devs) {
 		}
 		assert(dev->input != NULL);
 		if(devs[i].exists("sample_rate")) {
-			int sample_rate = (int)(devs[i]["sample_rate"]);
+			int sample_rate = parse_anynum2int(devs[i]["sample_rate"]);
 			if(sample_rate < WAVE_RATE) {
 				cerr<<"Configuration error: devices.["<<i<<"]: sample_rate must be greater than "<<WAVE_RATE<<"\n";
 				error();
@@ -371,7 +385,7 @@ int parse_devices(libconfig::Setting &devs) {
 			dev->mode = R_MULTICHANNEL;
 		}
 		if(dev->mode == R_MULTICHANNEL) {
-			dev->input->centerfreq = (int)devs[i]["centerfreq"];
+			dev->input->centerfreq = parse_anynum2int(devs[i]["centerfreq"]);
 		}	// centerfreq for R_SCAN will be set by parse_channels() after frequency list has been read
 #ifdef NFM
 		if(devs[i].exists("tau")) {

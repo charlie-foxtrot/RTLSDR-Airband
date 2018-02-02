@@ -273,6 +273,7 @@ void error();
 int atomic_inc(volatile int *pv);
 int atomic_dec(volatile int *pv);
 int atomic_get(volatile int *pv);
+double atofs(char *s);
 void log(int priority, const char *format, ...);
 void tag_queue_put(device_t *dev, int freq, struct timeval tv);
 void tag_queue_get(device_t *dev, struct freq_tag *tag);

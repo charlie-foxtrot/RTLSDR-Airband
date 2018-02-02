@@ -163,6 +163,16 @@ static struct freq_t *mk_freqlist( int n )
 	return fl;
 }
 
+static void warn_if_freq_not_in_range(int devidx, int chanidx, int freq, int centerfreq, int sample_rate) {
+	static const float soft_bw_threshold = 0.9f;
+	float bw_limit = (float)sample_rate / 2.f * soft_bw_threshold;
+	if((float)abs(freq - centerfreq) >= bw_limit) {
+		log(LOG_WARNING,
+			"Warning: dev[%d].channel[%d]: frequency %d Hz is outside of SDR operating bandwidth (%.0f-%.0f Hz)\n",
+			devidx, chanidx, freq, centerfreq - bw_limit, centerfreq + bw_limit);
+	}
+}
+
 static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 	int jj = 0;
 	for (int j = 0; j < chans.getLength(); j++) {
@@ -199,6 +209,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		if(dev->mode == R_MULTICHANNEL) {
 			channel->freqlist = mk_freqlist( 1 );
 			channel->freqlist[0].frequency = chans[j]["freq"];
+			warn_if_freq_not_in_range(i, j, channel->freqlist[0].frequency, dev->input->centerfreq, dev->input->sample_rate);
 		} else { /* R_SCAN */
 			channel->freq_count = chans[j]["freqs"].getLength();
 			if(channel->freq_count < 1) {

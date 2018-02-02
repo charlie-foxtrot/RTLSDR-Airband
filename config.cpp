@@ -168,8 +168,10 @@ static void warn_if_freq_not_in_range(int devidx, int chanidx, int freq, int cen
 	float bw_limit = (float)sample_rate / 2.f * soft_bw_threshold;
 	if((float)abs(freq - centerfreq) >= bw_limit) {
 		log(LOG_WARNING,
-			"Warning: dev[%d].channel[%d]: frequency %d Hz is outside of SDR operating bandwidth (%.0f-%.0f Hz)\n",
-			devidx, chanidx, freq, centerfreq - bw_limit, centerfreq + bw_limit);
+			"Warning: dev[%d].channel[%d]: frequency %.3f MHz is outside of SDR operating bandwidth (%.3f-%.3f MHz)\n",
+			devidx, chanidx, (double)freq / 1e6,
+			(double)(centerfreq - bw_limit) / 1e6,
+			(double)(centerfreq + bw_limit) / 1e6);
 	}
 }
 

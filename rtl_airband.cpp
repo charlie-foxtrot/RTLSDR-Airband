@@ -795,6 +795,7 @@ int main(int argc, char* argv[]) {
 			error();
 	}
 
+	log(LOG_INFO, "RTLSDR-Airband version %s starting\n", RTL_AIRBAND_VERSION);
 	if(!foreground) {
 		int pid1, pid2;
 		if((pid1 = fork()) == -1) {
@@ -826,8 +827,7 @@ int main(int argc, char* argv[]) {
 				if(nullfd > 2) close(nullfd);
 				FILE *f = fopen(pidfile, "w");
 				if(f == NULL) {
-					log(LOG_CRIT, "Cannot write pidfile: %s\n", strerror(errno));
-					error();
+					log(LOG_WARNING, "Cannot write pidfile: %s\n", strerror(errno));
 				} else {
 					fprintf(f, "%ld\n", (long)getpid());
 					fclose(f);
@@ -836,7 +836,6 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
-	log(LOG_INFO, "RTLSDR-Airband version %s starting\n", RTL_AIRBAND_VERSION);
 	for (int i = 0; i < mixer_count; i++) {
 		if(mixers[i].enabled == false)
 			continue;		// no inputs connected = no need to initialize output

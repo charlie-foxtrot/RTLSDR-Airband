@@ -2,7 +2,7 @@
  * rtl_airband.h
  * Global declarations
  *
- * Copyright (c) 2015-2016 Tomasz Lemiech <szpajder@gmail.com>
+ * Copyright (c) 2015-2018 Tomasz Lemiech <szpajder@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,13 +18,15 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifndef _RTL_AIRBAND_H
+#define _RTL_AIRBAND_H 1
 #include <cstdio>
+#include <stdint.h>		// uint32_t
 #include <pthread.h>
 #include <sys/time.h>
 #include <shout/shout.h>
 #include <lame/lame.h>
 #include <libconfig.h++>
-#include <rtl-sdr.h>
 #ifdef USE_BCM_VC
 #include "hello_fft/gpu_fft.h"
 #endif
@@ -32,6 +34,7 @@
 #include <pulse/context.h>
 #include <pulse/stream.h>
 #endif
+#include "input-common.h"	// input_t
 
 #ifndef RTL_AIRBAND_VERSION
 #define RTL_AIRBAND_VERSION "2.4.0"
@@ -52,8 +55,8 @@
 #define DEBUG_PATH "rtl_airband_debug.log"
 #endif
 
-#define BUF_SIZE 2560000
-#define SOURCE_RATE 2560000
+#define MIN_BUF_SIZE 2560000
+#define DEFAULT_SAMPLE_RATE 2560000
 #ifdef NFM
 #define WAVE_RATE 16000
 #else
@@ -65,12 +68,14 @@
 #define MP3_RATE 8000
 #define MAX_SHOUT_QUEUELEN 32768
 #define TAG_QUEUE_LEN 16
-#define CHANNELS 8
 #define MAX_MIXINPUTS 32
-#define FFT_SIZE_LOG 9
+
+#define MIN_FFT_SIZE_LOG 8
+#define DEFAULT_FFT_SIZE_LOG 9
+#define MAX_FFT_SIZE_LOG 13
+
 #define LAMEBUF_SIZE 22000 //todo: calculate
 #define MIX_DIVISOR 2
-#define RTL_DEV_INVALID 0xFFFFFFFF
 
 #define ONES(x) ~(~0 << (x))
 #define SET_BIT(a, x) (a) |= (1 << (x))
@@ -80,7 +85,7 @@
 #if defined USE_BCM_VC
 struct sample_fft_arg
 {
-	int fft_size_by4;
+	size_t fft_size_by4;
 	GPU_FFT_COMPLEX* dest;
 };
 extern "C" void samplefft(sample_fft_arg *a, unsigned char* buffer, float* window, float* levels);
@@ -89,7 +94,6 @@ extern "C" void samplefft(sample_fft_arg *a, unsigned char* buffer, float* windo
 #else
 # define FFT_BATCH 1
 #endif
-#define FFT_SIZE (2<<(FFT_SIZE_LOG - 1))
 
 //#define AFC_LOGGING
 
@@ -103,6 +107,7 @@ struct icecast_data {
 	const char *mountpoint;
 	const char *name;
 	const char *genre;
+	const char *description;
 	bool send_scan_freq_tags;
 	shout_t *shout;
 };
@@ -138,6 +143,7 @@ struct mixer_data {
 enum output_type {
 	O_ICECAST,
 	O_FILE,
+	O_RAWFILE,
 	O_MIXER
 #ifdef PULSE
 	, O_PULSE
@@ -176,16 +182,14 @@ struct channel_t {
 	float waveref[WAVE_LEN];	// for power level calculation
 	float waveout[WAVE_LEN];	// waveform after squelch + AGC (left/center channel mixer output)
 	float waveout_r[WAVE_LEN];	// right channel mixer output
+	float iq_in[2*WAVE_LEN];	// raw input samples for I/Q outputs and NFM demod
+	float iq_out[2*WAVE_LEN];	// raw output samples for I/Q outputs (FIXME: allocate only if required)
 #ifdef NFM
-	float complex_samples[2*WAVE_LEN];	// raw samples for NFM demod
-	float timeref_nsin[WAVE_RATE];
-	float timeref_cos[WAVE_RATE];
-	int wavecnt;				// sample counter for timeref shift
-// FIXME: get this from complex_samples?
 	float pr;					// previous sample - real part
 	float pj;					// previous sample - imaginary part
 	float alpha;
 #endif
+	uint32_t dm_dphi, dm_phi;	// derotation frequency and current phase value
 	enum modulations modulation;
 	enum mix_modes mode;		// mono or stereo
 	int agcsq;					// squelch status, 0 = signal, 1 = suppressed
@@ -196,6 +200,8 @@ struct channel_t {
 	int freq_idx;
 	int output_count;
 	int need_mp3;
+	int needs_raw_iq;
+	int has_iq_outputs;
 	enum ch_states state;		// mixer channel state flag
 	output_t *outputs;
 	lame_t lame;
@@ -203,31 +209,21 @@ struct channel_t {
 
 enum rec_modes { R_MULTICHANNEL, R_SCAN };
 struct device_t {
-	unsigned char buffer[BUF_SIZE + FFT_SIZE * 2 + 48];
-	int bufs;
-	int bufe;
-	rtlsdr_dev_t* rtlsdr;
-	char *serial;
-	uint32_t device;
-	int centerfreq;
-	int correction;
-	int gain;
+	input_t *input;
 #ifdef NFM
 	float alpha;
 #endif
 	int channel_count;
-	int base_bins[CHANNELS];
-	int bins[CHANNELS];
-	channel_t channels[CHANNELS];
+	size_t *base_bins, *bins;
+	channel_t *channels;
+// FIXME: size_t
 	int waveend;
 	int waveavail;
-	THREAD rtl_thread;
 	THREAD controller_thread;
 	struct freq_tag tag_queue[TAG_QUEUE_LEN];
 	int tq_head, tq_tail;
 	int last_frequency;
 	pthread_mutex_t tag_queue_lock;
-	pthread_mutex_t buffer_lock;
 	int row;
 	int failed;
 	enum rec_modes mode;
@@ -262,9 +258,10 @@ void *output_thread(void* params);
 
 // rtl_airband.cpp
 extern bool use_localtime;
+extern size_t fft_size, fft_size_log;
 extern int device_count, mixer_count;
 extern int shout_metadata_delay, do_syslog, foreground;
-extern volatile int do_exit;
+extern volatile int do_exit, device_opened;
 extern float alpha;
 extern device_t *devices;
 extern mixer_t *mixers;
@@ -276,10 +273,13 @@ void error();
 int atomic_inc(volatile int *pv);
 int atomic_dec(volatile int *pv);
 int atomic_get(volatile int *pv);
+double atofs(char *s);
 void log(int priority, const char *format, ...);
 void tag_queue_put(device_t *dev, int freq, struct timeval tv);
 void tag_queue_get(device_t *dev, struct freq_tag *tag);
 void tag_queue_advance(device_t *dev);
+void sincosf_lut_init();
+void sincosf_lut(uint32_t phi, float *sine, float *cosine);
 void *xcalloc(size_t nmemb, size_t size, const char *file, const int line, const char *func);
 void *xrealloc(void *ptr, size_t size, const char *file, const int line, const char *func);
 void init_debug (char *file);
@@ -313,5 +313,6 @@ void pulse_start();
 void pulse_shutdown(pulse_data *pdata);
 void pulse_write_stream(pulse_data *pdata, mix_modes mode, float *data_left, float *data_right, size_t len);
 #endif
+#endif /* _RTL_AIRBAND_H */
 
 // vim: ts=4

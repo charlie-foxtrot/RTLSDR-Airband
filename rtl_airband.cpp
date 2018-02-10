@@ -2,7 +2,7 @@
  * RTLSDR AM/NFM demodulator, mixer, streamer and recorder
  *
  * Copyright (c) 2014 Wong Man Hang <microtony@gmail.com>
- * Copyright (c) 2015-2016 Tomasz Lemiech <szpajder@gmail.com>
+ * Copyright (c) 2015-2018 Tomasz Lemiech <szpajder@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -59,11 +59,12 @@
 #include <cstdlib>
 #include <ctime>
 #include <libconfig.h++>
+#include <stdint.h>			// uint8_t
 #include <ogg/ogg.h>
 #include <vorbis/vorbisenc.h>
 #include <shout/shout.h>
 #include <lame/lame.h>
-#include <rtl-sdr.h>
+#include "input-common.h"
 #include "rtl_airband.h"
 
 using namespace std;
@@ -72,11 +73,15 @@ using namespace libconfig;
 device_t* devices;
 mixer_t* mixers;
 int device_count, mixer_count;
-volatile int device_opened = 0;
-int rtlsdr_buffers = 10;
-int foreground = 0, do_syslog = 1, shout_metadata_delay = 3;
+static int devices_running = 0;
+int foreground = 0;			// daemonize
+int tui = 0;				// do not display textual user interface
+int do_syslog = 1;
+int shout_metadata_delay = 3;
 volatile int do_exit = 0;
 bool use_localtime = false;
+size_t fft_size_log = DEFAULT_FFT_SIZE_LOG;
+size_t fft_size = 1 << fft_size_log;
 #ifdef NFM
 float alpha = exp(-1.0f/(WAVE_RATE * 2e-4));
 enum fm_demod_algo {
@@ -85,123 +90,23 @@ enum fm_demod_algo {
 };
 enum fm_demod_algo fm_demod = FM_FAST_ATAN2;
 #endif
+
 #if DEBUG
 char *debug_path;
 #endif
 pthread_cond_t	mp3_cond = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t	mp3_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx) {
-	if(do_exit) return;
-	device_t *dev = (device_t*)ctx;
-	pthread_mutex_lock(&dev->buffer_lock);
-	memcpy(dev->buffer + dev->bufe, buf, len);
-	if (dev->bufe == 0) {
-		memcpy(dev->buffer + BUF_SIZE, buf, FFT_SIZE * 2);
-	}
-	dev->bufe = dev->bufe + len;
-	if (dev->bufe == BUF_SIZE) dev->bufe = 0;
-	pthread_mutex_unlock(&dev->buffer_lock);
-}
-
 void sighandler(int sig) {
 	log(LOG_NOTICE, "Got signal %d, exiting\n", sig);
 	do_exit = 1;
-}
-
-/* taken from librtlsdr-keenerd, (c) Kyle Keen */
-static int nearest_gain(rtlsdr_dev_t *dev, int target_gain) {
-	int i, r, err1, err2, count, nearest;
-	int *gains;
-	r = rtlsdr_set_tuner_gain_mode(dev, 1);
-	if (r < 0)
-		return r;
-	count = rtlsdr_get_tuner_gains(dev, NULL);
-	if (count <= 0) {
-		return -1;
-	}
-	gains = (int *)XCALLOC(count, sizeof(int));
-	count = rtlsdr_get_tuner_gains(dev, gains);
-	nearest = gains[0];
-	for (i = 0; i < count; i++) {
-		err1 = abs(target_gain - nearest);
-		err2 = abs(target_gain - gains[i]);
-		if (err2 < err1) {
-			nearest = gains[i];
-		}
-	}
-	free(gains);
-	return nearest;
-}
-
-uint32_t rtl_find_device_by_serial(const char *s) {
-	uint32_t device_count, device;
-	char vendor[256] = {0}, product[256] = {0}, serial[256] = {0};
-	device_count = rtlsdr_get_device_count();
-	if(device_count < 1)
-		return RTL_DEV_INVALID;
-	for(uint32_t i = 0; i < device_count; i++) {
-		rtlsdr_get_device_usb_strings(i, vendor, product, serial);
-		if (strcmp(s, serial) != 0)
-			continue;
-		device = i;
-		return device;
-	}
-	return RTL_DEV_INVALID;
-}
-
-void* rtlsdr_exec(void* params) {
-	int r;
-	device_t *dev = (device_t*)params;
-
-	dev->rtlsdr = NULL;
-	rtlsdr_open(&dev->rtlsdr, dev->device);
-
-	if (NULL == dev->rtlsdr) {
-		log(LOG_ERR, "Failed to open rtlsdr device #%d.\n", dev->device);
-		error();
-		return NULL;
-	}
-	r = rtlsdr_set_sample_rate(dev->rtlsdr, SOURCE_RATE);
-	if (r < 0) log(LOG_ERR, "Failed to set sample rate for device #%d. Error %d.\n", dev->device, r);
-	r = rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);
-	if (r < 0) log(LOG_ERR, "Failed to set center freq for device #%d. Error %d.\n", dev->device, r);
-	r = rtlsdr_set_freq_correction(dev->rtlsdr, dev->correction);
-	if (r < 0 && r != -2 ) log(LOG_ERR, "Failed to set freq correction for device #%d. Error %d.\n", dev->device, r);
-
-	int ngain = nearest_gain(dev->rtlsdr, dev->gain);
-	if(ngain < 0) {
-		log(LOG_ERR, "Failed to read supported gain list for device #%d: error %d\n", dev->device, ngain);
-		_exit(1);
-	}
-	r = rtlsdr_set_tuner_gain_mode(dev->rtlsdr, 1);
-	r |= rtlsdr_set_tuner_gain(dev->rtlsdr, ngain);
-	if (r < 0)
-		log(LOG_ERR, "Failed to set gain to %0.2f for device #%d: error %d\n",
-			(float)ngain / 10.f, dev->device, r);
-	else
-		log(LOG_INFO, "Device #%d: gain set to %0.2f dB\n", dev->device,
-			(float)rtlsdr_get_tuner_gain(dev->rtlsdr) / 10.f);
-
-	r = rtlsdr_set_agc_mode(dev->rtlsdr, 0);
-	if (r < 0) log(LOG_ERR, "Failed to disable AGC for device #%d. Error %d.\n", dev->device, r);
-	rtlsdr_reset_buffer(dev->rtlsdr);
-	log(LOG_INFO, "Device %d started.\n", dev->device);
-	atomic_inc(&device_opened);
-	dev->failed = 0;
-	if(rtlsdr_read_async(dev->rtlsdr, rtlsdr_callback, params, rtlsdr_buffers, 320000) < 0) {
-		log(LOG_WARNING, "Device #%d: async read failed, disabling\n", dev->device);
-		dev->failed = 1;
-		disable_device_outputs(dev);
-		atomic_dec(&device_opened);
-	}
-	return 0;
 }
 
 void* controller_thread(void* params) {
 	device_t *dev = (device_t*)params;
 	int i = 0;
 	int consecutive_squelch_off = 0;
+	int new_centerfreq = 0;
 	struct timeval tv;
 
 	if(dev->channels[0].freq_count < 2) return 0;
@@ -213,8 +118,10 @@ void* controller_thread(void* params) {
 			} else {
 				i++; i %= dev->channels[0].freq_count;
 				dev->channels[0].freq_idx = i;
-				dev->centerfreq = dev->channels[0].freqlist[i].frequency + 2 * (double)(SOURCE_RATE / FFT_SIZE);
-				rtlsdr_set_center_freq(dev->rtlsdr, dev->centerfreq);
+				new_centerfreq = dev->channels[0].freqlist[i].frequency + 20 * (double)(dev->input->sample_rate / fft_size);
+				if(input_set_centerfreq(dev->input, new_centerfreq) < 0) {
+					break;
+				}
 			}
 		} else {
 			if(consecutive_squelch_off == 10) {
@@ -231,13 +138,13 @@ void* controller_thread(void* params) {
 	return 0;
 }
 
-#ifdef NFM
 void multiply(float ar, float aj, float br, float bj, float *cr, float *cj)
 {
 	*cr = ar*br - aj*bj;
 	*cj = aj*br + ar*bj;
 }
 
+#ifdef NFM
 float fast_atan2(float y, float x)
 {
 	float yabs, angle;
@@ -278,18 +185,18 @@ class AFC
 	const char _prev_axcindicate;
 
 #ifdef USE_BCM_VC
-	float square(const GPU_FFT_COMPLEX *fft_results, int index)
+	float square(const GPU_FFT_COMPLEX *fft_results, size_t index)
 	{
 		return fft_results[index].re * fft_results[index].re + fft_results[index].im * fft_results[index].im;
 	}
 #else
-	float square(const fftwf_complex *fft_results, int index)
+	float square(const fftwf_complex *fft_results, size_t index)
 	{
 		return fft_results[index][0] * fft_results[index][0] + fft_results[index][1] * fft_results[index][1];
 	}
 #endif
 	template <class FFT_RESULTS, int STEP>
-		int check(const FFT_RESULTS* fft_results, const int base, const float base_value, unsigned char afc)
+		size_t check(const FFT_RESULTS* fft_results, const size_t base, const float base_value, unsigned char afc)
 	{
 		float threshold = 0;
 		int bin;
@@ -298,14 +205,14 @@ class AFC
 			if (bin < -STEP)
 				break;
 
-			} else if ( (bin + STEP) >= FFT_SIZE)
+			} else if ( (size_t)(bin + STEP) >= fft_size)
 				break;
 
-			const float value = square(fft_results, bin + STEP);
+			const float value = square(fft_results, (size_t)(bin + STEP));
 			if (value <= base_value)
 				break;
 
-			if (base == bin) {
+			if (base == (size_t)bin) {
 				threshold = (value - base_value) / (float)afc;
 			} else {
 				if ((value - base_value) < threshold)
@@ -331,15 +238,15 @@ public:
 
 		const char axcindicate = channel->axcindicate;
 		if (axcindicate != ' ' && _prev_axcindicate == ' ') {
-			const int base = dev->base_bins[index];
+			const size_t base = dev->base_bins[index];
 			const float base_value = square(fft_results, base);
-			int bin = check<FFT_RESULTS, -1>(fft_results, base, base_value, channel->afc);
+			size_t bin = check<FFT_RESULTS, -1>(fft_results, base, base_value, channel->afc);
 			if (bin == base)
 				bin = check<FFT_RESULTS, 1>(fft_results, base, base_value, channel->afc);
 
 			if (dev->bins[index] != bin) {
 #ifdef AFC_LOGGING
-				log(LOG_INFO, "AFC device=%d channel=%d: base=%d prev=%d now=%d\n", dev->device, index, base, dev->bins[index], bin);
+				log(LOG_INFO, "AFC device=%d channel=%d: base=%zu prev=%zu now=%zu\n", dev->device, index, base, dev->bins[index], bin);
 #endif
 				dev->bins[index] = bin;
 				if ( bin > base )
@@ -360,52 +267,54 @@ void demodulate() {
 	fftwf_plan fft;
 	fftwf_complex* fftin;
 	fftwf_complex* fftout;
-	fftin = fftwf_alloc_complex(FFT_SIZE);
-	fftout = fftwf_alloc_complex(FFT_SIZE);
-	fft = fftwf_plan_dft_1d(FFT_SIZE, fftin, fftout, FFTW_FORWARD, FFTW_MEASURE);
+	fftin = fftwf_alloc_complex(fft_size);
+	fftout = fftwf_alloc_complex(fft_size);
+	fft = fftwf_plan_dft_1d(fft_size, fftin, fftout, FFTW_FORWARD, FFTW_MEASURE);
 #else
 	int mb = mbox_open();
 	struct GPU_FFT *fft;
-	int ret = gpu_fft_prepare(mb, FFT_SIZE_LOG, GPU_FFT_FWD, FFT_BATCH, &fft);
+	int ret = gpu_fft_prepare(mb, fft_size_log, GPU_FFT_FWD, FFT_BATCH, &fft);
 	switch (ret) {
 		case -1: log(LOG_CRIT, "Unable to enable V3D. Please check your firmware is up to date.\n"); error();
-		case -2: log(LOG_CRIT, "log2_N=%d not supported. Try between 8 and 17.\n", FFT_SIZE_LOG); error();
+		case -2: log(LOG_CRIT, "log2_N=%d not supported. Try between 8 and 17.\n", fft_size_log); error();
 		case -3: log(LOG_CRIT, "Out of memory. Try a smaller batch or increase GPU memory.\n"); error();
 	}
 #endif
 
-#ifdef NFM
-	float rotated_r, rotated_j;
-#endif
-	ALIGN float ALIGN2 levels[256];
+	float derotated_r = 0.f, derotated_j = 0.f, swf = 0.f, cwf = 0.f;
+	ALIGN float ALIGN2 levels_u8[256], levels_s8[256];
+	float *levels_ptr = NULL;
+
 	for (int i=0; i<256; i++) {
-		levels[i] = i-127.5f;
+		levels_u8[i] = i-127.5f;
+	}
+	for (int16_t i=-127; i<128; i++) {
+		levels_s8[(uint8_t)i] = i;
 	}
 
 	// initialize fft window
 	// blackman 7
 	// the whole matrix is computed
-	ALIGN float ALIGN2 window[FFT_SIZE * 2];
+	ALIGN float ALIGN2 window[fft_size * 2];
 	const double a0 = 0.27105140069342f;
 	const double a1 = 0.43329793923448f;	const double a2 = 0.21812299954311f;
 	const double a3 = 0.06592544638803f;	const double a4 = 0.01081174209837f;
 	const double a5 = 0.00077658482522f;	const double a6 = 0.00001388721735f;
 
-	for (int i = 0; i < FFT_SIZE; i++) {
-		double x = a0 - (a1 * cos((2.0 * M_PI * i) / (FFT_SIZE-1)))
-			+ (a2 * cos((4.0 * M_PI * i) / (FFT_SIZE - 1)))
-			- (a3 * cos((6.0 * M_PI * i) / (FFT_SIZE - 1)))
-			+ (a4 * cos((8.0 * M_PI * i) / (FFT_SIZE - 1)))
-			- (a5 * cos((10.0 * M_PI * i) / (FFT_SIZE - 1)))
-			+ (a6 * cos((12.0 * M_PI * i) / (FFT_SIZE - 1)));
+	for (size_t i = 0; i < fft_size; i++) {
+		double x = a0 - (a1 * cos((2.0 * M_PI * i) / (fft_size-1)))
+			+ (a2 * cos((4.0 * M_PI * i) / (fft_size - 1)))
+			- (a3 * cos((6.0 * M_PI * i) / (fft_size - 1)))
+			+ (a4 * cos((8.0 * M_PI * i) / (fft_size - 1)))
+			- (a5 * cos((10.0 * M_PI * i) / (fft_size - 1)))
+			+ (a6 * cos((12.0 * M_PI * i) / (fft_size - 1)));
 		window[i * 2] = window[i * 2 + 1] = (float)x;
 	}
 
 	struct timeval ts, te;
 	if(DEBUG)
 		gettimeofday(&ts, NULL);
-	// speed2 = number of bytes per wave sample (x 2 for I and Q)
-	int speed2 = (SOURCE_RATE * 2) / WAVE_RATE;
+	size_t available;
 	int device_num = 0;
 	while (true) {
 
@@ -418,50 +327,81 @@ void demodulate() {
 		}
 
 		device_t* dev = devices + device_num;
-		pthread_mutex_lock(&dev->buffer_lock);
-		int available = dev->bufe - dev->bufs;
-		if (available < 0) {
-			available += BUF_SIZE;
-		}
-		pthread_mutex_unlock(&dev->buffer_lock);
 
-		if(atomic_get(&device_opened)==0) {
+		pthread_mutex_lock(&dev->input->buffer_lock);
+		if(dev->input->bufe >= dev->input->bufs)
+			available = dev->input->bufe - dev->input->bufs;
+		else
+			available = dev->input->buf_size - dev->input->bufs + dev->input->bufe;
+		pthread_mutex_unlock(&dev->input->buffer_lock);
+
+		if(devices_running == 0) {
 			log(LOG_ERR, "All receivers failed, exiting\n");
 			do_exit = 1;
 			continue;
 		}
-		if (dev->failed) {
-			// move to next device
+
+		if (dev->input->state != INPUT_RUNNING) {
+			if(dev->input->state == INPUT_FAILED) {
+				dev->input->state = INPUT_DISABLED;
+				disable_device_outputs(dev);
+				devices_running--;
+			}
 			device_num = (device_num + 1) % device_count;
 			continue;
-		} else if (available < speed2 * FFT_BATCH + FFT_SIZE * 2) {
+		}
+
+// number of input bytes per output wave sample (x 2 for I and Q)
+		size_t bps = 2 * dev->input->bytes_per_sample * (size_t)round((double)dev->input->sample_rate / (double)WAVE_RATE);
+		if (available < bps * FFT_BATCH + fft_size * dev->input->bytes_per_sample * 2) {
 			// move to next device
 			device_num = (device_num + 1) % device_count;
 			SLEEP(10);
 			continue;
 		}
 
-#if defined USE_BCM_VC
-		sample_fft_arg sfa = {FFT_SIZE / 4, fft->in};
-		for (int i = 0; i < FFT_BATCH; i++) {
-			samplefft(&sfa, dev->buffer + dev->bufs + i * speed2, window, levels);
-			sfa.dest+= fft->step;
-		}
-#elif defined (__arm__) || defined (__aarch64__)
-		for (int i = 0; i < FFT_SIZE; i++) {
-			unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
-			fftin[i][0] = levels[*(buf2)] * window[i*2];
-			fftin[i][1] = levels[*(buf2+1)] * window[i*2];
-		}
-#else /* x86 */
-		for (int i = 0; i < FFT_SIZE; i += 2) {
-			unsigned char* buf2 = dev->buffer + dev->bufs + i * 2;
-			__m128 a = _mm_set_ps(levels[*(buf2 + 3)], levels[*(buf2 + 2)], levels[*(buf2 + 1)], levels[*(buf2)]);
-			__m128 b = _mm_load_ps(&window[i * 2]);
-			a = _mm_mul_ps(a, b);
-			_mm_store_ps(&fftin[i][0], a);
-		}
+		if(dev->input->sfmt == SFMT_S16) {
+#ifdef USE_BCM_VC
+			struct GPU_FFT_COMPLEX *ptr = fft->in;
+			for(size_t b = 0; b < FFT_BATCH; b++, ptr += fft->step) {
+				for(size_t i = 0; i < fft_size; i++) {
+					short *buf2 = (short *)(dev->input->buffer + dev->input->bufs + b * bps + i * dev->input->bytes_per_sample * 2);
+					ptr[i].re = (float)buf2[0] / dev->input->fullscale * 127.5f * window[i*2];
+					ptr[i].im = (float)buf2[1] / dev->input->fullscale * 127.5f * window[i*2];
+				}
+			}
+#else
+			for(size_t i = 0; i < fft_size; i++) {
+				short *buf2 = (short *)(dev->input->buffer + dev->input->bufs + i * dev->input->bytes_per_sample * 2);
+				fftin[i][0] = (float)buf2[0] / dev->input->fullscale * 127.5f * window[i*2];
+				fftin[i][1] = (float)buf2[1] / dev->input->fullscale * 127.5f * window[i*2];
+			}
 #endif
+		} else {	// S8 or U8
+			levels_ptr = (dev->input->sfmt == SFMT_U8 ? levels_u8 : levels_s8);
+#if defined USE_BCM_VC
+			sample_fft_arg sfa = {fft_size / 4, fft->in};
+			for (size_t i = 0; i < FFT_BATCH; i++) {
+				debug_print("buf: %p bufs: %zu bufe: %zu i: %zu i*bps: %d\n", dev->input->buffer, dev->input->bufs, dev->input->bufe, i, i * bps);
+				samplefft(&sfa, dev->input->buffer + dev->input->bufs + i * bps, window, levels_ptr);
+				sfa.dest+= fft->step;
+			}
+#elif defined (__arm__) || defined (__aarch64__)
+			for (size_t i = 0; i < fft_size; i++) {
+				unsigned char* buf2 = dev->input->buffer + dev->input->bufs + i * dev->input->bytes_per_sample * 2;
+				fftin[i][0] = levels_ptr[*(buf2)] * window[i*2];
+				fftin[i][1] = levels_ptr[*(buf2+1)] * window[i*2];
+			}
+#else /* x86 */
+			for (size_t i = 0; i < fft_size; i += 2) {
+				unsigned char* buf2 = dev->input->buffer + dev->input->bufs + i * dev->input->bytes_per_sample * 2;
+				__m128 a = _mm_set_ps(levels_ptr[*(buf2 + 3)], levels_ptr[*(buf2 + 2)], levels_ptr[*(buf2 + 1)], levels_ptr[*(buf2)]);
+				__m128 b = _mm_load_ps(&window[i * 2]);
+				a = _mm_mul_ps(a, b);
+				_mm_store_ps(&fftin[i][0], a);
+			}
+#endif
+		}
 #ifdef USE_BCM_VC
 		gpu_fft_execute(fft);
 #else
@@ -477,35 +417,31 @@ void demodulate() {
 			for (int j = 0; j < FFT_BATCH; j++, ++wavein, fftout+= fft->step)
 				*wavein = sqrtf(fftout->im * fftout->im + fftout->re * fftout->re);
 		}
-# ifdef NFM
 		for (int j = 0; j < dev->channel_count; j++) {
-			if(dev->channels[j].modulation == MOD_NFM) {
+			if(dev->channels[j].needs_raw_iq) {
 				struct GPU_FFT_COMPLEX *ptr = fft->out;
 				for (int job = 0; job < FFT_BATCH; job++) {
-					dev->channels[j].complex_samples[2*(dev->waveend+job)] = ptr[dev->bins[j]].re;
-					dev->channels[j].complex_samples[2*(dev->waveend+job)+1] = ptr[dev->bins[j]].im;
+					dev->channels[j].iq_in[2*(dev->waveend+job)] = ptr[dev->bins[j]].re;
+					dev->channels[j].iq_in[2*(dev->waveend+job)+1] = ptr[dev->bins[j]].im;
 					ptr += fft->step;
 				}
 			}
 		}
-# endif // NFM
 #else
 		for (int j = 0; j < dev->channel_count; j++) {
 			dev->channels[j].wavein[dev->waveend] =
 			sqrtf(fftout[dev->bins[j]][0] * fftout[dev->bins[j]][0] + fftout[dev->bins[j]][1] * fftout[dev->bins[j]][1]);
-# ifdef NFM
-			if(dev->channels[j].modulation == MOD_NFM) {
-				dev->channels[j].complex_samples[2*dev->waveend] = fftout[dev->bins[j]][0];
-				dev->channels[j].complex_samples[2*dev->waveend+1] = fftout[dev->bins[j]][1];
+			if(dev->channels[j].needs_raw_iq) {
+				dev->channels[j].iq_in[2*dev->waveend] = fftout[dev->bins[j]][0];
+				dev->channels[j].iq_in[2*dev->waveend+1] = fftout[dev->bins[j]][1];
 			}
-# endif // NFM
 		}
 #endif // USE_BCM_VC
 
 		dev->waveend += FFT_BATCH;
 
 		if (dev->waveend >= WAVE_BATCH + AGC_EXTRA) {
-			if (foreground) {
+			if (tui) {
 				GOTOXY(0, device_num * 17 + dev->row + 3);
 			}
 			for (int i = 0; i < dev->channel_count; i++) {
@@ -533,7 +469,7 @@ void demodulate() {
 					// average power
 					fparms->agcavgslow = fparms->agcavgslow * 0.99f + channel->waveref[j] * 0.01f;
 
-					float sqlevel = fparms->sqlevel > 0 ? (float)fparms->sqlevel : 3.0f * fparms->agcmin;
+					float sqlevel = fparms->sqlevel >= 0 ? (float)fparms->sqlevel : 3.0f * fparms->agcmin;
 					if (channel->agcsq > 0) {
 						channel->agcsq = max(channel->agcsq - 1, 1);
 						if (channel->agcsq == 1 && fparms->agcavgslow > sqlevel) {
@@ -570,7 +506,23 @@ void demodulate() {
 					}
 					if(channel->agcsq != -1) {
 						channel->waveout[j] = 0;
+						if(channel->has_iq_outputs) {
+							channel->iq_out[2*(j - AGC_EXTRA)] = 0;
+							channel->iq_out[2*(j - AGC_EXTRA)+1] = 0;
+						}
 					} else {
+						if(channel->needs_raw_iq) {
+// remove phase rotation introduced by FFT sliding window
+							sincosf_lut(channel->dm_phi, &swf, &cwf);
+							multiply(channel->iq_in[2*(j - AGC_EXTRA)], channel->iq_in[2*(j - AGC_EXTRA)+1],
+							cwf, -swf, &derotated_r, &derotated_j);
+							channel->dm_phi += channel->dm_dphi;
+							channel->dm_phi &= 0xffffff;
+							if(channel->has_iq_outputs) {
+								channel->iq_out[2*(j - AGC_EXTRA)] = derotated_r;
+								channel->iq_out[2*(j - AGC_EXTRA)+1] = derotated_j;
+							}
+						}
 						if(channel->modulation == MOD_AM) {
 							channel->waveout[j] = (channel->wavein[j - AGC_EXTRA] - fparms->agcavgfast) / (fparms->agcavgfast * 1.5f);
 							if (abs(channel->waveout[j]) > 0.8f) {
@@ -579,20 +531,15 @@ void demodulate() {
 							}
 						}
 #ifdef NFM
-						else {	// NFM
-							multiply(channel->complex_samples[2*(j - AGC_EXTRA)], channel->complex_samples[2*(j - AGC_EXTRA)+1],
-// FIXME: use j instead of wavecnt?
-							channel->timeref_cos[channel->wavecnt],
-							channel->timeref_nsin[channel->wavecnt],
-							&rotated_r,
-							&rotated_j);
+						else if(channel->modulation == MOD_NFM) {
+// FM demod
 							if(fm_demod == FM_FAST_ATAN2) {
-								channel->waveout[j] = polar_disc_fast(rotated_r, rotated_j, channel->pr, channel->pj);
+								channel->waveout[j] = polar_disc_fast(derotated_r, derotated_j, channel->pr, channel->pj);
 							} else if(fm_demod == FM_QUADRI_DEMOD) {
-								channel->waveout[j] = fm_quadri_demod(rotated_r, rotated_j, channel->pr, channel->pj);
+								channel->waveout[j] = fm_quadri_demod(derotated_r, derotated_j, channel->pr, channel->pj);
 							}
-							channel->pr = rotated_r;
-							channel->pj = rotated_j;
+							channel->pr = derotated_r;
+							channel->pj = derotated_j;
 // de-emphasis IIR + DC blocking
 							fparms->agcavgfast = fparms->agcavgfast * 0.995f + channel->waveout[j] * 0.005f;
 							channel->waveout[j] -= fparms->agcavgfast;
@@ -600,16 +547,11 @@ void demodulate() {
 						}
 #endif // NFM
 					}
-#ifdef NFM
-					if(channel->modulation == MOD_NFM)
-						channel->wavecnt = (channel->wavecnt + 1) % WAVE_RATE;
-#endif // NFM
 				}
-				memmove(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4);
-#ifdef NFM
-				if(channel->modulation == MOD_NFM)
-					memmove(channel->complex_samples, channel->complex_samples + 2 * WAVE_BATCH, (dev->waveend - WAVE_BATCH) * 4 * 2);
-#endif
+				memmove(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * sizeof(float));
+				if(channel->needs_raw_iq) {
+					memmove(channel->iq_in, channel->iq_in + 2 * WAVE_BATCH, (dev->waveend - WAVE_BATCH) * sizeof(float) * 2);
+				}
 
 #ifdef USE_BCM_VC
 				afc.finalize(dev, i, fft->out);
@@ -617,17 +559,17 @@ void demodulate() {
 				afc.finalize(dev, i, fftout);
 #endif
 
-				if (foreground) {
+				if (tui) {
 					if(dev->mode == R_SCAN)
 						printf("%4.0f/%3.0f%c %7.3f",
 							fparms->agcavgslow,
-							(fparms->sqlevel > 0 ? fparms->sqlevel : fparms->agcmin),
+							(fparms->sqlevel >= 0 ? fparms->sqlevel : fparms->agcmin),
 							channel->axcindicate,
 							(dev->channels[0].freqlist[channel->freq_idx].frequency / 1000000.0));
 					else
 						printf("%4.0f/%3.0f%c ",
 							fparms->agcavgslow,
-							(fparms->sqlevel > 0 ? fparms->sqlevel : fparms->agcmin),
+							(fparms->sqlevel >= 0 ? fparms->sqlevel : fparms->agcmin),
 							channel->axcindicate);
 					fflush(stdout);
 				}
@@ -647,8 +589,7 @@ void demodulate() {
 			}
 		}
 
-		dev->bufs += speed2 * FFT_BATCH;
-		if (dev->bufs >= BUF_SIZE) dev->bufs -= BUF_SIZE;
+		dev->input->bufs = (dev->input->bufs + bps * FFT_BATCH) % dev->input->buf_size;
 		device_num = (device_num + 1) % device_count;
 	}
 }
@@ -656,16 +597,28 @@ void demodulate() {
 void usage() {
 	cout<<"Usage: rtl_airband [options] [-c <config_file_path>]\n\
 \t-h\t\t\tDisplay this help text\n\
-\t-f\t\t\tRun in foreground, display textual waterfalls\n";
+\t-f\t\t\tRun in foreground, display textual waterfalls\n\
+\t-F\t\t\tRun in foreground, do not display waterfalls (for running as a systemd service)\n";
 #ifdef NFM
 	cout<<"\t-Q\t\t\tUse quadri correlator for FM demodulation (default is atan2)\n";
 #endif
 #if DEBUG
 	cout<<"\t-d <file>\t\tLog debugging information to <file> (default is "<<DEBUG_PATH<<")\n";
 #endif
+	cout<<"\t-e\t\t\tPrint messages to standard error (disables syslog logging\n";
 	cout<<"\t-c <config_file_path>\tUse non-default configuration file\n\t\t\t\t(default: "<<CFGFILE<<")\n\
 \t-v\t\t\tDisplay version and exit\n";
 	exit(EXIT_SUCCESS);
+}
+
+static int count_devices_running() {
+	int ret = 0;
+	for(int i = 0; i < device_count; i++) {
+		if(devices[i].input->state == INPUT_RUNNING) {
+			ret++;
+		}
+	}
+	return ret;
 }
 
 int main(int argc, char* argv[]) {
@@ -674,7 +627,7 @@ int main(int argc, char* argv[]) {
 	char *pidfile = PIDFILE;
 #pragma GCC diagnostic warning "-Wwrite-strings"
 	int opt;
-	char optstring[16] = "fhvc:";
+	char optstring[16] = "efFhvc:";
 
 #ifdef NFM
 	strcat(optstring, "Q");
@@ -695,8 +648,16 @@ int main(int argc, char* argv[]) {
 				debug_path = strdup(optarg);
 				break;
 #endif
+			case 'e':
+				do_syslog = 0;
+				break;
 			case 'f':
 				foreground = 1;
+				tui = 1;
+				break;
+			case 'F':
+				foreground = 1;
+				tui = 0;
 				break;
 			case 'c':
 				cfgfile = optarg;
@@ -744,12 +705,22 @@ int main(int argc, char* argv[]) {
 		Config config;
 		config.readFile(cfgfile);
 		Setting &root = config.getRoot();
-		if(root.exists("syslog")) do_syslog = root["syslog"];
 		if(root.exists("pidfile")) pidfile = strdup(root["pidfile"]);
-		if(root.exists("rtlsdr_buffers")) rtlsdr_buffers = (int)(root["rtlsdr_buffers"]);
-		if(rtlsdr_buffers < 1) {
-			cerr<<"Configuration error: rtlsdr_buffers must be greater than 0\n";
-			error();
+		if(root.exists("fft_size")) {
+			int fsize = (int)(root["fft_size"]);
+			fft_size_log = 0;
+			for(size_t i = MIN_FFT_SIZE_LOG; i <= MAX_FFT_SIZE_LOG; i++) {
+				if(fsize == 1 << i) {
+					fft_size = (size_t)fsize;
+					fft_size_log = i;
+					break;
+				}
+			}
+			if(fft_size_log == 0) {
+				cerr<<"Configuration error: invalid fft_size value (must be a power of two in range "<<
+					(1<<MIN_FFT_SIZE_LOG)<<"-"<<(1<<MAX_FFT_SIZE_LOG)<<")\n";
+				error();
+			}
 		}
 		if(root.exists("shout_metadata_delay")) shout_metadata_delay = (int)(root["shout_metadata_delay"]);
 		if(shout_metadata_delay < 0 || shout_metadata_delay > 2*TAG_QUEUE_LEN) {
@@ -780,9 +751,7 @@ int main(int argc, char* argv[]) {
 		sigaction(SIGQUIT, &sigact, NULL);
 		sigaction(SIGTERM, &sigact, NULL);
 
-		uintptr_t tempptr = (uintptr_t)XCALLOC(1, device_count * sizeof(device_t)+31);
-		tempptr &= ~0x0F;
-		devices = (device_t *)tempptr;
+		devices = (device_t *)XCALLOC(device_count, sizeof(device_t));
 		shout_init();
 		if(do_syslog) openlog("rtl_airband", LOG_PID, LOG_DAEMON);
 
@@ -803,29 +772,12 @@ int main(int argc, char* argv[]) {
 			cerr<<"Configuration error: no devices defined\n";
 			error();
 		}
+		device_count = devs_enabled;
 		debug_print("mixer_count=%d\n", mixer_count);
 		for(int z = 0; z < mixer_count; z++) {
 			mixer_t *m = &mixers[z];
 			debug_print("mixer[%d]: name=%s, input_count=%d, output_count=%d\n", z, m->name, m->input_count, m->channel.output_count);
 		}
-		uint32_t device_count2 = rtlsdr_get_device_count();
-		if (device_count2 < devs_enabled) {
-			cerr<<"Not enough devices ("<<devs_enabled<<" configured, "<<device_count2<<" detected)\n";
-			error();
-		}
-		for(uint32_t i = 0; i < devs_enabled; i++) {
-			device_t* dev = devices + i;
-			if(dev->serial != NULL) {
-				if((dev->device = rtl_find_device_by_serial(dev->serial)) == RTL_DEV_INVALID) {
-					cerr<<"Device with serial number "<<dev->serial<<" not found\n";
-					error();
-				}
-			} else if(dev->device >= device_count2) {
-				cerr<<"Specified device id "<<(int)dev->device<<" is greater or equal than number of devices ("<<device_count2<<")\n";
-				error();
-			}
-		}
-		device_count = devs_enabled;
 	} catch(FileIOException e) {
 			cerr<<"Cannot read configuration file "<<cfgfile<<"\n";
 			error();
@@ -843,6 +795,7 @@ int main(int argc, char* argv[]) {
 			error();
 	}
 
+	log(LOG_INFO, "RTLSDR-Airband version %s starting\n", RTL_AIRBAND_VERSION);
 	if(!foreground) {
 		int pid1, pid2;
 		if((pid1 = fork()) == -1) {
@@ -874,8 +827,7 @@ int main(int argc, char* argv[]) {
 				if(nullfd > 2) close(nullfd);
 				FILE *f = fopen(pidfile, "w");
 				if(f == NULL) {
-					log(LOG_CRIT, "Cannot write pidfile: %s\n", strerror(errno));
-					error();
+					log(LOG_WARNING, "Cannot write pidfile: %s\n", strerror(errno));
 				} else {
 					fprintf(f, "%ld\n", (long)getpid());
 					fclose(f);
@@ -884,7 +836,6 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
-	log(LOG_INFO, "RTLSDR-Airband version %s starting\n", RTL_AIRBAND_VERSION);
 	for (int i = 0; i < mixer_count; i++) {
 		if(mixers[i].enabled == false)
 			continue;		// no inputs connected = no need to initialize output
@@ -905,10 +856,6 @@ int main(int argc, char* argv[]) {
 	}
 	for (int i = 0; i < device_count; i++) {
 		device_t* dev = devices + i;
-		if(pthread_mutex_init(&dev->buffer_lock, NULL) != 0) {
-			cerr<<"Failed to initialize buffer mutex for device "<<i<<" - aborting\n";
-			error();
-		}
 		for (int j = 0; j < dev->channel_count; j++) {
 			channel_t* channel = dev->channels + j;
 
@@ -926,8 +873,20 @@ int main(int argc, char* argv[]) {
 				}
 			}
 		}
-		pthread_create(&dev->rtl_thread, NULL, &rtlsdr_exec, dev);
+		if(input_init(dev->input) != 0 || dev->input->state != INPUT_INITIALIZED) {
+			if(errno != 0) {
+				cerr<<"Failed to initialize input device "<<i<<": "<<strerror(errno)<<" - aborting\n";
+			} else {
+				cerr<<"Failed to initialize input device "<<i<<" - aborting\n";
+			}
+			error();
+		}
+		if(input_start(dev->input) != 0) {
+			cerr<<"Failed to start input on device "<<i<<": "<<strerror(errno)<<" - aborting\n";
+			error();
+		}
 		if(dev->mode == R_SCAN) {
+// FIXME: set errno
 			if(pthread_mutex_init(&dev->tag_queue_lock, NULL) != 0) {
 				cerr<<"Failed to initialize mutex - aborting\n";
 				error();
@@ -938,15 +897,15 @@ int main(int argc, char* argv[]) {
 	}
 
 	int timeout = 50;		// 5 seconds
-	while (atomic_get(&device_opened) != device_count && timeout > 0) {
+	while ((devices_running = count_devices_running()) != device_count && timeout > 0) {
 		SLEEP(100);
 		timeout--;
 	}
-	if(atomic_get(&device_opened) != device_count) {
-		cerr<<"Some devices failed to initialize - aborting\n";
+	if((devices_running = count_devices_running()) != device_count) {
+		log(LOG_ERR, "%d device(s) failed to initialize - aborting\n", device_count - devices_running);
 		error();
 	}
-	if (foreground) {
+	if (tui) {
 		printf("\e[1;1H\e[2J");
 
 		GOTOXY(0, 0);
@@ -972,17 +931,23 @@ int main(int argc, char* argv[]) {
 #ifdef PULSE
 	pulse_start();
 #endif
+	sincosf_lut_init();
 
 	demodulate();
 
-	log(LOG_INFO, "cleaning up\n");
+	log(LOG_INFO, "Cleaning up\n");
 	for (int i = 0; i < device_count; i++) {
-		rtlsdr_cancel_async(devices[i].rtlsdr);
-		pthread_join(devices[i].rtl_thread, NULL);
+		if(input_stop(devices[i].input) != 0 || devices[i].input->state != INPUT_STOPPED) {
+			if(errno != 0) {
+				log(LOG_ERR, "Failed do stop device #%d: %s\n", i, strerror(errno));
+			} else {
+				log(LOG_ERR, "Failed do stop device #%d\n", i);
+			}
+		}
 		if(devices[i].mode == R_SCAN)
 			pthread_join(devices[i].controller_thread, NULL);
 	}
-	log(LOG_INFO, "rtlsdr threads closed\n");
+	log(LOG_INFO, "Input threads closed\n");
 	close_debug();
 // FIXME: pulseaudio cleanup
 	return 0;

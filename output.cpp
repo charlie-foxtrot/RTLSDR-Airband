@@ -2,7 +2,7 @@
  * output.cpp
  * Output related routines
  *
- * Copyright (c) 2015-2016 Tomasz Lemiech <szpajder@gmail.com>
+ * Copyright (c) 2015-2018 Tomasz Lemiech <szpajder@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,6 +37,7 @@
 #include <ctime>
 #include <cerrno>
 #include "rtl_airband.h"
+#include "input-common.h"
 
 void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 	int ret;
@@ -71,6 +72,9 @@ void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 		shout_free(shouttemp); return;
 	}
 	if(icecast->genre && shout_set_genre(shouttemp, icecast->genre) != SHOUTERR_SUCCESS) {
+		shout_free(shouttemp); return;
+	}
+	if(icecast->description && shout_set_description(shouttemp, icecast->description) != SHOUTERR_SUCCESS) {
 		shout_free(shouttemp); return;
 	}
 	char samplerates[20];
@@ -193,7 +197,7 @@ public:
 	}
 };
 
-static int fdata_open(file_data *fdata, const char *filename, mix_modes mixmode) {
+static int fdata_open(file_data *fdata, const char *filename, mix_modes mixmode, int is_audio) {
 	fdata->f = fopen(filename, fdata->append ? "a+" : "w");
 	if(fdata->f == NULL)
 		return -1;
@@ -205,36 +209,39 @@ static int fdata_open(file_data *fdata, const char *filename, mix_modes mixmode)
 	}
 	log(LOG_INFO, "Appending from pos %llu to %s\n", (unsigned long long)st.st_size, filename);
 
-	//fill missing space with marker tones
-	LameTone lt_a(mixmode, 120, 2222);
-	LameTone lt_b(mixmode, 120, 1111);
-	LameTone lt_c(mixmode, 120, 555);
+	if(is_audio) {
+		//fill missing space with marker tones
+		LameTone lt_a(mixmode, 120, 2222);
+		LameTone lt_b(mixmode, 120, 1111);
+		LameTone lt_c(mixmode, 120, 555);
 
-	int r = lt_a.write(fdata->f);
-	if (r==0) r = lt_b.write(fdata->f);
-	if (r==0) r = lt_c.write(fdata->f);
-	if (fdata->continuous) {
-		time_t now = time(NULL);
-		if (now > st.st_mtime ) {
-			time_t delta = now - st.st_mtime;
-			if (delta > 3600) {
-				log(LOG_WARNING, "Too big time difference: %llu sec, limiting to one hour\n", (unsigned long long)delta);
-				delta = 3600;
+		int r = lt_a.write(fdata->f);
+		if (r==0) r = lt_b.write(fdata->f);
+		if (r==0) r = lt_c.write(fdata->f);
+		if (fdata->continuous) {
+			time_t now = time(NULL);
+			if (now > st.st_mtime ) {
+				time_t delta = now - st.st_mtime;
+				if (delta > 3600) {
+					log(LOG_WARNING, "Too big time difference: %llu sec, limiting to one hour\n", (unsigned long long)delta);
+					delta = 3600;
+				}
+				LameTone lt_silence(mixmode, 1000);
+				for (; (r==0 && delta > 1); --delta)
+					r = lt_silence.write(fdata->f);
 			}
-			LameTone lt_silence(mixmode, 1000);
-			for (; (r==0 && delta > 1); --delta)
-				r = lt_silence.write(fdata->f);
 		}
-	}
-	if (r==0) r = lt_c.write(fdata->f);
-	if (r==0) r = lt_b.write(fdata->f);
-	if (r==0) r = lt_a.write(fdata->f);
+		if (r==0) r = lt_c.write(fdata->f);
+		if (r==0) r = lt_b.write(fdata->f);
+		if (r==0) r = lt_a.write(fdata->f);
 
-	if (r<0) fseek(fdata->f, st.st_size, SEEK_SET);
+		if (r<0) fseek(fdata->f, st.st_size, SEEK_SET);
+	}
 	return 0;
 }
 
 unsigned char lamebuf[LAMEBUF_SIZE];
+int16_t iq_buf[2 * WAVE_BATCH];
 void process_outputs(channel_t *channel, int cur_scan_freq) {
 	int mp3_bytes = 0;
 	if(channel->need_mp3) {
@@ -247,6 +254,8 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 			lamebuf,
 			LAMEBUF_SIZE
 		);
+// FIXME: we should not return here, because there might be some non-mp3 outputs
+// which can be handled even if MP3 encoder has errored.
 		if (mp3_bytes < 0) {
 			log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n", mp3_bytes);
 			return;
@@ -281,7 +290,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 				shout_set_metadata(icecast->shout, meta);
 				shout_metadata_free(meta);
 			}
-		} else if(channel->outputs[k].type == O_FILE) {
+		} else if(channel->outputs[k].type == O_FILE || channel->outputs[k].type == O_RAWFILE) {
 			file_data *fdata = (file_data *)(channel->outputs[k].data);
 			if(fdata->continuous == false && channel->axcindicate == ' ' && channel->outputs[k].active == false) continue;
 			time_t t = time(NULL);
@@ -292,7 +301,9 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 				tmp = gmtime(&t);
 
 			char suffix[32];
-			if(strftime(suffix, sizeof(suffix), "_%Y%m%d_%H.mp3", tmp) == 0) {
+			if(strftime(suffix, sizeof(suffix),
+				channel->outputs[k].type == O_FILE ? "_%Y%m%d_%H.mp3" : "_%Y%m%d_%H.cs16",
+			tmp) == 0) {
 				log(LOG_NOTICE, "strftime returned 0\n");
 				continue;
 			}
@@ -305,7 +316,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 					fclose(fdata->f);
 					fdata->f = NULL;
 				}
-				int r = fdata_open(fdata, filename, channel->mode);
+				int r = fdata_open(fdata, filename, channel->mode, (channel->outputs[k].type == O_RAWFILE ? 0 : 1));
 				if (r<0) {
 					log(LOG_WARNING, "Cannot open output file %s (%s), output disabled\n", filename, strerror(errno));
 					channel->outputs[k].enabled = false;
@@ -314,11 +325,19 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 				}
 				free(filename);
 			}
-// mp3_bytes is signed, but we've checked for negative values earlier
-// so it's save to ignore the warning here
-#pragma GCC diagnostic ignored "-Wsign-compare"
-			if(fwrite(lamebuf, 1, mp3_bytes, fdata->f) < mp3_bytes) {
-#pragma GCC diagnostic warning "-Wsign-compare"
+			size_t buflen = 0, written = 0;
+			void *dataptr = NULL;
+			if(channel->outputs[k].type == O_FILE) {
+				dataptr = lamebuf;
+				buflen = (size_t)mp3_bytes;
+			} else if(channel->outputs[k].type == O_RAWFILE) {
+				dataptr = iq_buf;
+				buflen = 2 * WAVE_BATCH * sizeof(int16_t);
+				for(size_t k = 0; k < 2 * WAVE_BATCH; iq_buf[k] = (int16_t)(channel->iq_out[k]), k++)
+					;
+			}
+			written = fwrite(dataptr, 1, buflen, fdata->f);
+			if(written < buflen) {
 				if(ferror(fdata->f))
 					log(LOG_WARNING, "Cannot write to %s/%s%s (%s), output disabled\n",
 						fdata->dir, fdata->prefix, fdata->suffix, strerror(errno));
@@ -406,7 +425,7 @@ void* output_thread(void* params) {
 		}
 		for (int i = 0; i < device_count; i++) {
 			device_t* dev = devices + i;
-			if (!dev->failed && dev->waveavail) {
+			if (dev->input->state == INPUT_RUNNING && dev->waveavail) {
 				dev->waveavail = 0;
 				if(dev->mode == R_SCAN) {
 					tag_queue_get(dev, &tag);
@@ -443,7 +462,7 @@ void* output_check_thread(void* params) {
 				for (int k = 0; k < dev->channels[j].output_count; k++) {
 					if(dev->channels[j].outputs[k].type == O_ICECAST) {
 						icecast_data *icecast = (icecast_data *)(dev->channels[j].outputs[k].data);
-						if(dev->failed) {
+						if(dev->input->state == INPUT_FAILED) {
 							if(icecast->shout) {
 								log(LOG_WARNING, "Device #%d failed, disconnecting stream %s:%d/%s\n",
 									i, icecast->hostname, icecast->port, icecast->mountpoint);
@@ -451,7 +470,7 @@ void* output_check_thread(void* params) {
 								shout_free(icecast->shout);
 								icecast->shout = NULL;
 							}
-						} else {
+						} else if(dev->input->state == INPUT_RUNNING) {
 							if (icecast->shout == NULL){
 								log(LOG_NOTICE, "Trying to reconnect to %s:%d/%s...\n",
 									icecast->hostname, icecast->port, icecast->mountpoint);
@@ -461,11 +480,11 @@ void* output_check_thread(void* params) {
 #ifdef PULSE
 					} else if(dev->channels[j].outputs[k].type == O_PULSE) {
 						pulse_data *pdata = (pulse_data *)(dev->channels[j].outputs[k].data);
-						if(dev->failed) {
+						if(dev->input->state == INPUT_FAILED) {
 							if(pdata->context) {
 								pulse_shutdown(pdata);
 							}
-						} else {
+						} else if(dev->input->state == INPUT_RUNNING) {
 							if (pdata->context == NULL){
 								pulse_setup(pdata, dev->channels[j].mode);
 							}

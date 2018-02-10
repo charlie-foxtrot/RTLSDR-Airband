@@ -1,12 +1,12 @@
 [Unit]
 Description=SDR AM/NFM demodulator
-Documentation=https://github.com/szpajder/RTLSDR-Airband/blob/master/README.md
-Wants=network-online.target
-After=network-online.target
+Documentation=https://github.com/szpajder/RTLSDR-Airband/wiki
+Wants=network.target
+After=network.target
 
 [Service]
-Type=forking
-ExecStart=/usr/local/bin/rtl_airband
+Type=simple
+ExecStart=/usr/local/bin/rtl_airband -Fe
 # The program may exit only due to startup failure (eg. misconfiguration)
 # or due to failure of all SDR devices (eg. disconnection). In either case,
 # there is no point to restart it, because it would fail once again.

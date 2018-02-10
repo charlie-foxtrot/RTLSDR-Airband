@@ -2,7 +2,7 @@
  * util.cpp
  * Miscellaneous routines
  *
- * Copyright (c) 2015-2016 Tomasz Lemiech <szpajder@gmail.com>
+ * Copyright (c) 2015-2018 Tomasz Lemiech <szpajder@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,12 +19,14 @@
  */
 
 #include <unistd.h>
+#include <stdint.h>			// uint32_t
 #include <syslog.h>
 #include <iostream>
 #include <cstdlib>
 #include <cstdarg>
 #include <cstring>
 #include <cerrno>
+#include <cmath>
 #include <shout/shout.h>
 #include <lame/lame.h>
 #include "rtl_airband.h"
@@ -83,7 +85,7 @@ void tag_queue_put(device_t *dev, int freq, struct timeval tv) {
 	pthread_mutex_lock(&dev->tag_queue_lock);
 	dev->tq_head++; dev->tq_head %= TAG_QUEUE_LEN;
 	if(dev->tq_head == dev->tq_tail) {
-		log(LOG_WARNING, "tag_queue_put: queue overrun");
+		log(LOG_WARNING, "tag_queue_put: queue overrun\n");
 		dev->tq_tail++;
 	}
 	dev->tag_queue[dev->tq_head].freq = freq;
@@ -131,6 +133,58 @@ void *xrealloc(void *ptr, size_t size, const char *file, const int line, const c
 		error();
 	}
 	return ptr;
+}
+
+static float sin_lut[257], cos_lut[257];
+
+void sincosf_lut_init() {
+	for(uint32_t i = 0; i < 256; i++)
+		sincosf(2.0f * M_PI * (float)i / 256.0f, sin_lut + i, cos_lut + i);
+	sin_lut[256] = sin_lut[0];
+	cos_lut[256] = cos_lut[0];
+}
+
+// phi range must be (0..1), rescaled to 0x0-0xFFFFFF
+void sincosf_lut(uint32_t phi, float *sine, float *cosine) {
+	float v1, v2, fract;
+	uint32_t idx;
+// get LUT index
+	idx = phi >> 16;
+// cast fixed point fraction to float
+	fract = (float)(phi & 0xffff) / 65536.0f;
+// get two adjacent values from LUT and interpolate
+	v1 = sin_lut[idx];
+	v2 = sin_lut[idx+1];
+	*sine = v1 + (v2 - v1) * fract;
+	v1 = cos_lut[idx];
+	v2 = cos_lut[idx+1];
+	*cosine = v1 + (v2 - v1) * fract;
+}
+
+/* librtlsdr-keenerd, (c) Kyle Keen */
+double atofs(char *s) {
+	char last;
+	int len;
+	double suff = 1.0;
+	len = strlen(s);
+	last = s[len-1];
+	s[len-1] = '\0';
+	switch (last) {
+		case 'g':
+		case 'G':
+			suff *= 1e3;
+		case 'm':
+		case 'M':
+			suff *= 1e3;
+		case 'k':
+		case 'K':
+			suff *= 1e3;
+			suff *= atof(s);
+			s[len-1] = last;
+			return suff;
+	}
+	s[len-1] = last;
+	return atof(s);
 }
 
 // vim: ts=4

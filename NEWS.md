@@ -1,6 +1,44 @@
 NEWS:
 
-Version 2.4.0:
+Version 3.0.0 (Feb 10, 2018):
+ * Major overhaul of the SDR input code - now it's modular and
+   hardware-agnostic (no longer tightly coupled with librtlsdr).
+ * Support for SoapySDR vendor-neutral SDR library - any SDR which has
+   a plugin for SoapySDR shall now work in RTLSDR-Airband.
+ * Support for Mirics DVB-T dongles via libmirisdr-4 library.
+ * Support for RTLSDR is now optional and can be disabled at compilation
+   stage.
+ * Removed the 8-channels-per-device limit in multichannel mode.
+ * Configurable per-device sampling rate.
+ * Configurable FFT size.
+ * Support for multibyte input samples.
+ * Support for rawfile outputs (ie. writing raw I/Q data from a
+   narrowband channel to a file for processing with other programs,
+   line GNUradio or csdr).
+ * INCOMPATIBLE CHANGE: removed `rtlsdr_buffers` global configuration
+   option; buffer count can now be adjusted with a per-device
+   "buffers" option.
+ * INCOMPATIBLE CHANGE: removed `syslog` global configuration option;
+   syslog logging is now enabled by default, both in foreground and
+   background mode. To force logging to standard error, use -e command
+   line option.
+ * Added -F command line option for better cooperation with systemd.
+   Runs the program in foreground, but without textual waterfalls.
+   Together with -e it allows running rtl_airband as a service of type
+   "simple" under systemd. Example rtl_airband.service file has been
+   adjusted to reflect this change.
+ * Added `type` device configuration option. It sets the device type
+   (ie. the input driver which shall be used to talk to the device).
+   "rtlsdr" is assumed as a default type for backward compatibility.
+   If RTLSDR support has been disabled at compilation stage, then
+   there is no default type - it must be set manually, or the program
+   will throw an error on startup.
+ * Frequencies in the config can now be expressed in Hz, kHz, MHz or GHz
+   for improved readability.
+ * Lots of bugfixes.
+ * Rewritten documentation on [Github Wiki](https://github.com/szpajder/RTLSDR-Airband/wiki).
+
+Version 2.4.0 (Oct 15, 2017):
  * Support for PulseAudio output via new output type `pulse`. With this
    feature you can eg. play the sound via the soundcard of the Raspberry
    Pi you run RTLSDR-Airband on (you need to install and run pulseaudio
@@ -34,7 +72,7 @@ Version 2.4.0:
  * Bug fixes, performance improvements.
  * Decluttered and more understandable documentation.
 
-Version 2.3.0:
+Version 2.3.0 (Jan 2, 2017):
  * Added support for mixers. It is now possible to produce audio streams
    combined from several input channels. Both mono and stereo mixing is
    supported. Usage example is provided in config/mixers.conf. All
@@ -53,30 +91,30 @@ Version 2.3.0:
    still an interim solution before some more readable and understandable
    documentation gets written.
 
-Version 2.2.0:
+Version 2.2.0 (Oct 8, 2016):
  * Support for Icecast stream metadata updates in scanning mode. When enabled,
    every time the scanner stops on a channel, current frequency is written into
    Icecast song title, which in turn is displayed in the player. Alternatively,
    textual labels can be configured for each frequency. It is possible
    to configure the amount of delay between the stream and metadata updates to
-   synchronize them with the audio. There are some caveats however - read 
+   synchronize them with the audio. There are some caveats however - read
    comments in rtl_airband.conf.example for details.
- * Added global option 'localtime'. When enabled, rtl_airband uses local time 
+ * Added global option 'localtime'. When enabled, rtl_airband uses local time
    instead of UTC time for output file names. (Credit: ScanOC).
- * Auto gain feature removed. RTL auto gain does not work well for narrowband 
-   channels. Most often it sets the gain too high which causes problems for 
-   auto squelch and audio bleeding between adjacent channels. Gain must be 
+ * Auto gain feature removed. RTL auto gain does not work well for narrowband
+   channels. Most often it sets the gain too high which causes problems for
+   auto squelch and audio bleeding between adjacent channels. Gain must be
    configured manually from now on.
  * Dropped unmaintained Windows build.
  * Reverted to power level calculation algorithm from version 2.0.2. The new
-   algo didn't really do much to sensitivity, but introduced annoying clicks 
+   algo didn't really do much to sensitivity, but introduced annoying clicks
    on squelch open/close.
  * Improved DC offset estimator for AM mode. This one hardly ever clicks
    on squelch opening.
  * Boosted AM audio volume.
  * Reduced squelch flapping in NFM mode.
 
-Version 2.1.0:
+Version 2.1.0 (Aug 11, 2016):
  * Narrowband FM demodulation support
  * Automatic Frequency Control
  * Append mode for recording (enabled by default)
@@ -88,13 +126,13 @@ Version 2.1.0:
  * Support for manual squelch setting
  * Bug fixes
 
-Version 2.0.2:
+Version 2.0.2 (Mar 26, 2016):
  * Fixed a problem with running three dongles or more, simultaneously
 
-Version 2.0.1:
+Version 2.0.1 (Jan 24, 2016):
  * Fixed crash on output initialization
 
-Version 2.0.0:
+Version 2.0.0 (Dec 27, 2015):
  * New libconfig-style config file format
  * util/convert_cfg: can be used to convert old-style config.txt to the new format
  * Syslog logging (enabled by default)
@@ -109,7 +147,7 @@ Version 2.0.0:
  * Updated documentation
  * Numerous bugfixes and stability improvements
 
-Version 1.0.0:
+Version 1.0.0 (May 12, 2015):
  * Linux x86/x86_64 support (Windows build is currently unmaintained and might not work)
  * Raspberry Pi V2 support
  * Bundled hello_fft code (v2.0)

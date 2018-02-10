@@ -26,7 +26,7 @@ BIN = rtl_airband
 OBJ = rtl_airband.o input-common.o input-helpers.o output.o config.o util.o mixer.o
 FFT = hello_fft/hello_fft.a
 
-.PHONY: all clean install $(SUBDIRS) $(CLEANDIRS)
+.PHONY: all clean install help $(SUBDIRS) $(CLEANDIRS)
 
 UNKNOWN_PLATFORM = 0
 ifeq ($(PLATFORM), rpiv1)
@@ -97,6 +97,10 @@ endif
 
 $(BIN): $(DEPS)
 ifndef DEPS
+	$(MAKE) help
+endif
+
+help:
 	@printf "\nPlease set PLATFORM variable to one of available platforms:\n \
 	\tPLATFORM=rpiv1 make\t\tRaspberry Pi V1 (VFP FPU, use BCM VideoCore for FFT)\n \
 	\tPLATFORM=rpiv2 make\t\tRaspberry Pi V2 (NEON FPU, use BCM VideoCore for FFT)\n \
@@ -112,8 +116,6 @@ ifndef DEPS
 	\t\t\t\t\tWarning: this incurs noticeable performance penalty both for AM and FM\n \
 	\t\t\t\t\tDo not enable NFM, if you only use AM (especially on low-power platforms, like RPi)\n \
 	\tPULSE=1\t\t\t\tInclude support for streaming to PulseAudio server\n\n"
-	@false
-endif
 
 $(FFT):	hello_fft ;
 

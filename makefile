@@ -28,6 +28,7 @@ FFT = hello_fft/hello_fft.a
 
 .PHONY: all clean install $(SUBDIRS) $(CLEANDIRS)
 
+UNKNOWN_PLATFORM = 0
 ifeq ($(PLATFORM), rpiv1)
   CFLAGS += -DUSE_BCM_VC
   CFLAGS += -I/opt/vc/include  -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux
@@ -60,7 +61,7 @@ else ifeq ($(PLATFORM), x86-freebsd)
   DEPS = $(OBJ)
   INSTALL_GROUP = wheel
 else
-  DEPS =
+  UNKNOWN_PLATFORM = 1
 endif
 ifeq ($(NFM), 1)
   CFLAGS += -DNFM
@@ -88,6 +89,10 @@ ifeq ($(WITH_SOAPYSDR), 1)
   CFLAGS += -DWITH_SOAPYSDR
   DEPS += input-soapysdr.o
   LDLIBS += -lSoapySDR
+endif
+
+ifeq ($(UNKNOWN_PLATFORM),1)
+  DEPS =
 endif
 
 $(BIN): $(DEPS)

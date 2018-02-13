@@ -382,7 +382,6 @@ void demodulate() {
 #if defined USE_BCM_VC
 			sample_fft_arg sfa = {fft_size / 4, fft->in};
 			for (size_t i = 0; i < FFT_BATCH; i++) {
-				debug_print("buf: %p bufs: %zu bufe: %zu i: %zu i*bps: %d\n", dev->input->buffer, dev->input->bufs, dev->input->bufe, i, i * bps);
 				samplefft(&sfa, dev->input->buffer + dev->input->bufs + i * bps, window, levels_ptr);
 				sfa.dest+= fft->step;
 			}

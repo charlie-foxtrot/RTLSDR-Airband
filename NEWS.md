@@ -1,5 +1,9 @@
 NEWS:
 
+Version 3.0.1 (Feb 16, 2018)
+ * Fix for squelch staying constantly open when configured manually
+   with NFM=off (#84)
+
 Version 3.0.0 (Feb 10, 2018):
  * Major overhaul of the SDR input code - now it's modular and
    hardware-agnostic (no longer tightly coupled with librtlsdr).

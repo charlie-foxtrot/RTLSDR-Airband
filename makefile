@@ -9,7 +9,7 @@ export DEBUG ?= 0
 export WITH_RTLSDR ?= 1
 export CC = g++
 export CFLAGS = -O3 -g -Wall -DSYSCONFDIR=\"$(SYSCONFDIR)\" -DDEBUG=$(DEBUG)
-RTL_AIRBAND_VERSION:=\"$(shell git describe --always --tags --dirty)\"
+RTL_AIRBAND_VERSION:=\"$(shell git describe --always --tags --dirty 2>/dev/null)\"
 ifneq ($(RTL_AIRBAND_VERSION), \"\")
   CFLAGS+=-DRTL_AIRBAND_VERSION=$(RTL_AIRBAND_VERSION)
 endif

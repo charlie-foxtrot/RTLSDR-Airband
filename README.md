@@ -1,7 +1,7 @@
 RTLSDR-Airband
 =====================
 
-**Current stable release: [3.0.0](https://github.com/szpajder/RTLSDR-Airband/releases/latest)** (released February 10, 2018)
+**Current stable release: [3.0.1](https://github.com/szpajder/RTLSDR-Airband/releases/latest)** (released February 16, 2018)
 
 RTLSDR-Airband receives analog radio voice channels and produces
 audio streams which can be routed to various outputs, such as online

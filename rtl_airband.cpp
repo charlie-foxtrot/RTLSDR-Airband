@@ -492,7 +492,7 @@ void demodulate() {
 							fparms->agclow++;
 						}
 						channel->agcsq = min(channel->agcsq + 1, -1);
-						if (fparms->agclow == AGC_EXTRA - 12) {
+						if ((channel->agcsq == -1 && fparms->agcavgslow < sqlevel) || fparms->agclow == AGC_EXTRA - 12) {
 							channel->agcsq = AGC_EXTRA * 2;
 							channel->axcindicate = ' ';
 							if(channel->modulation == MOD_AM) {

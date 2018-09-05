@@ -46,7 +46,13 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <fcntl.h>
+
+#ifndef __MINGW32__
 #include <sys/wait.h>
+#else
+#include <windows.h>
+#endif
+
 #include <algorithm>
 #include <csignal>
 #include <cstdarg>
@@ -97,10 +103,22 @@ char *debug_path;
 pthread_cond_t	mp3_cond = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t	mp3_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+#ifndef __MINGW32__
 void sighandler(int sig) {
 	log(LOG_NOTICE, "Got signal %d, exiting\n", sig);
 	do_exit = 1;
 }
+#else
+BOOL WINAPI sighandler(int signum) {
+	if (CTRL_C_EVENT == signum) {
+		fprintf(stderr, "Signal caught, exiting!\n");
+		do_exit = 1;
+		return TRUE;
+	}
+	return FALSE;
+}
+#endif
+
 
 void* controller_thread(void* params) {
 	device_t *dev = (device_t*)params;
@@ -738,6 +756,8 @@ int main(int argc, char* argv[]) {
 			cerr<<"Configuration error: no devices defined\n";
 			error();
 		}
+
+#ifndef __MINGW32__
 		struct sigaction sigact, pipeact;
 
 		memset(&sigact, 0, sizeof(sigact));
@@ -749,6 +769,9 @@ int main(int argc, char* argv[]) {
 		sigaction(SIGINT, &sigact, NULL);
 		sigaction(SIGQUIT, &sigact, NULL);
 		sigaction(SIGTERM, &sigact, NULL);
+#else
+		SetConsoleCtrlHandler( (PHANDLER_ROUTINE) sighandler, TRUE );
+#endif
 
 		devices = (device_t *)XCALLOC(device_count, sizeof(device_t));
 		shout_init();
@@ -795,6 +818,8 @@ int main(int argc, char* argv[]) {
 	}
 
 	log(LOG_INFO, "RTLSDR-Airband version %s starting\n", RTL_AIRBAND_VERSION);
+
+#ifndef __MINGW32__ // Fork Were Nowhere Near the Windows
 	if(!foreground) {
 		int pid1, pid2;
 		if((pid1 = fork()) == -1) {
@@ -834,6 +859,7 @@ int main(int argc, char* argv[]) {
 			}
 		}
 	}
+#endif
 
 	for (int i = 0; i < mixer_count; i++) {
 		if(mixers[i].enabled == false)

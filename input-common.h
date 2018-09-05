@@ -21,7 +21,12 @@
 #define _INPUT_COMMON_H 1
 #include <pthread.h>
 #include <libconfig.h++>
+
+#ifndef __MINGW32__
 #define MODULE_EXPORT extern "C"
+#else
+#define MODULE_EXPORT extern "C" __declspec(dllexport)
+#endif
 
 typedef enum {
 	SFMT_UNDEF = 0,

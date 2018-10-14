@@ -57,6 +57,11 @@ static bool soapysdr_match_sfmt(input_t * const input, char const * const fmt, d
 		input->bytes_per_sample = sizeof(short);
 		input->fullscale = (fullscale > 0 ? fullscale : (float)SHRT_MAX - 0.5f);
 		goto matched;
+	} else if(strcmp(fmt, SOAPY_SDR_CF32) == 0) {
+		input->sfmt = SFMT_F32;
+		input->bytes_per_sample = sizeof(float);
+		input->fullscale = (fullscale > 0 ? fullscale : 1.0f);
+		goto matched;
 	}
 	return false;
 matched:

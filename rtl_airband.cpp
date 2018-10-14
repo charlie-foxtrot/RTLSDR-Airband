@@ -395,6 +395,23 @@ void demodulate() {
 				fftin[i][1] = (float)buf2[1] / dev->input->fullscale * 127.5f * window[i*2];
 			}
 #endif
+		} else if(dev->input->sfmt == SFMT_F32) {
+#ifdef USE_BCM_VC
+			struct GPU_FFT_COMPLEX *ptr = fft->in;
+			for(size_t b = 0; b < FFT_BATCH; b++, ptr += fft->step) {
+				for(size_t i = 0; i < fft_size; i++) {
+					float *buf2 = (float *)(dev->input->buffer + dev->input->bufs + b * bps + i * dev->input->bytes_per_sample * 2);
+					ptr[i].re = buf2[0] / dev->input->fullscale * 127.5f * window[i*2];
+					ptr[i].im = buf2[1] / dev->input->fullscale * 127.5f * window[i*2];
+				}
+			}
+#else
+			for(size_t i = 0; i < fft_size; i++) {
+				float *buf2 = (float *)(dev->input->buffer + dev->input->bufs + i * dev->input->bytes_per_sample * 2);
+				fftin[i][0] = buf2[0] / dev->input->fullscale * 127.5f * window[i*2];
+				fftin[i][1] = buf2[1] / dev->input->fullscale * 127.5f * window[i*2];
+			}
+#endif
 		} else {	// S8 or U8
 			levels_ptr = (dev->input->sfmt == SFMT_U8 ? levels_u8 : levels_s8);
 #if defined USE_BCM_VC

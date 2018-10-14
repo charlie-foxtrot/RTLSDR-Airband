@@ -32,9 +32,10 @@ typedef enum {
 	SFMT_UNDEF = 0,
 	SFMT_U8,
 	SFMT_S8,
-	SFMT_S16
+	SFMT_S16,
+	SFMT_F32
 } sample_format_t;
-#define SAMPLE_FORMAT_CNT 4
+#define SAMPLE_FORMAT_CNT 5
 
 typedef enum {
 	INPUT_UNKNOWN = 0,

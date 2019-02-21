@@ -204,6 +204,8 @@ struct channel_t {
 	int has_iq_outputs;
 	enum ch_states state;		// mixer channel state flag
 	output_t *outputs;
+	int highpass;               // highpass filter cutoff
+	int lowpass;                // lowpass filter cutoff
 	lame_t lame;
 };
 
@@ -249,7 +251,7 @@ struct mixer_t {
 };
 
 // output.cpp
-lame_t airlame_init(mix_modes mixmode);
+lame_t airlame_init(mix_modes mixmode, int highpass, int lowpass);
 void shout_setup(icecast_data *icecast, mix_modes mixmode);
 void disable_device_outputs(device_t *dev);
 void disable_channel_outputs(channel_t *channel);

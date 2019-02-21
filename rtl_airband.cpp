@@ -840,7 +840,7 @@ int main(int argc, char* argv[]) {
 			continue;		// no inputs connected = no need to initialize output
 		channel_t *channel = &mixers[i].channel;
 		if(channel->need_mp3)
-			channel->lame = airlame_init(mixers[i].channel.mode);
+			channel->lame = airlame_init(mixers[i].channel.mode, 0, 0);
 		for (int k = 0; k < channel->output_count; k++) {
 			output_t *output = channel->outputs + k;
 			if(output->type == O_ICECAST) {
@@ -859,7 +859,7 @@ int main(int argc, char* argv[]) {
 			channel_t* channel = dev->channels + j;
 
 			if(channel->need_mp3)
-				channel->lame = airlame_init(channel->mode);
+				channel->lame = airlame_init(channel->mode, channel->highpass, channel->lowpass);
 			for (int k = 0; k < channel->output_count; k++) {
 				output_t *output = channel->outputs + k;
 				if(output->type == O_ICECAST) {

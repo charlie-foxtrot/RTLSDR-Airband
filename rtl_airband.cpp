@@ -86,6 +86,7 @@ int do_syslog = 1;
 int shout_metadata_delay = 3;
 volatile int do_exit = 0;
 bool use_localtime = false;
+bool syslog_opened_squelch = false;
 size_t fft_size_log = DEFAULT_FFT_SIZE_LOG;
 size_t fft_size = 1 << fft_size_log;
 #ifdef NFM
@@ -143,6 +144,8 @@ void* controller_thread(void* params) {
 			}
 		} else {
 			if(consecutive_squelch_off == 10) {
+				if(syslog_opened_squelch)
+					log(LOG_INFO, "Squelch opened on %7.3f\n", dev->channels[0].freqlist[i].frequency / 1000000.0);
 				if(i != dev->last_frequency) {
 // squelch has just opened on a new frequency - we might need to update outputs' metadata
 					gettimeofday(&tv, NULL);
@@ -763,6 +766,8 @@ int main(int argc, char* argv[]) {
 		}
 		if(root.exists("localtime") && (bool)root["localtime"] == true)
 			use_localtime = true;
+		if(root.exists("syslog_opened_squelch") && (bool)root["syslog_opened_squelch"] == true)
+                        syslog_opened_squelch = true;
 #ifdef NFM
 		if(root.exists("tau"))
 			alpha = ((int)root["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)root["tau"])));

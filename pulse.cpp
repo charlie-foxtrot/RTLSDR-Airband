@@ -176,7 +176,7 @@ void pulse_init() {
 }
 
 int pulse_setup(pulse_data *pdata, mix_modes mixmode) {
-	if(!(pdata->context = pa_context_new(pa_threaded_mainloop_get_api(mainloop), "rtl_airband"))) {
+	if(!(pdata->context = pa_context_new(pa_threaded_mainloop_get_api(mainloop), pdata->name))) {
 		log(LOG_ERR, "%s", "pulse: failed to create context\n");
 		return -1;
 	}

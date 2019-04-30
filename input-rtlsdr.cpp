@@ -196,10 +196,6 @@ int rtlsdr_parse_config(input_t * const input, libconfig::Setting &cfg) {
 		cerr<<"RTLSDR configuration error: gain is not configured\n";
 		error();
 	}
-	if(dev_data->gain < 0) {
-		cerr<<"RTLSDR configuration error: gain value must be positive\n";
-		error();
-	}
 	if(cfg.exists("correction")) {
 		dev_data->correction = (int)cfg["correction"];
 	}

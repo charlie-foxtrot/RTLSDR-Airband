@@ -32,4 +32,5 @@ typedef struct {
 	double correction;	// PPM correction
 	double gain;		// gain in dB
 	size_t channel;		// HW channel number
+	bool agc;		// enable AGC
 } soapysdr_dev_data_t;

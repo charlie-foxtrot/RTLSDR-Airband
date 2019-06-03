@@ -172,10 +172,9 @@ int soapysdr_parse_config(input_t * const input, libconfig::Setting &cfg) {
 				error();
 			}
 		}
+		dev_data->agc = false;
 	} else {
-		cerr<<"SoapySDR configuration error: device '"<<dev_data->device_string<<
-			"': gain is not configured\n";
-		error();
+		dev_data->agc = true;
 	}
 	if(cfg.exists("correction")) {
 		if(cfg["correction"].getType() == libconfig::Setting::TypeInt) {
@@ -266,32 +265,37 @@ int soapysdr_init(input_t * const input) {
 		log(LOG_INFO, "SoapySDR: device '%s': antenna set to '%s'\n",
 		dev_data->device_string, SoapySDRDevice_getAntenna(sdr, SOAPY_SDR_RX, dev_data->channel));
 	}
-	if(SoapySDRDevice_setGainMode(sdr, SOAPY_SDR_RX, dev_data->channel, false) != 0) {
-		log(LOG_ERR, "Failed to set gain mode to manual for SoapySDR device '%s': %s\n",
-			dev_data->device_string, SoapySDRDevice_lastError());
+	if(SoapySDRDevice_setGainMode(sdr, SOAPY_SDR_RX, dev_data->channel, dev_data->agc) != 0) {
+		log(LOG_ERR, "Failed to %s AGC for SoapySDR device '%s': %s\n",
+			dev_data->agc ? "enable" : "disable", dev_data->device_string, SoapySDRDevice_lastError());
 		error();
 	}
-	if(dev_data->gains.size > 0) {
-		for(size_t i = 0; i < dev_data->gains.size; i++) {
-			char * const key = dev_data->gains.keys[i];
-			double val = atof(dev_data->gains.vals[i]);
-			if(SoapySDRDevice_setGainElement(sdr, SOAPY_SDR_RX, dev_data->channel, key, val) != 0) {
-				log(LOG_ERR, "Failed to set gain element '%s' for SoapySDR device '%s': %s\n",
-				    key, dev_data->device_string, SoapySDRDevice_lastError());
+	log(LOG_INFO, "SoapySDR: device '%s': AGC %s (requested: %s)\n", dev_data->device_string,
+		SoapySDRDevice_getGainMode(sdr, SOAPY_SDR_RX, dev_data->channel) ? "on" : "off",
+		dev_data->agc ? "on" : "off");
+	if(!dev_data->agc) {
+		if(dev_data->gains.size > 0) {
+			for(size_t i = 0; i < dev_data->gains.size; i++) {
+				char * const key = dev_data->gains.keys[i];
+				double val = atof(dev_data->gains.vals[i]);
+				if(SoapySDRDevice_setGainElement(sdr, SOAPY_SDR_RX, dev_data->channel, key, val) != 0) {
+					log(LOG_ERR, "Failed to set gain element '%s' for SoapySDR device '%s': %s\n",
+					    key, dev_data->device_string, SoapySDRDevice_lastError());
+					error();
+				}
+				log(LOG_INFO, "SoapySDR: device '%s': gain '%s' set to %.1f dB\n",
+				    dev_data->device_string, key,
+				    SoapySDRDevice_getGainElement(sdr, SOAPY_SDR_RX, dev_data->channel, key));
+			}
+		} else {
+			if(SoapySDRDevice_setGain(sdr, SOAPY_SDR_RX, dev_data->channel, dev_data->gain) != 0) {
+				log(LOG_ERR, "Failed to set gain for SoapySDR device '%s': %s\n",
+					dev_data->device_string, SoapySDRDevice_lastError());
 				error();
 			}
-			log(LOG_INFO, "SoapySDR: device '%s': gain '%s' set to %.1f dB\n",
-			    dev_data->device_string, key,
-			    SoapySDRDevice_getGainElement(sdr, SOAPY_SDR_RX, dev_data->channel, key));
+			log(LOG_INFO, "SoapySDR: device '%s': gain set to %.1f dB\n",
+				dev_data->device_string, SoapySDRDevice_getGain(sdr, SOAPY_SDR_RX, dev_data->channel));
 		}
-	} else {
-		if(SoapySDRDevice_setGain(sdr, SOAPY_SDR_RX, dev_data->channel, dev_data->gain) != 0) {
-			log(LOG_ERR, "Failed to set gain for SoapySDR device '%s': %s\n",
-				dev_data->device_string, SoapySDRDevice_lastError());
-			error();
-		}
-		log(LOG_INFO, "SoapySDR: device '%s': gain set to %.1f dB\n",
-			dev_data->device_string, SoapySDRDevice_getGain(sdr, SOAPY_SDR_RX, dev_data->channel));
 	}
 	log(LOG_INFO, "SoapySDR: device '%s' initialized\n", dev_data->device_string);
 	return 0;
@@ -360,6 +364,7 @@ int soapysdr_set_centerfreq(input_t * const input, int const centerfreq) {
 MODULE_EXPORT input_t *soapysdr_input_new() {
 	soapysdr_dev_data_t *dev_data = (soapysdr_dev_data_t *)XCALLOC(1, sizeof(soapysdr_dev_data_t));
 	dev_data->gain = -1.0;	// invalid default gain value
+	dev_data->agc = false;
 	memset(&dev_data->gains, 0, sizeof(dev_data->gains));
 	dev_data->channel = 0;
 	dev_data->antenna = NULL;

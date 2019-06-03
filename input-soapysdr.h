@@ -31,5 +31,5 @@ typedef struct {
 	SoapySDRKwargs gains;		// gain elements and their values
 	double correction;	// PPM correction
 	double gain;		// gain in dB
-	int channel;		// HW channel number
+	size_t channel;		// HW channel number
 } soapysdr_dev_data_t;

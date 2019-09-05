@@ -94,8 +94,9 @@ void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 		log(LOG_NOTICE, "Connecting to %s:%d/%s...\n",
 			icecast->hostname, icecast->port, icecast->mountpoint);
 
-	while (ret == SHOUTERR_BUSY) {
-		usleep(10000);
+	int shout_timeout = 30 * 5;		// 30 * 5 * 200ms = 30s
+	while (ret == SHOUTERR_BUSY && shout_timeout-- > 0) {
+		SLEEP(200);
 		ret = shout_get_connected(shouttemp);
 	}
 
@@ -108,6 +109,7 @@ void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 		log(LOG_WARNING, "Could not connect to %s:%d/%s\n",
 			icecast->hostname, icecast->port, icecast->mountpoint);
 		shout_free(shouttemp);
+		shout_close(shouttemp);
 		return;
 	}
 }

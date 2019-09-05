@@ -108,8 +108,8 @@ void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 	} else {
 		log(LOG_WARNING, "Could not connect to %s:%d/%s\n",
 			icecast->hostname, icecast->port, icecast->mountpoint);
-		shout_free(shouttemp);
 		shout_close(shouttemp);
+		shout_free(shouttemp);
 		return;
 	}
 }

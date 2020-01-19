@@ -26,7 +26,7 @@ of RTLSDR-Airband. Special thanks go to:
 
 License
 --------------------
-Copyright (C) 2015-2018 Tomasz Lemiech <szpajder@gmail.com>
+Copyright (C) 2015-2020 Tomasz Lemiech <szpajder@gmail.com>
 
 Based on original work by Wong Man Hang <microtony@gmail.com>
 

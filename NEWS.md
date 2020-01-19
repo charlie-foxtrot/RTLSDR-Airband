@@ -1,5 +1,24 @@
 NEWS:
 
+Version 3.1.0 (Jan 19, 2020)
+ * SoapySDR: added support for complex float 32-bit samples
+ * SoapySDR: allow using AGC if the device supports it. Gain setting for
+   soapy devices is now optional - if it's not specified, the program will
+   try to enable AGC.
+ * Use lowpass/highpass filters provided by LAME library to improve audio
+   quality of MP3 streams. Filter cutoff frequencies may be configured per
+   output, using `highpass` and `lowpass` config options. Credit: clydebarrow.
+ * Added `log_scan_activity` global config option. When set to `true`, a
+   log message is written whenever a squelch opens on a scanned channel,
+   effectively producing a channel activity log. Credit: clam-i-am.
+ * Improved squelch behaviour in some corner cases.
+ * Fix for incorrect naming of pulseaudio context. Name set in the config
+   was not used as it should. Credit: Darryl Pogue.
+ * Don't fail when the configured gain value is negative. Some SDRs support
+   this (eg. FC0012-based dongles).
+ * Fix a bug which in some cases could prevent the icecast output from
+   reconnecting with the Icecast server after the connection has failed.
+
 Version 3.0.1 (Feb 16, 2018)
  * Fix for squelch staying constantly open when configured manually
    with NFM=off (#84)

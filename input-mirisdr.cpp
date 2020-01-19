@@ -2,7 +2,7 @@
  *  input-mirisdr.cpp
  *  MiriSDR-specific routines
  *
- *  Copyright (c) 2015-2018 Tomasz Lemiech <szpajder@gmail.com>
+ *  Copyright (c) 2015-2020 Tomasz Lemiech <szpajder@gmail.com>
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by

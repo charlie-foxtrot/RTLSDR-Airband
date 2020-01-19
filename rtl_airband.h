@@ -2,7 +2,7 @@
  * rtl_airband.h
  * Global declarations
  *
- * Copyright (c) 2015-2018 Tomasz Lemiech <szpajder@gmail.com>
+ * Copyright (c) 2015-2020 Tomasz Lemiech <szpajder@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,7 +37,7 @@
 #include "input-common.h"	// input_t
 
 #ifndef RTL_AIRBAND_VERSION
-#define RTL_AIRBAND_VERSION "3.0.1"
+#define RTL_AIRBAND_VERSION "3.1.0"
 #endif
 #define ALIGN
 #define ALIGN2 __attribute__((aligned(32)))

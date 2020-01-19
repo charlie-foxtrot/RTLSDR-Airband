@@ -41,30 +41,31 @@ static void mirisdr_callback(unsigned char *buf, uint32_t len, void *ctx) {
 	circbuffer_append(input, buf, (size_t)len);
 }
 
-/* taken from libmirisdr-keenerd, (c) Kyle Keen */
-static int mirisdr_nearest_gain(mirisdr_dev_t *dev, int target_gain) {
-	int i, r, err1, err2, count, nearest;
+/* based on librtlsdr-keenerd, (c) Kyle Keen */
+static bool mirisdr_nearest_gain(mirisdr_dev_t *dev, int target_gain, int *nearest) {
+	assert(nearest != NULL);
+	int i, r, err1, err2, count;
 	int *gains;
 	r = mirisdr_set_tuner_gain_mode(dev, 1);
 	if (r < 0) {
-		return r;
+		return false;
 	}
 	count = mirisdr_get_tuner_gains(dev, NULL);
 	if (count <= 0) {
-		return -1;
+		return false;
 	}
 	gains = (int *)XCALLOC(count, sizeof(int));
 	count = mirisdr_get_tuner_gains(dev, gains);
-	nearest = gains[0];
+	*nearest = gains[0];
 	for (i = 0; i < count; i++) {
-		err1 = abs(target_gain - nearest);
+		err1 = abs(target_gain - *nearest);
 		err2 = abs(target_gain - gains[i]);
 		if (err2 < err1) {
-			nearest = gains[i];
+			*nearest = gains[i];
 		}
 	}
 	free(gains);
-	return nearest;
+	return true;
 }
 
 static int mirisdr_find_device_by_serial(char const * const s) {
@@ -117,9 +118,9 @@ int mirisdr_init(input_t * const input) {
 		log(LOG_ERR, "Failed to set center freq for device #%d. Error %d.\n", dev_data->index, r);
 	}
 
-	int ngain = mirisdr_nearest_gain(miri, dev_data->gain);
-	if(ngain < 0) {
-		log(LOG_ERR, "Failed to read supported gain list for device #%d: error %d\n", dev_data->index, ngain);
+	int ngain = 0;
+	if(mirisdr_nearest_gain(miri, dev_data->gain, &ngain) != true) {
+		log(LOG_ERR, "Failed to read supported gain list for device #%d\n", dev_data->index);
 		error();
 	}
 	r = mirisdr_set_tuner_gain_mode(miri, 1);
@@ -191,10 +192,6 @@ int mirisdr_parse_config(input_t * const input, libconfig::Setting &cfg) {
 		dev_data->gain = (int)cfg["gain"];
 	} else {
 		cerr<<"MiriSDR configuration error: gain is not configured\n";
-		error();
-	}
-	if(dev_data->gain < 0) {
-		cerr<<"MiriSDR configuration error: gain value must be positive\n";
 		error();
 	}
 	if(cfg.exists("correction")) {

@@ -46,7 +46,13 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <fcntl.h>
+
+#ifndef __MINGW32__
 #include <sys/wait.h>
+#else
+#include <windows.h>
+#endif
+
 #include <algorithm>
 #include <csignal>
 #include <cstdarg>
@@ -80,6 +86,7 @@ int do_syslog = 1;
 int shout_metadata_delay = 3;
 volatile int do_exit = 0;
 bool use_localtime = false;
+bool log_scan_activity = false;
 size_t fft_size_log = DEFAULT_FFT_SIZE_LOG;
 size_t fft_size = 1 << fft_size_log;
 #ifdef NFM
@@ -97,10 +104,22 @@ char *debug_path;
 pthread_cond_t	mp3_cond = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t	mp3_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+#ifndef __MINGW32__
 void sighandler(int sig) {
 	log(LOG_NOTICE, "Got signal %d, exiting\n", sig);
 	do_exit = 1;
 }
+#else
+BOOL WINAPI sighandler(int signum) {
+	if (CTRL_C_EVENT == signum) {
+		fprintf(stderr, "Signal caught, exiting!\n");
+		do_exit = 1;
+		return TRUE;
+	}
+	return FALSE;
+}
+#endif
+
 
 void* controller_thread(void* params) {
 	device_t *dev = (device_t*)params;
@@ -125,6 +144,8 @@ void* controller_thread(void* params) {
 			}
 		} else {
 			if(consecutive_squelch_off == 10) {
+				if(log_scan_activity)
+					log(LOG_INFO, "Activity on %7.3f MHz\n", dev->channels[0].freqlist[i].frequency / 1000000.0);
 				if(i != dev->last_frequency) {
 // squelch has just opened on a new frequency - we might need to update outputs' metadata
 					gettimeofday(&tv, NULL);
@@ -377,6 +398,23 @@ void demodulate() {
 				fftin[i][1] = (float)buf2[1] / dev->input->fullscale * 127.5f * window[i*2];
 			}
 #endif
+		} else if(dev->input->sfmt == SFMT_F32) {
+#ifdef USE_BCM_VC
+			struct GPU_FFT_COMPLEX *ptr = fft->in;
+			for(size_t b = 0; b < FFT_BATCH; b++, ptr += fft->step) {
+				for(size_t i = 0; i < fft_size; i++) {
+					float *buf2 = (float *)(dev->input->buffer + dev->input->bufs + b * bps + i * dev->input->bytes_per_sample * 2);
+					ptr[i].re = buf2[0] / dev->input->fullscale * 127.5f * window[i*2];
+					ptr[i].im = buf2[1] / dev->input->fullscale * 127.5f * window[i*2];
+				}
+			}
+#else
+			for(size_t i = 0; i < fft_size; i++) {
+				float *buf2 = (float *)(dev->input->buffer + dev->input->bufs + i * dev->input->bytes_per_sample * 2);
+				fftin[i][0] = buf2[0] / dev->input->fullscale * 127.5f * window[i*2];
+				fftin[i][1] = buf2[1] / dev->input->fullscale * 127.5f * window[i*2];
+			}
+#endif
 		} else {	// S8 or U8
 			levels_ptr = (dev->input->sfmt == SFMT_U8 ? levels_u8 : levels_s8);
 #if defined USE_BCM_VC
@@ -492,7 +530,7 @@ void demodulate() {
 							fparms->agclow++;
 						}
 						channel->agcsq = min(channel->agcsq + 1, -1);
-						if (fparms->agclow == AGC_EXTRA - 12) {
+						if ((channel->agcsq == -1 && fparms->agcavgslow < sqlevel) || fparms->agclow == AGC_EXTRA - 12) {
 							channel->agcsq = AGC_EXTRA * 2;
 							channel->axcindicate = ' ';
 							if(channel->modulation == MOD_AM) {
@@ -728,6 +766,8 @@ int main(int argc, char* argv[]) {
 		}
 		if(root.exists("localtime") && (bool)root["localtime"] == true)
 			use_localtime = true;
+		if(root.exists("log_scan_activity") && (bool)root["log_scan_activity"] == true)
+			log_scan_activity = true;
 #ifdef NFM
 		if(root.exists("tau"))
 			alpha = ((int)root["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)root["tau"])));
@@ -738,6 +778,8 @@ int main(int argc, char* argv[]) {
 			cerr<<"Configuration error: no devices defined\n";
 			error();
 		}
+
+#ifndef __MINGW32__
 		struct sigaction sigact, pipeact;
 
 		memset(&sigact, 0, sizeof(sigact));
@@ -749,6 +791,9 @@ int main(int argc, char* argv[]) {
 		sigaction(SIGINT, &sigact, NULL);
 		sigaction(SIGQUIT, &sigact, NULL);
 		sigaction(SIGTERM, &sigact, NULL);
+#else
+		SetConsoleCtrlHandler( (PHANDLER_ROUTINE) sighandler, TRUE );
+#endif
 
 		devices = (device_t *)XCALLOC(device_count, sizeof(device_t));
 		shout_init();
@@ -795,6 +840,8 @@ int main(int argc, char* argv[]) {
 	}
 
 	log(LOG_INFO, "RTLSDR-Airband version %s starting\n", RTL_AIRBAND_VERSION);
+
+#ifndef __MINGW32__ // Fork Were Nowhere Near the Windows
 	if(!foreground) {
 		int pid1, pid2;
 		if((pid1 = fork()) == -1) {
@@ -834,13 +881,14 @@ int main(int argc, char* argv[]) {
 			}
 		}
 	}
+#endif
 
 	for (int i = 0; i < mixer_count; i++) {
 		if(mixers[i].enabled == false)
 			continue;		// no inputs connected = no need to initialize output
 		channel_t *channel = &mixers[i].channel;
 		if(channel->need_mp3)
-			channel->lame = airlame_init(mixers[i].channel.mode);
+			channel->lame = airlame_init(mixers[i].channel.mode, 0, 0);
 		for (int k = 0; k < channel->output_count; k++) {
 			output_t *output = channel->outputs + k;
 			if(output->type == O_ICECAST) {
@@ -859,7 +907,7 @@ int main(int argc, char* argv[]) {
 			channel_t* channel = dev->channels + j;
 
 			if(channel->need_mp3)
-				channel->lame = airlame_init(channel->mode);
+				channel->lame = airlame_init(channel->mode, channel->highpass, channel->lowpass);
 			for (int k = 0; k < channel->output_count; k++) {
 				output_t *output = channel->outputs + k;
 				if(output->type == O_ICECAST) {

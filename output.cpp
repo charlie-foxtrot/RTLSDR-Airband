@@ -94,8 +94,9 @@ void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 		log(LOG_NOTICE, "Connecting to %s:%d/%s...\n",
 			icecast->hostname, icecast->port, icecast->mountpoint);
 
-	while (ret == SHOUTERR_BUSY) {
-		usleep(10000);
+	int shout_timeout = 30 * 5;		// 30 * 5 * 200ms = 30s
+	while (ret == SHOUTERR_BUSY && shout_timeout-- > 0) {
+		SLEEP(200);
 		ret = shout_get_connected(shouttemp);
 	}
 
@@ -107,12 +108,13 @@ void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 	} else {
 		log(LOG_WARNING, "Could not connect to %s:%d/%s\n",
 			icecast->hostname, icecast->port, icecast->mountpoint);
+		shout_close(shouttemp);
 		shout_free(shouttemp);
 		return;
 	}
 }
 
-lame_t airlame_init(mix_modes mixmode) {
+lame_t airlame_init(mix_modes mixmode, int highpass, int lowpass) {
 	lame_t lame = lame_init();
 	if (!lame) {
 		log(LOG_WARNING, "lame_init failed\n");
@@ -123,6 +125,8 @@ lame_t airlame_init(mix_modes mixmode) {
 	lame_set_VBR(lame, vbr_mtrh);
 	lame_set_brate(lame, 16);
 	lame_set_quality(lame, 7);
+	lame_set_lowpassfreq(lame, lowpass);
+	lame_set_highpassfreq(lame, highpass);
 	lame_set_out_samplerate(lame, MP3_RATE);
 	if(mixmode == MM_STEREO) {
 		lame_set_num_channels(lame, 2);
@@ -157,7 +161,7 @@ public:
 			}
 		} else
 			memset(buf, 0, samples * sizeof(float));
-		lame_t lame = airlame_init(mixmode);
+		lame_t lame = airlame_init(mixmode, 0, 0);
 		if (lame) {
 			_bytes = lame_encode_buffer_ieee_float(lame, buf, (mixmode == MM_STEREO ? buf : NULL), samples, _data, LAMEBUF_SIZE);
 			if (_bytes > 0) {

@@ -37,7 +37,7 @@
 #include "input-common.h"	// input_t
 
 #ifndef RTL_AIRBAND_VERSION
-#define RTL_AIRBAND_VERSION "3.0.1"
+#define RTL_AIRBAND_VERSION "3.1.0"
 #endif
 #define ALIGN
 #define ALIGN2 __attribute__((aligned(32)))

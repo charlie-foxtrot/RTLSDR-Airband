@@ -138,10 +138,8 @@ int rtlsdr_init(input_t * const input) {
 		log(LOG_ERR, "Failed to read supported gain list for device #%d\n", dev_data->index);
 		error();
 	}
-	
 	r = rtlsdr_set_tuner_gain_mode(rtl, 1);
 	r |= rtlsdr_set_tuner_gain(rtl, ngain);
-
 	if (r < 0) {
 		log(LOG_ERR, "Failed to set gain to %0.2f for device #%d: error %d\n",
 			(float)ngain / 10.f, dev_data->index, r);

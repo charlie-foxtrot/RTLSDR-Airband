@@ -120,8 +120,9 @@ int rtlsdr_init(input_t * const input) {
 
 	// Fitipower FC0012 gain needs to be initialized to its lowest value before setting it to the desired value
 	if (rtlsdr_get_tuner_type(rtl) == RTLSDR_TUNER_FC0012) {
-		int initialGain = -10;
-		if(rtlsdr_nearest_gain(rtl, 0, &initialGain) != true) {
+		int initialGain = 0;
+		int targetGain = -99;
+		if(rtlsdr_nearest_gain(rtl, targetGain, &initialGain) != true) {
 			log(LOG_ERR, "Failed to read supported gain list for device #%d\n", dev_data->index);
 			error();
         	}

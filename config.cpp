@@ -468,6 +468,8 @@ int parse_mixers(libconfig::Setting &mx) {
 		mixer->name = strdup(name);
 		mixer->interval = MIX_DIVISOR;
 		channel_t *channel = &mixer->channel;
+		channel->highpass = mx[i].exists("highpass") ? (int)mx[i]["highpass"] : 100;
+		channel->lowpass = mx[i].exists("lowpass") ? (int)mx[i]["lowpass"] : 2500;
 		channel->mode = MM_MONO;
 		libconfig::Setting &outputs = mx[i]["outputs"];
 		channel->output_count = outputs.getLength();

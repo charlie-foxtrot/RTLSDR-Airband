@@ -822,19 +822,19 @@ int main(int argc, char* argv[]) {
 			mixer_t *m = &mixers[z];
 			debug_print("mixer[%d]: name=%s, input_count=%d, output_count=%d\n", z, m->name, m->input_count, m->channel.output_count);
 		}
-	} catch(FileIOException e) {
+	} catch(const FileIOException &e) {
 			cerr<<"Cannot read configuration file "<<cfgfile<<"\n";
 			error();
-	} catch(ParseException e) {
+	} catch(const ParseException &e) {
 			cerr<<"Error while parsing configuration file "<<cfgfile<<" line "<<e.getLine()<<": "<<e.getError()<<"\n";
 			error();
-	} catch(SettingNotFoundException e) {
+	} catch(const SettingNotFoundException &e) {
 			cerr<<"Configuration error: mandatory parameter missing: "<<e.getPath()<<"\n";
 			error();
-	} catch(SettingTypeException e) {
+	} catch(const SettingTypeException &e) {
 			cerr<<"Configuration error: invalid parameter type: "<<e.getPath()<<"\n";
 			error();
-	} catch(ConfigException e) {
+	} catch(const ConfigException &e) {
 			cerr<<"Unhandled config exception\n";
 			error();
 	}

@@ -134,7 +134,7 @@ static bool mix_waveforms(float *sum, float *in, float mult, int size) {
  *       interval. Any input which is still not ready, is skipped (filled with 0s), because
  *       here we must emit the mixed audio to keep the desired audio bitrate.
  */
-void *mixer_thread(void *params) {
+void *mixer_thread(void *) {
 	struct timeval ts, te;
 	int interval_usec = 1e+6 * WAVE_BATCH / WAVE_RATE / MIX_DIVISOR;
 	if(mixer_count <= 0) return 0;

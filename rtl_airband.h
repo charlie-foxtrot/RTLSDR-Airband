@@ -77,7 +77,7 @@
 #define LAMEBUF_SIZE 22000 //todo: calculate
 #define MIX_DIVISOR 2
 
-#define ONES(x) ~(~0 << (x))
+#define ONES(x) ~(~0U << (x))
 #define SET_BIT(a, x) (a) |= (1 << (x))
 #define RESET_BIT(a, x) (a) &= ~(1 << (x))
 #define IS_SET(a, x) (a) & (1 << (x))

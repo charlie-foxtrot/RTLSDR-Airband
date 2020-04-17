@@ -206,7 +206,7 @@ static int fdata_open(file_data *fdata, const char *filename, mix_modes mixmode,
 	if(fdata->f == NULL)
 		return -1;
 
-	struct stat st = {0};
+	struct stat st = {};
 	if (!fdata->append || fstat(fileno(fdata->f), &st)!=0 || st.st_size == 0) {
 		log(LOG_INFO, "Writing to %s\n", filename);
 		return 0;
@@ -404,7 +404,7 @@ void disable_device_outputs(device_t *dev) {
 	}
 }
 
-void* output_thread(void* params) {
+void* output_thread(void*) {
 	struct freq_tag tag;
 	struct timeval tv;
 	int new_freq = -1;
@@ -457,7 +457,7 @@ void* output_thread(void* params) {
 }
 
 // reconnect as required
-void* output_check_thread(void* params) {
+void* output_check_thread(void*) {
 	while (!do_exit) {
 		SLEEP(10000);
 		for (int i = 0; i < device_count; i++) {

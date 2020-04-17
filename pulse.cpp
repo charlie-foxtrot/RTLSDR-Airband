@@ -53,13 +53,13 @@ void pulse_shutdown(pulse_data *pdata) {
 	PA_LOOP_UNLOCK(mainloop);
 }
 
-static void pulse_stream_underflow_cb(pa_stream *stream, void *userdata) {
+static void pulse_stream_underflow_cb(pa_stream *, void *userdata) {
 	pulse_data *pdata = (pulse_data *)userdata;
 	if(pdata->continuous)		// do not flood the logs on every squelch closing
 		log(LOG_INFO, "pulse: %s: stream \"%s\": underflow\n", SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
 }
 
-static void pulse_stream_overflow_cb(pa_stream *stream, void *userdata) {
+static void pulse_stream_overflow_cb(pa_stream *, void *userdata) {
 	pulse_data *pdata = (pulse_data *)userdata;
 	log(LOG_INFO, "pulse: %s: stream \"%s\": overflow\n", SERVER_IFNOTNULL(pdata->server), pdata->stream_name);
 }

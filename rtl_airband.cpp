@@ -296,9 +296,18 @@ void demodulate() {
 	struct GPU_FFT *fft;
 	int ret = gpu_fft_prepare(mb, fft_size_log, GPU_FFT_FWD, FFT_BATCH, &fft);
 	switch (ret) {
-		case -1: log(LOG_CRIT, "Unable to enable V3D. Please check your firmware is up to date.\n"); error();
-		case -2: log(LOG_CRIT, "log2_N=%d not supported. Try between 8 and 17.\n", fft_size_log); error();
-		case -3: log(LOG_CRIT, "Out of memory. Try a smaller batch or increase GPU memory.\n"); error();
+		case -1:
+			log(LOG_CRIT, "Unable to enable V3D. Please check your firmware is up to date.\n");
+			error();
+			break;
+		case -2:
+			log(LOG_CRIT, "log2_N=%d not supported. Try between 8 and 17.\n", fft_size_log);
+			error();
+			break;
+		case -3:
+			log(LOG_CRIT, "Out of memory. Try a smaller batch or increase GPU memory.\n");
+			error();
+			break;
 	}
 #endif
 

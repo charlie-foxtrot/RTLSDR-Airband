@@ -592,6 +592,9 @@ void demodulate() {
 							channel->waveout[j] = channel->waveout[j] * (1.0f - channel->alpha) + channel->waveout[j-1] * channel->alpha;
 						}
 #endif // NFM
+
+// apply the notch filter.  If no filter configured, this will no-op
+						channel->notch.apply(channel->waveout[j]);
 					}
 				}
 				memmove(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * sizeof(float));
@@ -1008,4 +1011,46 @@ int main(int argc, char* argv[]) {
 // FIXME: pulseaudio cleanup
 	return 0;
 }
+
+// Default constructor is no filter
+NotchFilter::NotchFilter(void) : enabled(false) {
+}
+
+// Notch Filter based on https://www.dsprelated.com/showcode/173.php
+NotchFilter::NotchFilter(float notch_freq, float sample_freq, float gain, float q): enabled(true), x{0.0}, y{0.0} {
+	debug_print("Adding notch filter for %f Hz with parameters {%f, %f, %f}\n", notch_freq, sample_freq, gain, q);
+
+	float damp = sqrt(1 - pow(gain,2))/gain;
+	float wo = 2*M_PI*(notch_freq/sample_freq);
+
+	e = 1/(1 + damp*tan(wo/(q*2)));
+	p = cos(wo);
+	d[0] = e;
+	d[1] = 2*e*p;
+	d[2] = (2*e-1);
+
+	debug_print("damp:%f wo:%f e:%f p:%f d:{%f,%f,%f}\n", damp, wo, e, p, d[0], d[1], d[2]);
+}
+
+void NotchFilter::apply(float &value) {
+	if (!enabled) {
+		return;
+	}
+
+	x[0] = x[1];
+	x[1] = x[2];
+	x[2] = value;
+
+	y[0] = y[1];
+	y[1] = y[2];
+	y[2] = d[0]*x[2] - d[1]*x[1] + d[0]*x[0] + d[1]*y[1] - d[2]*y[0];
+
+	if (skip_samples > 0) {
+		skip_samples--;
+	} else {
+		value = y[2];
+	}
+}
+
+
 // vim: ts=4

@@ -177,7 +177,6 @@ public:
 
 private:
 	bool enabled;
-	int skip_samples;
 	float e;
 	float p;
 	float d[3];

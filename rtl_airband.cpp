@@ -1045,11 +1045,7 @@ void NotchFilter::apply(float &value) {
 	y[1] = y[2];
 	y[2] = d[0]*x[2] - d[1]*x[1] + d[0]*x[0] + d[1]*y[1] - d[2]*y[0];
 
-	if (skip_samples > 0) {
-		skip_samples--;
-	} else {
-		value = y[2];
-	}
+	value = y[2];
 }
 
 

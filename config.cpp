@@ -278,6 +278,23 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				error();
 			}
 		}
+		if(chans[j].exists("notch")) {
+			float freq = (float)chans[j]["notch"];
+			float gain = chans[j].exists("notch_gain") ? (float)chans[j]["notch_gain"] : 0.9;
+			float q = chans[j].exists("notch_q") ? (float)chans[j]["notch_q"] : 2.4;
+
+			if (gain <= 0.0 || gain >= 1.0) {
+				cerr << "Invalid value for notch_gain: " << gain << " (must be between 0.0 and 1.0 exclusive)\n";
+				error();
+			}
+
+			if (q <= 0.0) {
+				cerr << "Invalid value for notch_q: " << q << " (must be greater than 0.0)\n";
+				error();
+			}
+
+			channel->notch = NotchFilter(freq, WAVE_RATE, gain, q);
+		}
 #ifdef NFM
 		if(chans[j].exists("tau")) {
 			channel->alpha = ((int)chans[j]["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)chans[j]["tau"])));

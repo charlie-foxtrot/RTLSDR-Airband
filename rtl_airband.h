@@ -168,6 +168,22 @@ enum modulations {
 #endif
 };
 
+class NotchFilter
+{
+public:
+	NotchFilter(void);
+	NotchFilter(float notch_freq, float sample_freq, float gain, float q);
+	void apply(float &value);
+
+private:
+	bool enabled;
+	float e;
+	float p;
+	float d[3];
+	float x[3];
+	float y[3];
+};
+
 struct freq_t {
 	int frequency;				// scan frequency
 	char *label;				// frequency label
@@ -207,6 +223,7 @@ struct channel_t {
 	int highpass;               // highpass filter cutoff
 	int lowpass;                // lowpass filter cutoff
 	lame_t lame;
+	NotchFilter notch;			// notch filter - good to remove CTCSS tones
 };
 
 enum rec_modes { R_MULTICHANNEL, R_SCAN };

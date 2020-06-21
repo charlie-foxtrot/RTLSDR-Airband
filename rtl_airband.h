@@ -113,11 +113,14 @@ struct icecast_data {
 };
 
 struct file_data {
-	const char *dir;
-	const char *prefix;
+	char *basename;
 	char *suffix;
+	char *file_path;
 	bool continuous;
 	bool append;
+	bool split_on_transmission;
+	timeval open_time;
+	timeval last_write_time;
 	FILE *f;
 };
 

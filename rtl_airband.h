@@ -172,7 +172,7 @@ class NotchFilter
 {
 public:
 	NotchFilter(void);
-	NotchFilter(float notch_freq, float sample_freq, float gain, float q);
+	NotchFilter(float notch_freq, float sample_freq, float q);
 	void apply(float &value);
 
 private:

@@ -1017,19 +1017,18 @@ NotchFilter::NotchFilter(void) : enabled(false) {
 }
 
 // Notch Filter based on https://www.dsprelated.com/showcode/173.php
-NotchFilter::NotchFilter(float notch_freq, float sample_freq, float gain, float q): enabled(true), x{0.0}, y{0.0} {
-	debug_print("Adding notch filter for %f Hz with parameters {%f, %f, %f}\n", notch_freq, sample_freq, gain, q);
+NotchFilter::NotchFilter(float notch_freq, float sample_freq, float q): enabled(true), x{0.0}, y{0.0} {
+	debug_print("Adding notch filter for %f Hz with parameters {%f, %f}\n", notch_freq, sample_freq, q);
 
-	float damp = sqrt(1 - pow(gain,2))/gain;
 	float wo = 2*M_PI*(notch_freq/sample_freq);
 
-	e = 1/(1 + damp*tan(wo/(q*2)));
+	e = 1/(1 + tan(wo/(q*2)));
 	p = cos(wo);
 	d[0] = e;
 	d[1] = 2*e*p;
 	d[2] = (2*e-1);
 
-	debug_print("damp:%f wo:%f e:%f p:%f d:{%f,%f,%f}\n", damp, wo, e, p, d[0], d[1], d[2]);
+	debug_print("wo:%f e:%f p:%f d:{%f,%f,%f}\n", wo, e, p, d[0], d[1], d[2]);
 }
 
 void NotchFilter::apply(float &value) {

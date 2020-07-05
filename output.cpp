@@ -18,6 +18,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <iostream>
+#include <fstream>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -395,7 +397,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 		} else if(channel->outputs[k].type == O_FILE || channel->outputs[k].type == O_RAWFILE) {
 			file_data *fdata = (file_data *)(channel->outputs[k].data);
 
-			if(fdata->continuous == false && channel->axcindicate == ' ' && channel->outputs[k].active == false) {
+			if(fdata->continuous == false && channel->axcindicate == NO_SIGNAL && channel->outputs[k].active == false) {
 				close_file_check(fdata);
 				continue;
 			}
@@ -428,7 +430,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 				close_file(fdata);
 				channel->outputs[k].enabled = false;
 			}
-			channel->outputs[k].active = (channel->axcindicate != ' ');
+			channel->outputs[k].active = (channel->axcindicate != NO_SIGNAL);
 			gettimeofday(&fdata->last_write_time, NULL);
 		} else if(channel->outputs[k].type == O_MIXER) {
 			mixer_data *mdata = (mixer_data *)(channel->outputs[k].data);
@@ -436,7 +438,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 #ifdef PULSE
 		} else if(channel->outputs[k].type == O_PULSE) {
 			pulse_data *pdata = (pulse_data *)(channel->outputs[k].data);
-			if(pdata->continuous == false && channel->axcindicate == ' ')
+			if(pdata->continuous == false && channel->axcindicate == NO_SIGNAL)
 				continue;
 
 			pulse_write_stream(pdata, channel->mode, channel->waveout, channel->waveout_r, (size_t)WAVE_BATCH * sizeof(float));
@@ -478,11 +480,48 @@ void disable_device_outputs(device_t *dev) {
 	}
 }
 
+void write_stats_file(timeval *last_stats_write) {
+	if (!stats_filepath) {
+		return;
+	}
+
+	timeval current_time;
+	gettimeofday(&current_time, NULL);
+
+	static const double STATS_FILE_TIMING = 15.0;
+	if (delta_sec(last_stats_write, &current_time) < STATS_FILE_TIMING) {
+		return;
+	}
+
+	*last_stats_write = current_time;
+
+	std::ofstream file;
+	file.open(stats_filepath);
+	file << "# HELP channel_activity_counter Loops of output_thread with frequency active." << std::endl;
+	file << "# TYPE channel_activity_counter counter" << std::endl;
+
+	for (int i = 0; i < device_count; i++) {
+		device_t* dev = devices + i;
+		for (int j = 0; j < dev->channel_count; j++) {
+			channel_t* channel = devices[i].channels + j;
+			for (int k = 0; k < channel->freq_count; k++) {
+				file << "channel_activity_counter{freq=\"" << channel->freqlist[k].frequency / 1000000.0 ;
+				if (channel->freqlist[k].label) {
+					file << "\",label=\"" << channel->freqlist[k].label;
+				}
+				file << "\"}\t" << channel->freqlist[k].active_counter << std::endl;
+			}
+		}
+	}
+	file.close();
+}
+
 void* output_thread(void*) {
 	struct freq_tag tag;
 	struct timeval tv;
 	int new_freq = -1;
-	struct timeval ts, te;
+	timeval ts, te;
+	timeval last_stats_write = {0, 0};
 
 	if(DEBUG) gettimeofday(&ts, NULL);
 	while (!do_exit) {
@@ -526,6 +565,7 @@ void* output_thread(void*) {
 // in multichannel mode
 			new_freq = -1;
 		}
+		write_stats_file(&last_stats_write);
 	}
 	return 0;
 }

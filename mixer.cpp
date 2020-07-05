@@ -163,17 +163,17 @@ void *mixer_thread(void *) {
 						memset(channel->waveout, 0, WAVE_BATCH * sizeof(float));
 						if(channel->mode == MM_STEREO)
 							memset(channel->waveout_r, 0, WAVE_BATCH * sizeof(float));
-						channel->axcindicate = ' ';
+						channel->axcindicate = NO_SIGNAL;
 						channel->state = CH_WORKING;
 					}
 					debug_bulk_print("mixer[%d]: ampleft=%.1f ampright=%.1f\n", i, input->ampfactor * input->ampl, input->ampfactor * input->ampr);
 					/* left channel */
 					if(mix_waveforms(channel->waveout, input->wavein, input->ampfactor * input->ampl, WAVE_BATCH))
-						channel->axcindicate = '*';
+						channel->axcindicate = SIGNAL;
 					/* right channel */
 					if(channel->mode == MM_STEREO) {
 						if(mix_waveforms(channel->waveout_r, input->wavein, input->ampfactor * input->ampr, WAVE_BATCH))
-							channel->axcindicate = '*';
+							channel->axcindicate = SIGNAL;
 					}
 					input->ready = false;
 					RESET_BIT(mixer->inputs_todo, j);

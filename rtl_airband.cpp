@@ -87,6 +87,7 @@ int shout_metadata_delay = 3;
 volatile int do_exit = 0;
 bool use_localtime = false;
 bool log_scan_activity = false;
+char *stats_filepath = NULL;
 size_t fft_size_log = DEFAULT_FFT_SIZE_LOG;
 size_t fft_size = 1 << fft_size_log;
 #ifdef NFM
@@ -131,7 +132,7 @@ void* controller_thread(void* params) {
 	if(dev->channels[0].freq_count < 2) return 0;
 	while(!do_exit) {
 		SLEEP(200);
-		if(dev->channels[0].axcindicate == ' ') {
+		if(dev->channels[0].axcindicate == NO_SIGNAL) {
 			if(consecutive_squelch_off < 10) {
 				consecutive_squelch_off++;
 			} else {
@@ -203,7 +204,7 @@ float fm_quadri_demod(float ar, float aj, float br, float bj) {
 
 class AFC
 {
-	const char _prev_axcindicate;
+	const status _prev_axcindicate;
 
 #ifdef USE_BCM_VC
 	float square(const GPU_FFT_COMPLEX *fft_results, size_t index)
@@ -220,7 +221,7 @@ class AFC
 		size_t check(const FFT_RESULTS* fft_results, const size_t base, const float base_value, unsigned char afc)
 	{
 		float threshold = 0;
-		int bin;
+		size_t bin;
 		for (bin = base;; bin+= STEP) {
 			if (STEP < 0) {
 			if (bin < -STEP)
@@ -258,7 +259,7 @@ public:
 			return;
 
 		const char axcindicate = channel->axcindicate;
-		if (axcindicate != ' ' && _prev_axcindicate == ' ') {
+		if (axcindicate != NO_SIGNAL && _prev_axcindicate == NO_SIGNAL) {
 			const size_t base = dev->base_bins[index];
 			const float base_value = square(fft_results, base);
 			size_t bin = check<FFT_RESULTS, -1>(fft_results, base, base_value, channel->afc);
@@ -271,12 +272,12 @@ public:
 #endif
 				dev->bins[index] = bin;
 				if ( bin > base )
-					channel->axcindicate = '>';
+					channel->axcindicate = AFC_UP;
 				else if ( bin < base )
-					channel->axcindicate = '<';
+					channel->axcindicate = AFC_DOWN;
 			}
 		}
-		else if (axcindicate == ' ' && _prev_axcindicate != ' ')
+		else if (axcindicate == NO_SIGNAL && _prev_axcindicate != NO_SIGNAL)
 			dev->bins[index] = dev->base_bins[index];
 	}
 };
@@ -520,7 +521,7 @@ void demodulate() {
 						channel->agcsq = max(channel->agcsq - 1, 1);
 						if (channel->agcsq == 1 && fparms->agcavgslow > sqlevel) {
 							channel->agcsq = -AGC_EXTRA * 2;
-							channel->axcindicate = '*';
+							channel->axcindicate = SIGNAL;
 							if(channel->modulation == MOD_AM) {
 							// fade in
 								for (int k = j - AGC_EXTRA; k < j; k++) {
@@ -541,7 +542,7 @@ void demodulate() {
 						channel->agcsq = min(channel->agcsq + 1, -1);
 						if ((channel->agcsq == -1 && fparms->agcavgslow < sqlevel) || fparms->agclow == AGC_EXTRA - 12) {
 							channel->agcsq = AGC_EXTRA * 2;
-							channel->axcindicate = ' ';
+							channel->axcindicate = NO_SIGNAL;
 							if(channel->modulation == MOD_AM) {
 								// fade out
 								for (int k = j - AGC_EXTRA + 1; k < j; k++) {
@@ -621,6 +622,10 @@ void demodulate() {
 							(fparms->sqlevel >= 0 ? fparms->sqlevel : fparms->agcmin),
 							channel->axcindicate);
 					fflush(stdout);
+				}
+
+				if (channel->axcindicate != NO_SIGNAL) {
+					channel->freqlist[channel->freq_idx].active_counter++;
 				}
 			}
 			dev->waveavail = 1;
@@ -780,6 +785,8 @@ int main(int argc, char* argv[]) {
 			use_localtime = true;
 		if(root.exists("log_scan_activity") && (bool)root["log_scan_activity"] == true)
 			log_scan_activity = true;
+		if(root.exists("stats_filepath"))
+			stats_filepath = strdup(root["stats_filepath"]);
 #ifdef NFM
 		if(root.exists("tau"))
 			alpha = ((int)root["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)root["tau"])));

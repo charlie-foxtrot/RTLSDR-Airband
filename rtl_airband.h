@@ -209,6 +209,7 @@ struct channel_t {
 	float alpha;
 #endif
 	uint32_t dm_dphi, dm_phi;	// derotation frequency and current phase value
+	uint32_t dm_phi2;
 	enum modulations modulation;
 	enum mix_modes mode;		// mono or stereo
 	int agcsq;					// squelch status, 0 = signal, 1 = suppressed
@@ -227,6 +228,8 @@ struct channel_t {
 	int lowpass;                // lowpass filter cutoff
 	lame_t lame;
 	NotchFilter notch;			// notch filter - good to remove CTCSS tones
+	FILE *raw_input;
+	FILE *after_shift;
 };
 
 enum rec_modes { R_MULTICHANNEL, R_SCAN };

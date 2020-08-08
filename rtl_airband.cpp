@@ -481,6 +481,30 @@ void demodulate() {
 				dev->channels[j].iq_in[2*dev->waveend] = fftout[dev->bins[j]][0];
 				dev->channels[j].iq_in[2*dev->waveend+1] = fftout[dev->bins[j]][1];
 			}
+
+			float &re = fftout[dev->bins[j]][0];
+			float &im = fftout[dev->bins[j]][1];
+
+			if(dev->channels[j].raw_input) {
+				int16_t tmp = (int16_t)re;
+				fwrite(&tmp, sizeof(int16_t), 1, dev->channels[j].raw_input);
+				tmp = (int16_t)im;
+				fwrite(&tmp, sizeof(int16_t), 1, dev->channels[j].raw_input);
+			}
+			if(dev->channels[j].after_shift){
+				float derotated_r = 0.f, derotated_j = 0.f, swf = 0.f, cwf = 0.f;
+
+				channel_t* channel = dev->channels + j;
+				sincosf_lut(channel->dm_phi2, &swf, &cwf);
+				multiply(re, im, cwf, -swf, &derotated_r, &derotated_j);
+				channel->dm_phi2 += channel->dm_dphi;
+				channel->dm_phi2 &= 0xffffff;
+
+				int16_t tmp = (int16_t)derotated_r;
+				fwrite(&tmp, sizeof(int16_t), 1, dev->channels[j].after_shift);
+				tmp = (int16_t)derotated_j;
+				fwrite(&tmp, sizeof(int16_t), 1, dev->channels[j].after_shift);
+			}
 		}
 #endif // USE_BCM_VC
 

@@ -406,7 +406,14 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			channel->dm_dphi = (uint32_t)((int)dm_dphi);
 			debug_print("dev[%d].chan[%d]: dm_dphi_scaled=%f cast=0x%x\n", i, jj, dm_dphi, channel->dm_dphi);
 			channel->dm_phi = 0.f;
+			channel->dm_phi2 = 0.f;
 		}
+
+		std::string tmp = "after_fft_" + std::to_string((int)fft_size) + "_" + std::to_string(channel->freqlist[0].frequency) + ".cs16";
+		channel->raw_input = fopen(tmp.c_str(), "w+");
+		tmp = "after_shift_" + std::to_string((int)fft_size) + "_" + std::to_string(channel->freqlist[0].frequency)  + ".cs16";
+		channel->after_shift = fopen(tmp.c_str(), "w+");
+
 		jj++;
 	}
 	return jj;

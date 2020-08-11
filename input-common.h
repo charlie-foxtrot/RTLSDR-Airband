@@ -53,6 +53,7 @@ struct input_t {
 	unsigned char *buffer;
 	void *dev_data;
 	size_t buf_size, bufs, bufe;
+	size_t overflow_count;
 	input_state_t state;
 	sample_format_t sfmt;
 	float fullscale;

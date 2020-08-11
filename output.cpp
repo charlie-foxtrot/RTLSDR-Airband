@@ -20,6 +20,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -497,22 +498,37 @@ void write_stats_file(timeval *last_stats_write) {
 
 	std::ofstream file;
 	file.open(stats_filepath);
-	file << "# HELP channel_activity_counter Loops of output_thread with frequency active." << std::endl;
-	file << "# TYPE channel_activity_counter counter" << std::endl;
+	if (!file.is_open()) {
+		log(LOG_WARNING, "Cannot open output file %s (%s)\n", stats_filepath, strerror(errno));
+		return;
+	}
+	std::stringstream activity, noise, overflow;
+
+	activity << "# HELP channel_activity_counter Loops of output_thread with frequency active.\n"
+			 << "# TYPE channel_activity_counter counter\n";
+	noise << "# HELP channel_noise_level Measure of agcmin.\n"
+		  << "# TYPE channel_noise_level gauge\n";
+	overflow << "# HELP buffer_overflow_count Number of times a device's buffer has overflowed.\n"
+			 << "# TYPE buffer_overflow_count counter\n";
 
 	for (int i = 0; i < device_count; i++) {
 		device_t* dev = devices + i;
+		overflow << "buffer_overflow_count{device=\"" << i << "\"}\t" << dev->input->overflow_count << std::endl;
 		for (int j = 0; j < dev->channel_count; j++) {
 			channel_t* channel = devices[i].channels + j;
 			for (int k = 0; k < channel->freq_count; k++) {
-				file << "channel_activity_counter{freq=\"" << channel->freqlist[k].frequency / 1000000.0 ;
+				std::stringstream labels;
+				labels << "{freq=\"" << channel->freqlist[k].frequency / 1000000.0 ;
 				if (channel->freqlist[k].label) {
-					file << "\",label=\"" << channel->freqlist[k].label;
+					labels << "\",label=\"" << channel->freqlist[k].label << "\"}\t";
 				}
-				file << "\"}\t" << channel->freqlist[k].active_counter << std::endl;
+				activity << "channel_activity_counter" << labels.str() << channel->freqlist[k].active_counter << std::endl;
+				noise << "channel_noise_level" << labels.str() << channel->freqlist[k].agcmin << std::endl;
 			}
 		}
 	}
+
+	file << activity.str() << std::endl << noise.str() << std::endl << overflow.str();
 	file.close();
 }
 

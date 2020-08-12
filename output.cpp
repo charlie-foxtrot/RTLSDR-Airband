@@ -18,8 +18,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <iostream>
-#include <fstream>
+#include <stdio.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -495,25 +494,42 @@ void write_stats_file(timeval *last_stats_write) {
 
 	*last_stats_write = current_time;
 
-	std::ofstream file;
-	file.open(stats_filepath);
-	file << "# HELP channel_activity_counter Loops of output_thread with frequency active." << std::endl;
-	file << "# TYPE channel_activity_counter counter" << std::endl;
+	FILE *file = fopen(stats_filepath, "w");
+	if (!file) {
+		log(LOG_WARNING, "Cannot open output file %s (%s)\n", stats_filepath, strerror(errno));
+		return;
+	}
+
+	char noise[2048];
+	char overflow[256];
+	size_t noise_len = 0;
+	size_t overflow_len = 0;
+
+	fprintf(file, "# HELP channel_activity_counter Loops of output_thread with frequency active.\n"
+				  "# TYPE channel_activity_counter counter\n");
 
 	for (int i = 0; i < device_count; i++) {
 		device_t* dev = devices + i;
 		for (int j = 0; j < dev->channel_count; j++) {
 			channel_t* channel = devices[i].channels + j;
 			for (int k = 0; k < channel->freq_count; k++) {
-				file << "channel_activity_counter{freq=\"" << channel->freqlist[k].frequency / 1000000.0 ;
+				char tmp[256];
+				size_t len = snprintf(tmp, sizeof(tmp), "freq=\"%.3f\"", channel->freqlist[k].frequency / 1000000.0);
 				if (channel->freqlist[k].label) {
-					file << "\",label=\"" << channel->freqlist[k].label;
+					len += snprintf(tmp + len, sizeof(tmp) - len, ",label=\"%s\"", channel->freqlist[k].label);
 				}
-				file << "\"}\t" << channel->freqlist[k].active_counter << std::endl;
+				fprintf(file, "channel_activity_counter{%s}\t%zu\n", tmp, channel->freqlist[k].active_counter);
+				noise_len += snprintf(noise + noise_len, sizeof(noise) - noise_len, "channel_noise_level{%s}\t%.3f\n", tmp, channel->freqlist[k].agcmin);
 			}
 		}
+		overflow_len += snprintf(overflow, sizeof(overflow) - overflow_len, "buffer_overflow_count{device=\"%d\"}\t%zu\n", i , dev->input->overflow_count);
 	}
-	file.close();
+
+	fprintf(file, "\n# HELP channel_noise_level Measure of agcmin.\n"
+				  "# TYPE channel_noise_level gauge\n%s", noise);
+	fprintf(file, "\n# HELP buffer_overflow_count Number of times a device's buffer has overflowed.\n"
+				  "# TYPE buffer_overflow_count counter.\n%s", overflow);
+	fclose(file);
 }
 
 void* output_thread(void*) {

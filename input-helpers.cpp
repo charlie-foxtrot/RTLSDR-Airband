@@ -65,6 +65,7 @@ void circbuffer_append(input_t * const input, unsigned char *buf, size_t len) {
 	input->bufe = (input->bufe + len) % input->buf_size;
 	if(old_end < input->bufs && input->bufe >= input->bufs) {
 		std::cerr << "Warning: buffer overflow\n";
+		input->overflow_count++;
 	}
 	pthread_mutex_unlock(&input->buffer_lock);
 }

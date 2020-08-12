@@ -97,6 +97,7 @@ extern "C" void samplefft(sample_fft_arg *a, unsigned char* buffer, float* windo
 
 //#define AFC_LOGGING
 
+enum status {NO_SIGNAL = ' ', SIGNAL = '*', AFC_UP = '<', AFC_DOWN = '>' };
 enum ch_states { CH_DIRTY, CH_WORKING, CH_READY };
 enum mix_modes { MM_MONO, MM_STEREO };
 struct icecast_data {
@@ -194,7 +195,8 @@ struct freq_t {
 	float agcavgslow;			// average power, for squelch level detection
 	float agcmin;				// noise level
 	int sqlevel;				// manually configured squelch level
-	int agclow;				// low level sample count
+	int agclow;					// low level sample count
+	size_t active_counter;		// count of loops where channel has signal
 };
 struct channel_t {
 	float wavein[WAVE_LEN];		// FFT output waveform
@@ -212,7 +214,7 @@ struct channel_t {
 	enum modulations modulation;
 	enum mix_modes mode;		// mono or stereo
 	int agcsq;					// squelch status, 0 = signal, 1 = suppressed
-	char axcindicate;			// squelch/AFC status indicator: ' ' - no signal; '*' - has signal; '>', '<' - signal tuned by AFC
+	status axcindicate;
 	unsigned char afc;			//0 - AFC disabled; 1 - minimal AFC; 2 - more aggressive AFC and so on to 255
 	struct freq_t *freqlist;
 	int freq_count;
@@ -280,6 +282,7 @@ void *output_thread(void* params);
 
 // rtl_airband.cpp
 extern bool use_localtime;
+extern char *stats_filepath;
 extern size_t fft_size, fft_size_log;
 extern int device_count, mixer_count;
 extern int shout_metadata_delay, do_syslog, foreground;

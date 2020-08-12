@@ -213,6 +213,7 @@ static struct freq_t *mk_freqlist( int n )
 		fl[i].agcmin = 100.0f;
 		fl[i].agclow = 0;
 		fl[i].sqlevel = -1;
+		fl[i].active_counter = 0;
 	}
 	return fl;
 }
@@ -255,7 +256,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			channel->waveout[k] = 0.5;
 		}
 		channel->agcsq = 1;
-		channel->axcindicate = ' ';
+		channel->axcindicate = NO_SIGNAL;
 		channel->modulation = MOD_AM;
 		channel->mode = MM_MONO;
 		channel->need_mp3 = 0;
@@ -282,6 +283,10 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			channel->freqlist = mk_freqlist( 1 );
 			channel->freqlist[0].frequency = parse_anynum2int(chans[j]["freq"]);
 			warn_if_freq_not_in_range(i, j, channel->freqlist[0].frequency, dev->input->centerfreq, dev->input->sample_rate);
+			if (chans[j].exists("label"))
+			{
+				channel->freqlist[0].label = strdup(chans[j]["label"]);
+			}
 		} else { /* R_SCAN */
 			channel->freq_count = chans[j]["freqs"].getLength();
 			if(channel->freq_count < 1) {
@@ -488,6 +493,7 @@ int parse_devices(libconfig::Setting &devs) {
 		dev->input->buffer = (unsigned char *)XCALLOC(sizeof(unsigned char),
 			dev->input->buf_size + 2 * dev->input->bytes_per_sample * fft_size);
 		dev->input->bufs = dev->input->bufe = 0;
+		dev->input->overflow_count = 0;
 		dev->waveend = dev->waveavail = dev->row = dev->tq_head = dev->tq_tail = 0;
 		dev->last_frequency = -1;
 

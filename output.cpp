@@ -479,6 +479,60 @@ void disable_device_outputs(device_t *dev) {
 	}
 }
 
+static void print_channel_metric(FILE *f, char const *name, float freq, char *label) {
+	fprintf(f, "%s{freq=\"%.3f\"", name, freq / 1000000.0);
+	if (label != NULL) {
+		fprintf(f, ",label=\"%s\"", label);
+	}
+	fprintf(f, "}");
+}
+
+static void output_channel_noise_levels(FILE *f) {
+	fprintf(f, "# HELP channel_noise_level Measure of agcmin.\n"
+			"# TYPE channel_noise_level gauge\n");
+
+	for (int i = 0; i < device_count; i++) {
+		device_t* dev = devices + i;
+		for (int j = 0; j < dev->channel_count; j++) {
+			channel_t* channel = devices[i].channels + j;
+			for (int k = 0; k < channel->freq_count; k++) {
+				print_channel_metric(f, "channel_noise_level", channel->freqlist[k].frequency, channel->freqlist[k].label);
+				fprintf(f, "\t%.3f\n", channel->freqlist[k].agcmin);
+			}
+		}
+	}
+	fprintf(f, "\n");
+}
+
+static void output_channel_activity_counters(FILE *f) {
+	fprintf(f, "# HELP channel_activity_counter Loops of output_thread with frequency active.\n"
+			"# TYPE channel_activity_counter counter\n");
+
+	for (int i = 0; i < device_count; i++) {
+		device_t* dev = devices + i;
+		for (int j = 0; j < dev->channel_count; j++) {
+			channel_t* channel = devices[i].channels + j;
+			for (int k = 0; k < channel->freq_count; k++) {
+				print_channel_metric(f, "channel_activity_counter", channel->freqlist[k].frequency, channel->freqlist[k].label);
+				fprintf(f, "\t%zu\n", channel->freqlist[k].active_counter);
+			}
+		}
+	}
+	fprintf(f, "\n");
+}
+
+static void output_device_buffer_overflows(FILE *f) {
+	fprintf(f, "# HELP buffer_overflow_count Number of times a device's buffer has overflowed.\n"
+			"# TYPE buffer_overflow_count counter\n");
+
+	for (int i = 0; i < device_count; i++) {
+		device_t* dev = devices + i;
+		fprintf(f, "buffer_overflow_count{device=\"%d\"}\t%zu\n", i , dev->input->overflow_count);
+	}
+	fprintf(f, "\n");
+}
+
+
 void write_stats_file(timeval *last_stats_write) {
 	if (!stats_filepath) {
 		return;
@@ -500,35 +554,10 @@ void write_stats_file(timeval *last_stats_write) {
 		return;
 	}
 
-	char noise[2048];
-	char overflow[256];
-	size_t noise_len = 0;
-	size_t overflow_len = 0;
+	output_channel_activity_counters(file);
+	output_channel_noise_levels(file);
+	output_device_buffer_overflows(file);
 
-	fprintf(file, "# HELP channel_activity_counter Loops of output_thread with frequency active.\n"
-				  "# TYPE channel_activity_counter counter\n");
-
-	for (int i = 0; i < device_count; i++) {
-		device_t* dev = devices + i;
-		for (int j = 0; j < dev->channel_count; j++) {
-			channel_t* channel = devices[i].channels + j;
-			for (int k = 0; k < channel->freq_count; k++) {
-				char tmp[256];
-				size_t len = snprintf(tmp, sizeof(tmp), "freq=\"%.3f\"", channel->freqlist[k].frequency / 1000000.0);
-				if (channel->freqlist[k].label) {
-					len += snprintf(tmp + len, sizeof(tmp) - len, ",label=\"%s\"", channel->freqlist[k].label);
-				}
-				fprintf(file, "channel_activity_counter{%s}\t%zu\n", tmp, channel->freqlist[k].active_counter);
-				noise_len += snprintf(noise + noise_len, sizeof(noise) - noise_len, "channel_noise_level{%s}\t%.3f\n", tmp, channel->freqlist[k].agcmin);
-			}
-		}
-		overflow_len += snprintf(overflow, sizeof(overflow) - overflow_len, "buffer_overflow_count{device=\"%d\"}\t%zu\n", i , dev->input->overflow_count);
-	}
-
-	fprintf(file, "\n# HELP channel_noise_level Measure of agcmin.\n"
-				  "# TYPE channel_noise_level gauge\n%s", noise);
-	fprintf(file, "\n# HELP buffer_overflow_count Number of times a device's buffer has overflowed.\n"
-				  "# TYPE buffer_overflow_count counter.\n%s", overflow);
 	fclose(file);
 }
 

@@ -525,7 +525,7 @@ void write_stats_file(timeval *last_stats_write) {
 			}
 		}
 		if(overflow_len < sizeof(overflow)) {
-			overflow_len += snprintf(overflow, sizeof(overflow) - overflow_len, "buffer_overflow_count{device=\"%d\"}\t%zu\n", i , dev->input->overflow_count);
+			overflow_len += snprintf(overflow + overflow_len, sizeof(overflow) - overflow_len, "buffer_overflow_count{device=\"%d\"}\t%zu\n", i , dev->input->overflow_count);
 		}
 	}
 

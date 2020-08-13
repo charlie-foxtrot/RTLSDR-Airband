@@ -500,7 +500,7 @@ void write_stats_file(timeval *last_stats_write) {
 		return;
 	}
 
-	char noise[2048];
+	char noise[6144];
 	char overflow[256];
 	size_t noise_len = 0;
 	size_t overflow_len = 0;
@@ -515,14 +515,18 @@ void write_stats_file(timeval *last_stats_write) {
 			for (int k = 0; k < channel->freq_count; k++) {
 				char tmp[256];
 				size_t len = snprintf(tmp, sizeof(tmp), "freq=\"%.3f\"", channel->freqlist[k].frequency / 1000000.0);
-				if (channel->freqlist[k].label) {
+				if (channel->freqlist[k].label && len < sizeof(tmp)) {
 					len += snprintf(tmp + len, sizeof(tmp) - len, ",label=\"%s\"", channel->freqlist[k].label);
 				}
 				fprintf(file, "channel_activity_counter{%s}\t%zu\n", tmp, channel->freqlist[k].active_counter);
-				noise_len += snprintf(noise + noise_len, sizeof(noise) - noise_len, "channel_noise_level{%s}\t%.3f\n", tmp, channel->freqlist[k].agcmin);
+				if(noise_len < sizeof(noise)) {
+					noise_len += snprintf(noise + noise_len, sizeof(noise) - noise_len, "channel_noise_level{%s}\t%.3f\n", tmp, channel->freqlist[k].agcmin);
+				}
 			}
 		}
-		overflow_len += snprintf(overflow, sizeof(overflow) - overflow_len, "buffer_overflow_count{device=\"%d\"}\t%zu\n", i , dev->input->overflow_count);
+		if(overflow_len < sizeof(overflow)) {
+			overflow_len += snprintf(overflow, sizeof(overflow) - overflow_len, "buffer_overflow_count{device=\"%d\"}\t%zu\n", i , dev->input->overflow_count);
+		}
 	}
 
 	fprintf(file, "\n# HELP channel_noise_level Measure of agcmin.\n"

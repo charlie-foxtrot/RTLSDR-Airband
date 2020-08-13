@@ -532,7 +532,7 @@ void write_stats_file(timeval *last_stats_write) {
 	fprintf(file, "\n# HELP channel_noise_level Measure of agcmin.\n"
 				  "# TYPE channel_noise_level gauge\n%s", noise);
 	fprintf(file, "\n# HELP buffer_overflow_count Number of times a device's buffer has overflowed.\n"
-				  "# TYPE buffer_overflow_count counter.\n%s", overflow);
+				  "# TYPE buffer_overflow_count counter\n%s", overflow);
 	fclose(file);
 }
 

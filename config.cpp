@@ -304,6 +304,16 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 					<<channel->freq_count<<" elements\n";
 				error();
 			}
+			if(chans[j].exists("notch") && libconfig::Setting::TypeList == chans[j]["notch"].getType() && chans[j]["notch"].getLength() < channel->freq_count) {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: notch should be an float or a list of floats with at least "
+					<<channel->freq_count<<" elements\n";
+				error();
+			}
+			if(chans[j].exists("notch_q") && libconfig::Setting::TypeList == chans[j]["notch_q"].getType() && chans[j]["notch_q"].getLength() < channel->freq_count) {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: notch_q should be an float or a list of floats with at least "
+					<<channel->freq_count<<" elements\n";
+				error();
+			}
 			for(int f = 0; f<channel->freq_count; f++) {
 				channel->freqlist[f].frequency = parse_anynum2int((chans[j]["freqs"][f]));
 				if(chans[j].exists("labels")) {
@@ -338,15 +348,40 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			}
 		}
 		if(chans[j].exists("notch")) {
-			float freq = (float)chans[j]["notch"];
-			float q = chans[j].exists("notch_q") ? (float)chans[j]["notch_q"] : 10.0;
+			static const float default_q = 10.0;
 
-			if (q <= 0.0) {
-				cerr << "Invalid value for notch_q: " << q << " (must be greater than 0.0)\n";
+			if(chans[j].exists("notch_q") && chans[j]["notch"].getType() != chans[j]["notch_q"].getType()) {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: notch_q (if set) must be the same type as notch - "
+					<<"float or a list of floats with at least "<<channel->freq_count<<" elements\n";
 				error();
 			}
-
-			channel->notch = NotchFilter(freq, WAVE_RATE, q);
+			if(libconfig::Setting::TypeList == chans[j]["notch"].getType()) {
+				for(int f = 0; f<channel->freq_count; f++) {
+					float freq = (float)chans[j]["notch"][f];
+					float q = chans[j].exists("notch_q") ? (float)chans[j]["notch_q"][f] : default_q;
+					if (q <= 0.0) {
+						cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] freq.["<<f<<"]: invalid value for notch_q: "
+							<<q<<" (must be greater than 0.0)\n";
+						error();
+					}
+					channel->freqlist[f].notch_filter = NotchFilter(freq, WAVE_RATE, q);
+				}
+			} else if(libconfig::Setting::TypeFloat == chans[j]["notch"].getType() ) {
+				float freq = (float)chans[j]["notch"];
+				float q = chans[j].exists("notch_q") ? (float)chans[j]["notch_q"] : default_q;
+				if (q <= 0.0) {
+					cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: invalid value for notch_q: "
+						<<q<<" (must be greater than 0.0)\n";
+					error();
+				}
+				for(int f = 0; f<channel->freq_count; f++) {
+					channel->freqlist[f].notch_filter = NotchFilter(freq, WAVE_RATE, q);;
+				}
+			} else {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: notch should be an float or a list of floats with at least "
+					<<channel->freq_count<<" elements\n";
+				error();
+			}
 		}
 #ifdef NFM
 		if(chans[j].exists("tau")) {

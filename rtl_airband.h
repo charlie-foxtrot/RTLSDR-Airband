@@ -197,6 +197,7 @@ struct freq_t {
 	int sqlevel;				// manually configured squelch level
 	int agclow;					// low level sample count
 	size_t active_counter;		// count of loops where channel has signal
+	NotchFilter notch_filter;	// notch filter - good to remove CTCSS tones
 };
 struct channel_t {
 	float wavein[WAVE_LEN];		// FFT output waveform
@@ -228,7 +229,6 @@ struct channel_t {
 	int highpass;               // highpass filter cutoff
 	int lowpass;                // lowpass filter cutoff
 	lame_t lame;
-	NotchFilter notch;			// notch filter - good to remove CTCSS tones
 };
 
 enum rec_modes { R_MULTICHANNEL, R_SCAN };

@@ -607,7 +607,7 @@ void *demodulate(void *params) {
 #endif // NFM
 
 // apply the notch filter.  If no filter configured, this will no-op
-						channel->notch.apply(channel->waveout[j]);
+						fparms->notch_filter.apply(channel->waveout[j]);
 					}
 				}
 				memmove(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * sizeof(float));
@@ -1063,6 +1063,12 @@ NotchFilter::NotchFilter(void) : enabled(false) {
 
 // Notch Filter based on https://www.dsprelated.com/showcode/173.php
 NotchFilter::NotchFilter(float notch_freq, float sample_freq, float q): enabled(true), x{0.0}, y{0.0} {
+	if (notch_freq <= 0.0) {
+		debug_print("Invalid frequency %f Hz, disabling notch filter\n", notch_freq);
+		enabled = false;
+		return;
+	}
+	
 	debug_print("Adding notch filter for %f Hz with parameters {%f, %f}\n", notch_freq, sample_freq, q);
 
 	float wo = 2*M_PI*(notch_freq/sample_freq);

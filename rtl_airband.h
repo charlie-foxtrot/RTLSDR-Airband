@@ -29,6 +29,8 @@
 #include <libconfig.h++>
 #ifdef USE_BCM_VC
 #include "hello_fft/gpu_fft.h"
+#else
+#include <fftw3.h>
 #endif
 #ifdef PULSE
 #include <pulse/context.h>
@@ -272,6 +274,17 @@ struct mixer_t {
 	mixinput_t inputs[MAX_MIXINPUTS];
 };
 
+struct demod_params_t {
+	int start_device;
+	int end_device;
+
+#ifndef USE_BCM_VC
+	fftwf_plan fft;
+	fftwf_complex* fftin;
+	fftwf_complex* fftout;
+#endif
+};
+
 // output.cpp
 lame_t airlame_init(mix_modes mixmode, int highpass, int lowpass);
 void shout_setup(icecast_data *icecast, mix_modes mixmode);
@@ -282,6 +295,7 @@ void *output_thread(void* params);
 
 // rtl_airband.cpp
 extern bool use_localtime;
+extern bool multiple_demod_threads;
 extern char *stats_filepath;
 extern size_t fft_size, fft_size_log;
 extern int device_count, mixer_count;

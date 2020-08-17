@@ -29,14 +29,10 @@
 #ifdef USE_BCM_VC
 #include "hello_fft/mailbox.h"
 #include "hello_fft/gpu_fft.h"
-#else
-#include <fftw3.h>
 #endif
 
 #else	/* x86 */
 #include <xmmintrin.h>
-#include <fftw3.h>
-
 #endif	/* x86 */
 
 #include <unistd.h>
@@ -86,6 +82,7 @@ int do_syslog = 1;
 int shout_metadata_delay = 3;
 volatile int do_exit = 0;
 bool use_localtime = false;
+bool multiple_demod_threads = false;
 bool log_scan_activity = false;
 char *stats_filepath = NULL;
 size_t fft_size_log = DEFAULT_FFT_SIZE_LOG;
@@ -282,17 +279,32 @@ public:
 	}
 };
 
-void demodulate() {
+void init_demod(demod_params_t *params, int start_device, int end_device) {
+	assert(params != NULL);
+
+	params->start_device = start_device;
+	params->end_device = end_device;
+
+#ifndef USE_BCM_VC
+	params->fftin = fftwf_alloc_complex(fft_size);
+	params->fftout = fftwf_alloc_complex(fft_size);
+	params->fft = fftwf_plan_dft_1d(fft_size, params->fftin, params->fftout, FFTW_FORWARD, FFTW_MEASURE);
+#endif
+}
+
+int next_device(demod_params_t *params, int current) {
+	if (current == params->end_device) {
+		return params->start_device;
+	}
+	return current + 1;
+}
+
+void *demodulate(void *params) {
+	assert(params != NULL);
+	demod_params_t *demod_params = (demod_params_t *) params;
 
 	// initialize fft engine
-#ifndef USE_BCM_VC
-	fftwf_plan fft;
-	fftwf_complex* fftin;
-	fftwf_complex* fftout;
-	fftin = fftwf_alloc_complex(fft_size);
-	fftout = fftwf_alloc_complex(fft_size);
-	fft = fftwf_plan_dft_1d(fft_size, fftin, fftout, FFTW_FORWARD, FFTW_MEASURE);
-#else
+#ifdef USE_BCM_VC
 	int mb = mbox_open();
 	struct GPU_FFT *fft;
 	int ret = gpu_fft_prepare(mb, fft_size_log, GPU_FFT_FWD, FFT_BATCH, &fft);
@@ -310,6 +322,9 @@ void demodulate() {
 			error();
 			break;
 	}
+#else
+	fftwf_complex* fftin = demod_params->fftin;
+	fftwf_complex* fftout = demod_params->fftout;
 #endif
 
 	float derotated_r = 0.f, derotated_j = 0.f, swf = 0.f, cwf = 0.f;
@@ -346,7 +361,7 @@ void demodulate() {
 	if(DEBUG)
 		gettimeofday(&ts, NULL);
 	size_t available;
-	int device_num = 0;
+	int device_num = demod_params->start_device;
 	while (true) {
 
 		if(do_exit) {
@@ -354,7 +369,7 @@ void demodulate() {
 			log(LOG_INFO, "Freeing GPU memory\n");
 			gpu_fft_release(fft);
 #endif
-			return;
+			return NULL;
 		}
 
 		device_t* dev = devices + device_num;
@@ -378,7 +393,7 @@ void demodulate() {
 				disable_device_outputs(dev);
 				devices_running--;
 			}
-			device_num = (device_num + 1) % device_count;
+			device_num = next_device(demod_params, device_num);
 			continue;
 		}
 
@@ -386,7 +401,7 @@ void demodulate() {
 		size_t bps = 2 * dev->input->bytes_per_sample * (size_t)round((double)dev->input->sample_rate / (double)WAVE_RATE);
 		if (available < bps * FFT_BATCH + fft_size * dev->input->bytes_per_sample * 2) {
 			// move to next device
-			device_num = (device_num + 1) % device_count;
+			device_num = next_device(demod_params, device_num);
 			SLEEP(10);
 			continue;
 		}
@@ -452,7 +467,7 @@ void demodulate() {
 #ifdef USE_BCM_VC
 		gpu_fft_execute(fft);
 #else
-		fftwf_execute(fft);
+		fftwf_execute(demod_params->fft);
 #endif
 
 #ifdef USE_BCM_VC
@@ -488,9 +503,6 @@ void demodulate() {
 		dev->waveend += FFT_BATCH;
 
 		if (dev->waveend >= WAVE_BATCH + AGC_EXTRA) {
-			if (tui) {
-				GOTOXY(0, device_num * 17 + dev->row + 3);
-			}
 			for (int i = 0; i < dev->channel_count; i++) {
 				AFC afc(dev, i);
 				channel_t* channel = dev->channels + i;
@@ -606,21 +618,24 @@ void demodulate() {
 #ifdef USE_BCM_VC
 				afc.finalize(dev, i, fft->out);
 #else
-				afc.finalize(dev, i, fftout);
+				afc.finalize(dev, i, demod_params->fftout);
 #endif
 
 				if (tui) {
-					if(dev->mode == R_SCAN)
-						printf("%4.0f/%3.0f%c %7.3f",
+					if(dev->mode == R_SCAN) {
+						GOTOXY(0, device_num * 17 + dev->row + 3);
+						printf("%4.0f/%3.0f%c %7.3f ",
 							fparms->agcavgslow,
 							(fparms->sqlevel >= 0 ? fparms->sqlevel : fparms->agcmin),
 							channel->axcindicate,
 							(dev->channels[0].freqlist[channel->freq_idx].frequency / 1000000.0));
-					else
+					} else {
+						GOTOXY(i*10, device_num * 17 + dev->row + 3);
 						printf("%4.0f/%3.0f%c ",
 							fparms->agcavgslow,
 							(fparms->sqlevel >= 0 ? fparms->sqlevel : fparms->agcmin),
 							channel->axcindicate);
+					}
 					fflush(stdout);
 				}
 
@@ -644,7 +659,7 @@ void demodulate() {
 		}
 
 		dev->input->bufs = (dev->input->bufs + bps * FFT_BATCH) % dev->input->buf_size;
-		device_num = (device_num + 1) % device_count;
+		device_num = next_device(demod_params, device_num);
 	}
 }
 
@@ -783,6 +798,13 @@ int main(int argc, char* argv[]) {
 		}
 		if(root.exists("localtime") && (bool)root["localtime"] == true)
 			use_localtime = true;
+		if(root.exists("multiple_demod_threads") && (bool)root["multiple_demod_threads"] == true) {
+#ifdef USE_BCM_VC
+			cerr<<"Using multiple_demod_threads not supported with BCM VideoCore for FFT\n";
+			exit(1);
+#endif
+			multiple_demod_threads = true;
+		}
 		if(root.exists("log_scan_activity") && (bool)root["log_scan_activity"] == true)
 			log_scan_activity = true;
 		if(root.exists("stats_filepath"))
@@ -999,7 +1021,23 @@ int main(int argc, char* argv[]) {
 #endif
 	sincosf_lut_init();
 
-	demodulate();
+	if (!multiple_demod_threads) {
+		demod_params_t params;
+		init_demod(&params, 0, device_count - 1);
+		demodulate(&params);
+	} else {
+		demod_params_t *params = (demod_params_t *)XCALLOC(device_count, sizeof(demod_params_t));
+		THREAD *threads = (THREAD *)XCALLOC(device_count, sizeof(THREAD));
+		for (int i = 0; i < device_count; i++) {
+			init_demod(&params[i], i, i);
+		}
+		for (int i = 0; i < device_count; i++) {
+			pthread_create(&threads[i], NULL, &demodulate, &params[i]);
+		}
+		for (int i = 0; i < device_count; i++) {
+			pthread_join(threads[i], NULL);
+		}
+	}
 
 	log(LOG_INFO, "Cleaning up\n");
 	for (int i = 0; i < device_count; i++) {

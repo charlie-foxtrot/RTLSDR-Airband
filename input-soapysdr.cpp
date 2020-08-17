@@ -189,12 +189,7 @@ int soapysdr_parse_config(input_t * const input, libconfig::Setting &cfg) {
 		}
 	}
 	if(cfg.exists("channel")) {
-		dev_data->channel = (int)cfg["channel"];
-		if(dev_data->channel < 0) {
-			cerr<<"SoapySDR configuration error: device '"<<dev_data->device_string<<
-				"': channel number must be positive\n";
-			error();
-		}
+		dev_data->channel = (size_t)(int)cfg["channel"];
 	}
 	if(cfg.exists("antenna")) {
 		dev_data->antenna = strdup(cfg["antenna"]);

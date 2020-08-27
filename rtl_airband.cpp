@@ -326,8 +326,6 @@ void *demodulate(void *params) {
 	fftwf_complex* fftin = demod_params->fftin;
 	fftwf_complex* fftout = demod_params->fftout;
 #endif
-
-	float derotated_r = 0.f, derotated_j = 0.f, swf = 0.f, cwf = 0.f;
 	ALIGN float ALIGN2 levels_u8[256], levels_s8[256];
 	float *levels_ptr = NULL;
 
@@ -563,25 +561,49 @@ void *demodulate(void *params) {
 							}
 						}
 					}
-					if(channel->agcsq != -1) {
+
+					bool signal_filtered = false;
+					if(channel->agcsq < 0 && channel->needs_raw_iq) {
+						// remove phase rotation introduced by FFT sliding window
+						float swf, cwf, re, im;
+						sincosf_lut(channel->dm_phi, &swf, &cwf);
+						multiply(channel->iq_in[2*(j - AGC_EXTRA)], channel->iq_in[2*(j - AGC_EXTRA)+1], cwf, -swf, &re, &im);
+						channel->dm_phi += channel->dm_dphi;
+						channel->dm_phi &= 0xffffff;
+
+						if(fparms->lowpass_filter.enabled()) {
+							fparms->lowpass_filter.apply(re, im);
+
+							// update I/Q and wave
+							channel->iq_in[2*(j - AGC_EXTRA)] = re;
+							channel->iq_in[2*(j - AGC_EXTRA)+1] = im;
+							channel->wavein[j] = sqrt(re * re + im * im);
+
+							fparms->filter_avg = fparms->filter_avg * 0.999f + channel->wavein[j] * 0.001f;
+
+							if (fparms->filter_avg < sqlevel) {
+								signal_filtered = true;
+								channel->axcindicate = NO_SIGNAL;
+							} else {
+								channel->axcindicate = SIGNAL;
+							}
+						}
+					}
+					if(channel->agcsq != -1 || signal_filtered) {
 						channel->waveout[j] = 0;
 						if(channel->has_iq_outputs) {
 							channel->iq_out[2*(j - AGC_EXTRA)] = 0;
 							channel->iq_out[2*(j - AGC_EXTRA)+1] = 0;
 						}
 					} else {
-						if(channel->needs_raw_iq) {
-// remove phase rotation introduced by FFT sliding window
-							sincosf_lut(channel->dm_phi, &swf, &cwf);
-							multiply(channel->iq_in[2*(j - AGC_EXTRA)], channel->iq_in[2*(j - AGC_EXTRA)+1],
-							cwf, -swf, &derotated_r, &derotated_j);
-							channel->dm_phi += channel->dm_dphi;
-							channel->dm_phi &= 0xffffff;
-							if(channel->has_iq_outputs) {
-								channel->iq_out[2*(j - AGC_EXTRA)] = derotated_r;
-								channel->iq_out[2*(j - AGC_EXTRA)+1] = derotated_j;
-							}
+						const float &re = channel->iq_in[2*(j - AGC_EXTRA)];
+						const float &im = channel->iq_in[2*(j - AGC_EXTRA)+1];
+
+						if(channel->has_iq_outputs) {
+							channel->iq_out[2*(j - AGC_EXTRA)] = re;
+							channel->iq_out[2*(j - AGC_EXTRA)+1] = im;
 						}
+
 						if(channel->modulation == MOD_AM) {
 							channel->waveout[j] = (channel->wavein[j - AGC_EXTRA] - fparms->agcavgfast) / (fparms->agcavgfast * 1.5f);
 							if (abs(channel->waveout[j]) > 0.8f) {
@@ -593,12 +615,12 @@ void *demodulate(void *params) {
 						else if(channel->modulation == MOD_NFM) {
 // FM demod
 							if(fm_demod == FM_FAST_ATAN2) {
-								channel->waveout[j] = polar_disc_fast(derotated_r, derotated_j, channel->pr, channel->pj);
+								channel->waveout[j] = polar_disc_fast(re, im, channel->pr, channel->pj);
 							} else if(fm_demod == FM_QUADRI_DEMOD) {
-								channel->waveout[j] = fm_quadri_demod(derotated_r, derotated_j, channel->pr, channel->pj);
+								channel->waveout[j] = fm_quadri_demod(re, im, channel->pr, channel->pj);
 							}
-							channel->pr = derotated_r;
-							channel->pj = derotated_j;
+							channel->pr = re;
+							channel->pj = im;
 // de-emphasis IIR + DC blocking
 							fparms->agcavgfast = fparms->agcavgfast * 0.995f + channel->waveout[j] * 0.005f;
 							channel->waveout[j] -= fparms->agcavgfast;
@@ -1058,14 +1080,14 @@ int main(int argc, char* argv[]) {
 }
 
 // Default constructor is no filter
-NotchFilter::NotchFilter(void) : enabled(false) {
+NotchFilter::NotchFilter(void) : enabled_(false) {
 }
 
 // Notch Filter based on https://www.dsprelated.com/showcode/173.php
-NotchFilter::NotchFilter(float notch_freq, float sample_freq, float q): enabled(true), x{0.0}, y{0.0} {
+NotchFilter::NotchFilter(float notch_freq, float sample_freq, float q): enabled_(true), x{0.0}, y{0.0} {
 	if (notch_freq <= 0.0) {
 		debug_print("Invalid frequency %f Hz, disabling notch filter\n", notch_freq);
-		enabled = false;
+		enabled_ = false;
 		return;
 	}
 	
@@ -1083,7 +1105,7 @@ NotchFilter::NotchFilter(float notch_freq, float sample_freq, float q): enabled(
 }
 
 void NotchFilter::apply(float &value) {
-	if (!enabled) {
+	if (!enabled_) {
 		return;
 	}
 
@@ -1098,5 +1120,115 @@ void NotchFilter::apply(float &value) {
 	value = y[2];
 }
 
+// Default constructor is no filter
+LowpassFilter::LowpassFilter(void) : enabled_(false) {
+}
+
+// 2nd order lowpass Bessel filter, based entirely on a simplification of https://www-users.cs.york.ac.uk/~fisher/mkfilter/
+LowpassFilter::LowpassFilter(float freq, float sample_freq) : enabled_(true) {
+	if (freq <= 0.0) {
+		debug_print("Invalid frequency %f Hz, disabling lowpass filter\n", freq);
+		enabled_ = false;
+		return;
+	}
+
+	debug_print("Adding lowpass filter at %f Hz with a sample rate of %f\n", freq, sample_freq);
+
+	double raw_alpha = (double)freq/sample_freq;
+	double warped_alpha = tan(M_PI * raw_alpha) / M_PI;
+
+	complex<double> zeros[2] = {-1.0, -1.0};
+	complex<double> poles[2];
+	poles[0] = blt(M_PI * 2 * warped_alpha * complex<double>(-1.10160133059e+00, 6.36009824757e-01));
+	poles[1] = blt(M_PI * 2 * warped_alpha * conj(complex<double>(-1.10160133059e+00, 6.36009824757e-01)));
+
+	complex<double> topcoeffs[3];
+	complex<double> botcoeffs[3];
+	expand(zeros, 2, topcoeffs);
+	expand(poles, 2, botcoeffs);
+	complex<double> gain_complex = evaluate(topcoeffs, 2, botcoeffs, 2, 1.0);
+	gain = hypot(gain_complex.imag(), gain_complex.real());
+
+	for (int i = 0; i <= 2; i++)
+	{
+		ycoeffs[i] = -(botcoeffs[i].real() / botcoeffs[2].real());
+	}
+
+	debug_print("gain: %f, ycoeffs: {%f, %f}\n", gain, ycoeffs[0], ycoeffs[1]);
+}
+
+complex<double> LowpassFilter::blt(complex<double> pz)
+{
+	return (2.0 + pz) / (2.0 - pz);
+}
+
+/* evaluate response, substituting for z */
+complex<double> LowpassFilter::evaluate(complex<double> topco[], int nz, complex<double> botco[], int np, complex<double> z)
+{
+	return eval(topco, nz, z) / eval(botco, np, z);
+}
+
+/* evaluate polynomial in z, substituting for z */
+complex<double> LowpassFilter::eval(complex<double> coeffs[], int npz, complex<double> z)
+{
+	complex<double> sum (0.0);
+	for (int i = npz; i >= 0; i--) {
+		sum = (sum * z) + coeffs[i];
+	}
+	return sum;
+}
+
+/* compute product of poles or zeros as a polynomial of z */
+void LowpassFilter::expand(complex<double> pz[], int npz, complex<double> coeffs[])
+{
+	coeffs[0] = 1.0;
+	for (int i = 0; i < npz; i++)
+	{
+		coeffs[i+1] = 0.0;
+	}
+	for (int i = 0; i < npz; i++)
+	{
+		multin(pz[i], npz, coeffs);
+	}
+	/* check computed coeffs of z^k are all real */
+	for (int i = 0; i < npz+1; i++)
+	{
+		if (fabs(coeffs[i].imag()) > 1e-10)
+		{
+			log(LOG_ERR, "coeff of z^%d is not real; poles/zeros are not complex conjugates\n", i);
+			error();
+		}
+	}
+}
+
+void LowpassFilter::multin(complex<double> w, int npz, complex<double> coeffs[])
+{
+	/* multiply factor (z-w) into coeffs */
+	complex<double> nw = -w;
+	for (int i = npz; i >= 1; i--)
+	{
+		coeffs[i] = (nw * coeffs[i]) + coeffs[i-1];
+	}
+	coeffs[0] = nw * coeffs[0];
+}
+
+void LowpassFilter::apply(float &r, float &j) {
+	if (!enabled_) {
+		return;
+	}
+
+	complex<float> input(r, j);
+
+	xv[0] = xv[1];
+	xv[1] = xv[2];
+	xv[2] = input / gain;
+
+	yv[0] = yv[1];
+	yv[1] = yv[2];
+	yv[2] = (xv[0] + xv[2]) + (2.0f * xv[1]) + (ycoeffs[0] * yv[0]) + (ycoeffs[1] * yv[1]);
+
+	r = yv[2].real();
+	j = yv[2].imag();
+}
 
 // vim: ts=4

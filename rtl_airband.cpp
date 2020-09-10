@@ -571,14 +571,15 @@ void *demodulate(void *params) {
 						channel->dm_phi += channel->dm_dphi;
 						channel->dm_phi &= 0xffffff;
 
+						// apply lowpass filter, will be a no-op if not configured
+						fparms->lowpass_filter.apply(re, im);
+
+						// update I/Q and wave
+						channel->iq_in[2*(j - AGC_EXTRA)] = re;
+						channel->iq_in[2*(j - AGC_EXTRA)+1] = im;
+						channel->wavein[j] = sqrt(re * re + im * im);
+
 						if(fparms->lowpass_filter.enabled()) {
-							fparms->lowpass_filter.apply(re, im);
-
-							// update I/Q and wave
-							channel->iq_in[2*(j - AGC_EXTRA)] = re;
-							channel->iq_in[2*(j - AGC_EXTRA)+1] = im;
-							channel->wavein[j] = sqrt(re * re + im * im);
-
 							fparms->filter_avg = fparms->filter_avg * 0.999f + channel->wavein[j] * 0.001f;
 
 							if (fparms->filter_avg < sqlevel) {

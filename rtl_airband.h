@@ -74,11 +74,7 @@
 #define MAX_MIXINPUTS 32
 
 #define MIN_FFT_SIZE_LOG 8
-#ifdef NFM
-#define DEFAULT_FFT_SIZE_LOG 10
-#else
 #define DEFAULT_FFT_SIZE_LOG 9
-#endif
 #define MAX_FFT_SIZE_LOG 13
 
 #define LAMEBUF_SIZE 22000 //todo: calculate

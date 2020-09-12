@@ -21,6 +21,7 @@
 #ifndef _RTL_AIRBAND_H
 #define _RTL_AIRBAND_H 1
 #include <cstdio>
+#include <complex>
 #include <stdint.h>		// uint32_t
 #include <pthread.h>
 #include <sys/time.h>
@@ -182,7 +183,7 @@ public:
 	void apply(float &value);
 
 private:
-	bool enabled;
+	bool enabled_;
 	float e;
 	float p;
 	float d[3];
@@ -190,16 +191,41 @@ private:
 	float y[3];
 };
 
+class LowpassFilter
+{
+public:
+	LowpassFilter(void);
+	LowpassFilter(float freq, float sample_freq);
+	void apply(float &r, float &j);
+	bool enabled(void) const {return enabled_;}
+
+private:
+	static std::complex<double> blt(std::complex<double> pz);
+	static void expand(std::complex<double> pz[], int npz, std::complex<double> coeffs[]);
+	static void multin(std::complex<double> w, int npz, std::complex<double> coeffs[]);
+	static std::complex<double> evaluate(std::complex<double> topco[], int nz, std::complex<double> botco[], int np, std::complex<double> z);
+	static std::complex<double> eval(std::complex<double> coeffs[], int npz, std::complex<double> z);
+
+	bool enabled_;
+	float ycoeffs[3];
+	float gain;
+
+	std::complex<float> xv[3];
+	std::complex<float> yv[3];
+};
+
 struct freq_t {
 	int frequency;				// scan frequency
 	char *label;				// frequency label
 	float agcavgfast;			// average power, for AGC
 	float agcavgslow;			// average power, for squelch level detection
+	float filter_avg;			// average power, for post-filter squelch level detection
 	float agcmin;				// noise level
 	int sqlevel;				// manually configured squelch level
 	int agclow;					// low level sample count
 	size_t active_counter;		// count of loops where channel has signal
 	NotchFilter notch_filter;	// notch filter - good to remove CTCSS tones
+	LowpassFilter lowpass_filter;	// lowpass filter, applied to I/Q after derotation, set at bandwidth/2 to remove out of band noise
 };
 struct channel_t {
 	float wavein[WAVE_LEN];		// FFT output waveform
@@ -216,7 +242,7 @@ struct channel_t {
 	uint32_t dm_dphi, dm_phi;	// derotation frequency and current phase value
 	enum modulations modulation;
 	enum mix_modes mode;		// mono or stereo
-	int agcsq;					// squelch status, 0 = signal, 1 = suppressed
+	int agcsq;					// squelch status, negative: signal, positive: suppressed
 	status axcindicate;
 	unsigned char afc;			//0 - AFC disabled; 1 - minimal AFC; 2 - more aggressive AFC and so on to 255
 	struct freq_t *freqlist;

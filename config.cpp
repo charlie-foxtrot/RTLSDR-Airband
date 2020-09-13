@@ -393,11 +393,6 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			}
 		}
 		if(chans[j].exists("bandwidth")) {
-			if(channel->modulation == MOD_AM) {
-				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: bandwidth not supported for AM\n";
-				error();
-			}
-
 			channel->needs_raw_iq = 1;
 
 			if(libconfig::Setting::TypeList == chans[j]["bandwidth"].getType()) {

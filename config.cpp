@@ -210,6 +210,7 @@ static struct freq_t *mk_freqlist( int n )
 		fl[i].label = NULL;
 		fl[i].agcavgfast = 0.5f;
 		fl[i].agcavgslow = 0.5f;
+		fl[i].filter_avg = 0.5f;
 		fl[i].agcmin = 100.0f;
 		fl[i].agclow = 0;
 		fl[i].sqlevel = -1;
@@ -310,7 +311,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				error();
 			}
 			if(chans[j].exists("notch_q") && libconfig::Setting::TypeList == chans[j]["notch_q"].getType() && chans[j]["notch_q"].getLength() < channel->freq_count) {
-				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: notch_q should be an float or a list of floats with at least "
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: notch_q should be a float or a list of floats with at least "
 					<<channel->freq_count<<" elements\n";
 				error();
 			}
@@ -364,7 +365,11 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 							<<q<<" (must be greater than 0.0)\n";
 						error();
 					}
-					channel->freqlist[f].notch_filter = NotchFilter(freq, WAVE_RATE, q);
+					if(freq <= 0) {
+						cerr << "devices.["<<i<<"] channels.["<<j<<"] freq.["<<f<<"]: invalid value for notch: "<<freq<<", ignoring\n";
+					} else {
+						channel->freqlist[f].notch_filter = NotchFilter(freq, WAVE_RATE, q);
+					}
 				}
 			} else if(libconfig::Setting::TypeFloat == chans[j]["notch"].getType() ) {
 				float freq = (float)chans[j]["notch"];
@@ -375,7 +380,11 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 					error();
 				}
 				for(int f = 0; f<channel->freq_count; f++) {
-					channel->freqlist[f].notch_filter = NotchFilter(freq, WAVE_RATE, q);;
+					if(freq <= 0) {
+						cerr << "devices.["<<i<<"] channels.["<<j<<"]: freq value '"<<freq<<"' invalid, ignoring\n";
+					} else {
+						channel->freqlist[f].notch_filter = NotchFilter(freq, WAVE_RATE, q);
+					}
 				}
 			} else {
 				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: notch should be an float or a list of floats with at least "
@@ -383,6 +392,30 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				error();
 			}
 		}
+		if(chans[j].exists("bandwidth")) {
+			channel->needs_raw_iq = 1;
+
+			if(libconfig::Setting::TypeList == chans[j]["bandwidth"].getType()) {
+				for(int f = 0; f<channel->freq_count; f++) {
+					int bandwidth = parse_anynum2int(chans[j]["bandwidth"][f]);
+					if(bandwidth <= 0) {
+						cerr << "devices.["<<i<<"] channels.["<<j<<"] freq.["<<f<<"]: bandwidth value '"<<bandwidth<<"' invalid, ignoring\n";
+					} else {
+						channel->freqlist[f].lowpass_filter = LowpassFilter((float)bandwidth/2, WAVE_RATE);
+					}
+				}
+			} else {
+				int bandwidth = parse_anynum2int(chans[j]["bandwidth"]);
+				if(bandwidth <= 0) {
+					cerr << "devices.["<<i<<"] channels.["<<j<<"]: bandwidth value '"<<bandwidth<<"' invalid, ignoring\n";
+				} else {
+					for(int f = 0; f<channel->freq_count; f++) {
+						channel->freqlist[f].lowpass_filter = LowpassFilter((float)bandwidth/2, WAVE_RATE);
+					}
+				}
+			}
+		}
+
 #ifdef NFM
 		if(chans[j].exists("tau")) {
 			channel->alpha = ((int)chans[j]["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)chans[j]["tau"])));

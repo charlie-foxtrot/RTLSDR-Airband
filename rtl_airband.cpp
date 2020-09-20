@@ -452,12 +452,11 @@ void *demodulate(void *params) {
 			}
 #elif defined (__arm__) || defined (__aarch64__)
 			unsigned char* buf2 = dev->input->buffer + dev->input->bufs;
-			for (size_t i = 0; i < fft_size; i++) {
+			for (size_t i = 0; i < fft_size; i++, buf2 += 2 * dev->input->bytes_per_sample) {
 				float re = levels_ptr[*(buf2)] * window[i*2];
 				float im = levels_ptr[*(buf2+1)] * window[i*2];
 				fftin[i][0] = re;
 				fftin[i][1] = im;
-				buf2 += 2;
 			}
 #else /* x86 */
 			for (size_t i = 0; i < fft_size; i += 2) {

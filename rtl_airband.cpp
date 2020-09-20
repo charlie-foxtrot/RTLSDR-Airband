@@ -409,37 +409,39 @@ void *demodulate(void *params) {
 		}
 
 		if(dev->input->sfmt == SFMT_S16) {
+			float const scale = 127.5f / dev->input->fullscale;
 #ifdef USE_BCM_VC
 			struct GPU_FFT_COMPLEX *ptr = fft->in;
 			for(size_t b = 0; b < FFT_BATCH; b++, ptr += fft->step) {
-				for(size_t i = 0; i < fft_size; i++) {
-					short *buf2 = (short *)(dev->input->buffer + dev->input->bufs + b * bps + i * dev->input->bytes_per_sample * 2);
-					ptr[i].re = (float)buf2[0] / dev->input->fullscale * 127.5f * window[i*2];
-					ptr[i].im = (float)buf2[1] / dev->input->fullscale * 127.5f * window[i*2];
+				short *buf2 = (short *)(dev->input->buffer + dev->input->bufs + b * bps);
+				for(size_t i = 0; i < fft_size; i++, buf2 += 2) {
+					ptr[i].re = scale * (float)buf2[0] * window[i*2];
+					ptr[i].im = scale * (float)buf2[1] * window[i*2];
 				}
 			}
 #else
-			for(size_t i = 0; i < fft_size; i++) {
-				short *buf2 = (short *)(dev->input->buffer + dev->input->bufs + i * dev->input->bytes_per_sample * 2);
-				fftin[i][0] = (float)buf2[0] / dev->input->fullscale * 127.5f * window[i*2];
-				fftin[i][1] = (float)buf2[1] / dev->input->fullscale * 127.5f * window[i*2];
+			short *buf2 = (short *)(dev->input->buffer + dev->input->bufs);
+			for(size_t i = 0; i < fft_size; i++, buf2 += 2) {
+				 fftin[i][0] = scale * (float)buf2[0] * window[i*2];
+				 fftin[i][1] = scale * (float)buf2[1] * window[i*2];
 			}
 #endif
 		} else if(dev->input->sfmt == SFMT_F32) {
+			float const scale = 127.5f / dev->input->fullscale;
 #ifdef USE_BCM_VC
 			struct GPU_FFT_COMPLEX *ptr = fft->in;
 			for(size_t b = 0; b < FFT_BATCH; b++, ptr += fft->step) {
-				for(size_t i = 0; i < fft_size; i++) {
-					float *buf2 = (float *)(dev->input->buffer + dev->input->bufs + b * bps + i * dev->input->bytes_per_sample * 2);
-					ptr[i].re = buf2[0] / dev->input->fullscale * 127.5f * window[i*2];
-					ptr[i].im = buf2[1] / dev->input->fullscale * 127.5f * window[i*2];
+				float *buf2 = (float *)(dev->input->buffer + dev->input->bufs + b * bps);
+				for(size_t i = 0; i < fft_size; i++, buf2 += 2) {
+					ptr[i].re = scale * buf2[0] * window[i*2];
+					ptr[i].im = scale * buf2[1] * window[i*2];
 				}
 			}
 #else
-			for(size_t i = 0; i < fft_size; i++) {
-				float *buf2 = (float *)(dev->input->buffer + dev->input->bufs + i * dev->input->bytes_per_sample * 2);
-				fftin[i][0] = buf2[0] / dev->input->fullscale * 127.5f * window[i*2];
-				fftin[i][1] = buf2[1] / dev->input->fullscale * 127.5f * window[i*2];
+			float *buf2 = (float *)(dev->input->buffer + dev->input->bufs);
+			for(size_t i = 0; i < fft_size; i++, buf2 += 2) {
+				fftin[i][0] = scale * buf2[0] * window[i*2];
+				fftin[i][1] = scale * buf2[1] * window[i*2];
 			}
 #endif
 		} else {	// S8 or U8
@@ -452,16 +454,16 @@ void *demodulate(void *params) {
 			}
 #elif defined (__arm__) || defined (__aarch64__)
 			unsigned char* buf2 = dev->input->buffer + dev->input->bufs;
-			for (size_t i = 0; i < fft_size; i++, buf2 += 2 * dev->input->bytes_per_sample) {
-				float re = levels_ptr[*(buf2)] * window[i*2];
-				float im = levels_ptr[*(buf2+1)] * window[i*2];
+			for (size_t i = 0; i < fft_size; i++, buf2 += 2) {
+				float re = levels_ptr[buf2[0]] * window[i*2];
+				float im = levels_ptr[buf2[1]] * window[i*2];
 				fftin[i][0] = re;
 				fftin[i][1] = im;
 			}
 #else /* x86 */
-			for (size_t i = 0; i < fft_size; i += 2) {
-				unsigned char* buf2 = dev->input->buffer + dev->input->bufs + i * dev->input->bytes_per_sample * 2;
-				__m128 a = _mm_set_ps(levels_ptr[*(buf2 + 3)], levels_ptr[*(buf2 + 2)], levels_ptr[*(buf2 + 1)], levels_ptr[*(buf2)]);
+			unsigned char* buf2 = dev->input->buffer + dev->input->bufs;
+			for (size_t i = 0; i < fft_size; i += 2, buf2 += 4) {
+				__m128 a = _mm_set_ps(levels_ptr[buf2[3]], levels_ptr[buf2[2]], levels_ptr[buf2[1]], levels_ptr[buf2[0]]);
 				__m128 b = _mm_load_ps(&window[i * 2]);
 				a = _mm_mul_ps(a, b);
 				_mm_store_ps(&fftin[i][0], a);

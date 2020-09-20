@@ -91,6 +91,11 @@ ifeq ($(WITH_SOAPYSDR), 1)
   LDLIBS += -lSoapySDR
 endif
 
+ifeq ($(WITH_PROFILING), 1)
+  CFLAGS += -DWITH_PROFILING
+  LDLIBS += -lprofiler
+endif
+
 ifeq ($(UNKNOWN_PLATFORM),1)
   DEPS =
 endif

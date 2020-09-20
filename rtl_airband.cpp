@@ -69,6 +69,10 @@
 #include "input-common.h"
 #include "rtl_airband.h"
 
+#ifdef WITH_PROFILING
+#include "gperftools/profiler.h"
+#endif
+
 using namespace std;
 using namespace libconfig;
 
@@ -447,10 +451,13 @@ void *demodulate(void *params) {
 				sfa.dest+= fft->step;
 			}
 #elif defined (__arm__) || defined (__aarch64__)
+			unsigned char* buf2 = dev->input->buffer + dev->input->bufs;
 			for (size_t i = 0; i < fft_size; i++) {
-				unsigned char* buf2 = dev->input->buffer + dev->input->bufs + i * dev->input->bytes_per_sample * 2;
-				fftin[i][0] = levels_ptr[*(buf2)] * window[i*2];
-				fftin[i][1] = levels_ptr[*(buf2+1)] * window[i*2];
+				float re = levels_ptr[*(buf2)] * window[i*2];
+				float im = levels_ptr[*(buf2+1)] * window[i*2];
+				fftin[i][0] = re;
+				fftin[i][1] = im;
+				buf2 += 2;
 			}
 #else /* x86 */
 			for (size_t i = 0; i < fft_size; i += 2) {
@@ -714,6 +721,9 @@ static int count_devices_running() {
 }
 
 int main(int argc, char* argv[]) {
+#ifdef WITH_PROFILING
+	ProfilerStart("rtl_airband.prof");
+#endif
 #pragma GCC diagnostic ignored "-Wwrite-strings"
 	char *cfgfile = CFGFILE;
 	char *pidfile = PIDFILE;
@@ -1077,6 +1087,9 @@ int main(int argc, char* argv[]) {
 	log(LOG_INFO, "Input threads closed\n");
 	close_debug();
 // FIXME: pulseaudio cleanup
+#ifdef WITH_PROFILING
+	ProfilerStop();
+#endif
 	return 0;
 }
 

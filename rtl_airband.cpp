@@ -1075,6 +1075,8 @@ int main(int argc, char* argv[]) {
 
 	log(LOG_INFO, "Cleaning up\n");
 	for (int i = 0; i < device_count; i++) {
+		if(devices[i].mode == R_SCAN)
+			pthread_join(devices[i].controller_thread, NULL);
 		if(input_stop(devices[i].input) != 0 || devices[i].input->state != INPUT_STOPPED) {
 			if(errno != 0) {
 				log(LOG_ERR, "Failed do stop device #%d: %s\n", i, strerror(errno));
@@ -1082,8 +1084,6 @@ int main(int argc, char* argv[]) {
 				log(LOG_ERR, "Failed do stop device #%d\n", i);
 			}
 		}
-		if(devices[i].mode == R_SCAN)
-			pthread_join(devices[i].controller_thread, NULL);
 	}
 	log(LOG_INFO, "Input threads closed\n");
 	close_debug();

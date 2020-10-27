@@ -399,7 +399,7 @@ void *demodulate(void *params) {
 			continue;
 		}
 
-// number of input bytes per output wave sample (x 2 for I and Q)
+		// number of input bytes per output wave sample (x 2 for I and Q)
 		size_t bps = 2 * dev->input->bytes_per_sample * (size_t)round((double)dev->input->sample_rate / (double)WAVE_RATE);
 		if (available < bps * FFT_BATCH + fft_size * dev->input->bytes_per_sample * 2) {
 			// move to next device
@@ -981,8 +981,11 @@ int main(int argc, char* argv[]) {
 		for (int j = 0; j < dev->channel_count; j++) {
 			channel_t* channel = dev->channels + j;
 
+			// If the channel has icecast or MP3 file output, we will attempt to
+			// initialize a separate LAME context for MP3 encoding.
 			if(channel->need_mp3)
 				channel->lame = airlame_init(channel->mode, channel->highpass, channel->lowpass);
+
 			for (int k = 0; k < channel->output_count; k++) {
 				output_t *output = channel->outputs + k;
 				if(output->type == O_ICECAST) {
@@ -1086,8 +1089,19 @@ int main(int argc, char* argv[]) {
 			pthread_join(devices[i].controller_thread, NULL);
 	}
 	log(LOG_INFO, "Input threads closed\n");
+
+	for (int i = 0; i < device_count; i++) {
+		device_t* dev = devices + i;
+		disable_device_outputs(dev);
+
+		for (int j = 0; j < dev->channel_count; j++) {
+			channel_t* channel = dev->channels + j;
+			if(channel->need_mp3 && channel->lame)
+				lame_close(channel->lame);
+		}
+	}
+
 	close_debug();
-// FIXME: pulseaudio cleanup
 #ifdef WITH_PROFILING
 	ProfilerStop();
 #endif
@@ -1105,7 +1119,7 @@ NotchFilter::NotchFilter(float notch_freq, float sample_freq, float q): enabled_
 		enabled_ = false;
 		return;
 	}
-	
+
 	debug_print("Adding notch filter for %f Hz with parameters {%f, %f}\n", notch_freq, sample_freq, q);
 
 	float wo = 2*M_PI*(notch_freq/sample_freq);

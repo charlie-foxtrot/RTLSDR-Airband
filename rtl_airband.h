@@ -103,6 +103,16 @@ extern "C" void samplefft(sample_fft_arg *a, unsigned char* buffer, float* windo
 enum status {NO_SIGNAL = ' ', SIGNAL = '*', AFC_UP = '<', AFC_DOWN = '>' };
 enum ch_states { CH_DIRTY, CH_WORKING, CH_READY };
 enum mix_modes { MM_MONO, MM_STEREO };
+enum output_type {
+	O_ICECAST,
+	O_FILE,
+	O_RAWFILE,
+	O_MIXER
+#ifdef PULSE
+	, O_PULSE
+#endif
+};
+
 struct icecast_data {
 	const char *hostname;
 	int port;
@@ -126,6 +136,7 @@ struct file_data {
 	timeval open_time;
 	timeval last_write_time;
 	FILE *f;
+	enum output_type type;
 };
 
 #ifdef PULSE
@@ -147,15 +158,6 @@ struct mixer_data {
 	int input;
 };
 
-enum output_type {
-	O_ICECAST,
-	O_FILE,
-	O_RAWFILE,
-	O_MIXER
-#ifdef PULSE
-	, O_PULSE
-#endif
-};
 struct output_t {
 	enum output_type type;
 	bool enabled;
@@ -256,7 +258,7 @@ struct channel_t {
 	output_t *outputs;
 	int highpass;               // highpass filter cutoff
 	int lowpass;                // lowpass filter cutoff
-	lame_t lame;
+	lame_t lame;                // Context for LAME MP3 encoding if needed
 };
 
 enum rec_modes { R_MULTICHANNEL, R_SCAN };

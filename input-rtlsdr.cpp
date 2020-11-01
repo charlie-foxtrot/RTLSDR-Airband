@@ -177,7 +177,7 @@ int rtlsdr_stop(input_t * const input) {
 	if(rtlsdr_cancel_async(dev_data->dev) < 0) {
 		return -1;
 	}
-	return 0;
+	return rtlsdr_close(dev_data->dev);
 }
 
 int rtlsdr_set_centerfreq(input_t * const input, int const centerfreq) {

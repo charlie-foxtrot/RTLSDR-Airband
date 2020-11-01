@@ -62,6 +62,7 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			channel->outputs[oo].type = O_FILE;
 			file_data *fdata = (file_data *)(channel->outputs[oo].data);
 
+			fdata->type = O_FILE;
 			if (!outs[o].exists("directory") || !outs[o].exists("filename_template")) {
 				if(parsing_mixers) {
 					cerr<<"Configuration error: mixers.["<<i<<"] outputs.["<<o<<"]: both directory and filename_template required for file\n";
@@ -108,11 +109,12 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			channel->outputs[oo].type = O_RAWFILE;
 			file_data *fdata = (file_data *)(channel->outputs[oo].data);
 
+			fdata->type = O_RAWFILE;
 			if (!outs[o].exists("directory") || !outs[o].exists("filename_template")) {
 				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: both directory and filename_template required for file\n";
 				error();
 			}
-			
+
 			fdata->basename = (char *)XCALLOC(1, strlen(outs[o]["directory"]) + strlen(outs[o]["filename_template"]) + 2);
 			sprintf(fdata->basename, "%s/%s", (const char *)outs[o]["directory"], (const char *)outs[o]["filename_template"]);
 

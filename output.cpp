@@ -136,7 +136,7 @@ lame_t airlame_init(mix_modes mixmode, int highpass, int lowpass) {
 		lame_set_num_channels(lame, 1);
 		lame_set_mode(lame, MONO);
 	}
-	debug_print("mixmode=%s\n", mixmode == MM_STEREO ? "MM_STEREO" : "MM_MONO");
+	debug_print("lame init with mixmode=%s\n", mixmode == MM_STEREO ? "MM_STEREO" : "MM_MONO");
 	lame_init_params(lame);
 	return lame;
 }
@@ -153,6 +153,9 @@ public:
 		int samples = (msec * WAVE_RATE) / 1000;
 		float *buf = (float *)XCALLOC(samples, sizeof(float));
 
+		debug_print("LameTone with mixmode=%s msec=%d hz=%u\n",
+					mixmode == MM_STEREO ? "MM_STEREO" : "MM_MONO",
+					msec, hz);
 		if (hz > 0) {
 			const float period = 1.0 / (float)hz;
 			const float sample_time = 1.0 / (float)WAVE_RATE;
@@ -253,12 +256,27 @@ static double delta_sec(const timeval *start, const timeval *stop) {
 	timersub(stop, start, &delta);
 	return delta.tv_sec + delta.tv_usec/1000000.0;
 }
-static void close_file(file_data *fdata) {
+
+// Buffer used by each lame encode. Each channel is handled sequentially by
+// the output thread, so this is reused sequentially.
+unsigned char lamebuf[LAMEBUF_SIZE];
+
+static void close_file(channel_t *channel, file_data *fdata) {
 	if (!fdata) {
 		return;
 	}
 
-	//todo: finalize file stream with lame_encode_flush_nogap for O_FILE but not O_RAWFILE
+	if(fdata->type == O_FILE && fdata->f && channel->lame) {
+		int encoded = lame_encode_flush_nogap(channel->lame, lamebuf, LAMEBUF_SIZE);
+		debug_print("closing file %s flushed %d\n", fdata->file_path, encoded);
+
+		if (encoded > 0) {
+			size_t written = fwrite((void *)lamebuf, 1, (size_t)encoded, fdata->f);
+			if (written == 0 || written < (size_t)encoded)
+				log(LOG_WARNING, "Problem writing %s (%s)\n", fdata->file_path, strerror(errno));
+		}
+	}
+
 	if(fdata->f) {
 		fclose(fdata->f);
 		fdata->f = NULL;
@@ -266,7 +284,8 @@ static void close_file(file_data *fdata) {
 	free(fdata->file_path);
 	fdata->file_path = NULL;
 }
-static void close_file_check(file_data *fdata) {
+
+static void close_file_check(channel_t *channel, file_data *fdata) {
 	static const double MIN_TRANSMISSION_TIME_SEC = 1.0;
 	static const double MAX_TRANSMISSION_TIME_SEC = 60.0 * 60.0;
 	static const double MAX_TRANSMISSION_IDLE_SEC = 0.5;
@@ -284,7 +303,7 @@ static void close_file_check(file_data *fdata) {
 
 		if (duration_sec > MAX_TRANSMISSION_TIME_SEC || (duration_sec > MIN_TRANSMISSION_TIME_SEC && idle_sec > MAX_TRANSMISSION_IDLE_SEC)) {
 			debug_print("closing file %s, duration %f sec, idle %f sec\n", fdata->file_path, duration_sec, idle_sec);
-			close_file(fdata);
+			close_file(channel, fdata);
 		}
 		return;
 	}
@@ -302,16 +321,17 @@ static void close_file_check(file_data *fdata) {
 	}
 	if (start_hour != current_hour) {
 		debug_print("closing file %s after crossing hour boundary\n", fdata->file_path);
-		close_file(fdata);
+		close_file(channel, fdata);
 	}
 }
-static bool open_file_check(file_data *fdata, mix_modes mixmode, int is_audio) {
+
+static bool open_file_check(channel_t *channel, file_data *fdata, mix_modes mixmode, int is_audio) {
 	if (!fdata) {
 		return false;
 	}
 
 	// Start by trying to close the current file incase this just crossed an hour boundary
-	close_file_check(fdata);
+	close_file_check(channel, fdata);
 
 	if (fdata->f) {
 		return true;
@@ -343,12 +363,12 @@ static bool open_file_check(file_data *fdata, mix_modes mixmode, int is_audio) {
 	return true;
 }
 
-unsigned char lamebuf[LAMEBUF_SIZE];
 int16_t iq_buf[2 * WAVE_BATCH];
+// Create all the output for a particular channel.
 void process_outputs(channel_t *channel, int cur_scan_freq) {
 	int mp3_bytes = 0;
 	if(channel->need_mp3) {
-		debug_bulk_print("channel->mode=%s\n", channel->mode == MM_STEREO ? "MM_STEREO" : "MM_MONO");
+		//debug_bulk_print("channel->mode=%s\n", channel->mode == MM_STEREO ? "MM_STEREO" : "MM_MONO");
 		mp3_bytes = lame_encode_buffer_ieee_float(
 			channel->lame,
 			channel->waveout,
@@ -357,19 +377,14 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 			lamebuf,
 			LAMEBUF_SIZE
 		);
-// FIXME: we should not return here, because there might be some non-mp3 outputs
-// which can be handled even if MP3 encoder has errored.
-		if (mp3_bytes < 0) {
+		if (mp3_bytes < 0)
 			log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n", mp3_bytes);
-			return;
-		} else if (mp3_bytes == 0)
-			return;
 	}
 	for (int k = 0; k < channel->output_count; k++) {
 		if(channel->outputs[k].enabled == false) continue;
 		if(channel->outputs[k].type == O_ICECAST) {
 			icecast_data *icecast = (icecast_data *)(channel->outputs[k].data);
-			if(icecast->shout == NULL) continue;
+			if(icecast->shout == NULL || mp3_bytes <= 0) continue;
 			int ret = shout_send(icecast->shout, lamebuf, mp3_bytes);
 			if (ret != SHOUTERR_SUCCESS || shout_queuelen(icecast->shout) > MAX_SHOUT_QUEUELEN) {
 				if (shout_queuelen(icecast->shout) > MAX_SHOUT_QUEUELEN)
@@ -397,11 +412,14 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 			file_data *fdata = (file_data *)(channel->outputs[k].data);
 
 			if(fdata->continuous == false && channel->axcindicate == NO_SIGNAL && channel->outputs[k].active == false) {
-				close_file_check(fdata);
+				close_file_check(channel, fdata);
 				continue;
 			}
 
-			if (!open_file_check(fdata, channel->mode, (channel->outputs[k].type == O_RAWFILE ? 0 : 1))) {
+			if(channel->outputs[k].type == O_FILE && mp3_bytes <= 0)
+				continue;
+
+			if (!open_file_check(channel, fdata, channel->mode, (channel->outputs[k].type == O_RAWFILE ? 0 : 1))) {
 				log(LOG_WARNING, "Output disabled\n");
 				channel->outputs[k].enabled = false;
 				continue;
@@ -426,7 +444,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 				else
 					log(LOG_WARNING, "Short write on %s, output disabled\n",
 						fdata->file_path);
-				close_file(fdata);
+				close_file(channel, fdata);
 				channel->outputs[k].enabled = false;
 			}
 			channel->outputs[k].active = (channel->axcindicate != NO_SIGNAL);
@@ -460,7 +478,7 @@ void disable_channel_outputs(channel_t *channel) {
 			icecast->shout = NULL;
 		} else if(output->type == O_FILE || output->type == O_RAWFILE) {
 			file_data *fdata = (file_data *)(channel->outputs[k].data);
-			close_file(fdata);
+			close_file(channel, fdata);
 		} else if(output->type == O_MIXER) {
 			mixer_data *mdata = (mixer_data *)(output->data);
 			mixer_disable_input(mdata->mixer, mdata->input);
@@ -474,6 +492,7 @@ void disable_channel_outputs(channel_t *channel) {
 }
 
 void disable_device_outputs(device_t *dev) {
+	log(LOG_INFO, "Disabling device output");
 	for(int j = 0; j < dev->channel_count; j++) {
 		disable_channel_outputs(dev->channels + j);
 	}

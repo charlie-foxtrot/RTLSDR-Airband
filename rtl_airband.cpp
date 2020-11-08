@@ -705,7 +705,7 @@ void usage() {
 #if DEBUG
 	cout<<"\t-d <file>\t\tLog debugging information to <file> (default is "<<DEBUG_PATH<<")\n";
 #endif
-	cout<<"\t-e\t\t\tPrint messages to standard error (disables syslog logging\n";
+	cout<<"\t-e\t\t\tPrint messages to standard error (disables syslog logging)\n";
 	cout<<"\t-c <config_file_path>\tUse non-default configuration file\n\t\t\t\t(default: "<<CFGFILE<<")\n\
 \t-v\t\t\tDisplay version and exit\n";
 	exit(EXIT_SUCCESS);

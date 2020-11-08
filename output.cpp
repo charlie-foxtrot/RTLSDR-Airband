@@ -91,12 +91,12 @@ void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 	if (ret == SHOUTERR_SUCCESS)
 		ret = SHOUTERR_CONNECTED;
 
-	if (ret == SHOUTERR_BUSY)
+	if (ret == SHOUTERR_BUSY || ret == SHOUTERR_RETRY)
 		log(LOG_NOTICE, "Connecting to %s:%d/%s...\n",
 			icecast->hostname, icecast->port, icecast->mountpoint);
 
 	int shout_timeout = 30 * 5;		// 30 * 5 * 200ms = 30s
-	while (ret == SHOUTERR_BUSY && shout_timeout-- > 0) {
+	while ((ret == SHOUTERR_BUSY || ret == SHOUTERR_RETRY) && shout_timeout-- > 0) {
 		SLEEP(200);
 		ret = shout_get_connected(shouttemp);
 	}

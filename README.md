@@ -1,7 +1,7 @@
 RTLSDR-Airband
 =====================
 
-**Current stable release: [3.1.0](https://github.com/szpajder/RTLSDR-Airband/releases/latest)** (released January 19, 2020)
+**Current stable release: [3.2.0](https://github.com/szpajder/RTLSDR-Airband/releases/latest)** (released November 08, 2020)
 
 RTLSDR-Airband receives analog radio voice channels and produces
 audio streams which can be routed to various outputs, such as online
@@ -23,6 +23,7 @@ of RTLSDR-Airband. Special thanks go to:
  * SDR Guru
  * Marcus Ströbel
  * strix-technica
+ * charlie-foxtrot
 
 License
 --------------------

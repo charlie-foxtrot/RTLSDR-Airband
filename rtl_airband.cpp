@@ -29,14 +29,10 @@
 #ifdef USE_BCM_VC
 #include "hello_fft/mailbox.h"
 #include "hello_fft/gpu_fft.h"
-#else
-#include <fftw3.h>
 #endif
 
 #else	/* x86 */
 #include <xmmintrin.h>
-#include <fftw3.h>
-
 #endif	/* x86 */
 
 #include <unistd.h>
@@ -73,6 +69,10 @@
 #include "input-common.h"
 #include "rtl_airband.h"
 
+#ifdef WITH_PROFILING
+#include "gperftools/profiler.h"
+#endif
+
 using namespace std;
 using namespace libconfig;
 
@@ -86,7 +86,9 @@ int do_syslog = 1;
 int shout_metadata_delay = 3;
 volatile int do_exit = 0;
 bool use_localtime = false;
+bool multiple_demod_threads = false;
 bool log_scan_activity = false;
+char *stats_filepath = NULL;
 size_t fft_size_log = DEFAULT_FFT_SIZE_LOG;
 size_t fft_size = 1 << fft_size_log;
 #ifdef NFM
@@ -131,7 +133,7 @@ void* controller_thread(void* params) {
 	if(dev->channels[0].freq_count < 2) return 0;
 	while(!do_exit) {
 		SLEEP(200);
-		if(dev->channels[0].axcindicate == ' ') {
+		if(dev->channels[0].axcindicate == NO_SIGNAL) {
 			if(consecutive_squelch_off < 10) {
 				consecutive_squelch_off++;
 			} else {
@@ -203,7 +205,7 @@ float fm_quadri_demod(float ar, float aj, float br, float bj) {
 
 class AFC
 {
-	const char _prev_axcindicate;
+	const status _prev_axcindicate;
 
 #ifdef USE_BCM_VC
 	float square(const GPU_FFT_COMPLEX *fft_results, size_t index)
@@ -220,7 +222,7 @@ class AFC
 		size_t check(const FFT_RESULTS* fft_results, const size_t base, const float base_value, unsigned char afc)
 	{
 		float threshold = 0;
-		int bin;
+		size_t bin;
 		for (bin = base;; bin+= STEP) {
 			if (STEP < 0) {
 			if (bin < -STEP)
@@ -258,7 +260,7 @@ public:
 			return;
 
 		const char axcindicate = channel->axcindicate;
-		if (axcindicate != ' ' && _prev_axcindicate == ' ') {
+		if (axcindicate != NO_SIGNAL && _prev_axcindicate == NO_SIGNAL) {
 			const size_t base = dev->base_bins[index];
 			const float base_value = square(fft_results, base);
 			size_t bin = check<FFT_RESULTS, -1>(fft_results, base, base_value, channel->afc);
@@ -271,38 +273,63 @@ public:
 #endif
 				dev->bins[index] = bin;
 				if ( bin > base )
-					channel->axcindicate = '>';
+					channel->axcindicate = AFC_UP;
 				else if ( bin < base )
-					channel->axcindicate = '<';
+					channel->axcindicate = AFC_DOWN;
 			}
 		}
-		else if (axcindicate == ' ' && _prev_axcindicate != ' ')
+		else if (axcindicate == NO_SIGNAL && _prev_axcindicate != NO_SIGNAL)
 			dev->bins[index] = dev->base_bins[index];
 	}
 };
 
-void demodulate() {
+void init_demod(demod_params_t *params, int start_device, int end_device) {
+	assert(params != NULL);
+
+	params->start_device = start_device;
+	params->end_device = end_device;
+
+#ifndef USE_BCM_VC
+	params->fftin = fftwf_alloc_complex(fft_size);
+	params->fftout = fftwf_alloc_complex(fft_size);
+	params->fft = fftwf_plan_dft_1d(fft_size, params->fftin, params->fftout, FFTW_FORWARD, FFTW_MEASURE);
+#endif
+}
+
+int next_device(demod_params_t *params, int current) {
+	if (current == params->end_device) {
+		return params->start_device;
+	}
+	return current + 1;
+}
+
+void *demodulate(void *params) {
+	assert(params != NULL);
+	demod_params_t *demod_params = (demod_params_t *) params;
 
 	// initialize fft engine
-#ifndef USE_BCM_VC
-	fftwf_plan fft;
-	fftwf_complex* fftin;
-	fftwf_complex* fftout;
-	fftin = fftwf_alloc_complex(fft_size);
-	fftout = fftwf_alloc_complex(fft_size);
-	fft = fftwf_plan_dft_1d(fft_size, fftin, fftout, FFTW_FORWARD, FFTW_MEASURE);
-#else
+#ifdef USE_BCM_VC
 	int mb = mbox_open();
 	struct GPU_FFT *fft;
 	int ret = gpu_fft_prepare(mb, fft_size_log, GPU_FFT_FWD, FFT_BATCH, &fft);
 	switch (ret) {
-		case -1: log(LOG_CRIT, "Unable to enable V3D. Please check your firmware is up to date.\n"); error();
-		case -2: log(LOG_CRIT, "log2_N=%d not supported. Try between 8 and 17.\n", fft_size_log); error();
-		case -3: log(LOG_CRIT, "Out of memory. Try a smaller batch or increase GPU memory.\n"); error();
+		case -1:
+			log(LOG_CRIT, "Unable to enable V3D. Please check your firmware is up to date.\n");
+			error();
+			break;
+		case -2:
+			log(LOG_CRIT, "log2_N=%d not supported. Try between 8 and 17.\n", fft_size_log);
+			error();
+			break;
+		case -3:
+			log(LOG_CRIT, "Out of memory. Try a smaller batch or increase GPU memory.\n");
+			error();
+			break;
 	}
+#else
+	fftwf_complex* fftin = demod_params->fftin;
+	fftwf_complex* fftout = demod_params->fftout;
 #endif
-
-	float derotated_r = 0.f, derotated_j = 0.f, swf = 0.f, cwf = 0.f;
 	ALIGN float ALIGN2 levels_u8[256], levels_s8[256];
 	float *levels_ptr = NULL;
 
@@ -336,7 +363,7 @@ void demodulate() {
 	if(DEBUG)
 		gettimeofday(&ts, NULL);
 	size_t available;
-	int device_num = 0;
+	int device_num = demod_params->start_device;
 	while (true) {
 
 		if(do_exit) {
@@ -344,7 +371,7 @@ void demodulate() {
 			log(LOG_INFO, "Freeing GPU memory\n");
 			gpu_fft_release(fft);
 #endif
-			return;
+			return NULL;
 		}
 
 		device_t* dev = devices + device_num;
@@ -368,51 +395,53 @@ void demodulate() {
 				disable_device_outputs(dev);
 				devices_running--;
 			}
-			device_num = (device_num + 1) % device_count;
+			device_num = next_device(demod_params, device_num);
 			continue;
 		}
 
-// number of input bytes per output wave sample (x 2 for I and Q)
+		// number of input bytes per output wave sample (x 2 for I and Q)
 		size_t bps = 2 * dev->input->bytes_per_sample * (size_t)round((double)dev->input->sample_rate / (double)WAVE_RATE);
 		if (available < bps * FFT_BATCH + fft_size * dev->input->bytes_per_sample * 2) {
 			// move to next device
-			device_num = (device_num + 1) % device_count;
+			device_num = next_device(demod_params, device_num);
 			SLEEP(10);
 			continue;
 		}
 
 		if(dev->input->sfmt == SFMT_S16) {
+			float const scale = 127.5f / dev->input->fullscale;
 #ifdef USE_BCM_VC
 			struct GPU_FFT_COMPLEX *ptr = fft->in;
 			for(size_t b = 0; b < FFT_BATCH; b++, ptr += fft->step) {
-				for(size_t i = 0; i < fft_size; i++) {
-					short *buf2 = (short *)(dev->input->buffer + dev->input->bufs + b * bps + i * dev->input->bytes_per_sample * 2);
-					ptr[i].re = (float)buf2[0] / dev->input->fullscale * 127.5f * window[i*2];
-					ptr[i].im = (float)buf2[1] / dev->input->fullscale * 127.5f * window[i*2];
+				short *buf2 = (short *)(dev->input->buffer + dev->input->bufs + b * bps);
+				for(size_t i = 0; i < fft_size; i++, buf2 += 2) {
+					ptr[i].re = scale * (float)buf2[0] * window[i*2];
+					ptr[i].im = scale * (float)buf2[1] * window[i*2];
 				}
 			}
 #else
-			for(size_t i = 0; i < fft_size; i++) {
-				short *buf2 = (short *)(dev->input->buffer + dev->input->bufs + i * dev->input->bytes_per_sample * 2);
-				fftin[i][0] = (float)buf2[0] / dev->input->fullscale * 127.5f * window[i*2];
-				fftin[i][1] = (float)buf2[1] / dev->input->fullscale * 127.5f * window[i*2];
+			short *buf2 = (short *)(dev->input->buffer + dev->input->bufs);
+			for(size_t i = 0; i < fft_size; i++, buf2 += 2) {
+				 fftin[i][0] = scale * (float)buf2[0] * window[i*2];
+				 fftin[i][1] = scale * (float)buf2[1] * window[i*2];
 			}
 #endif
 		} else if(dev->input->sfmt == SFMT_F32) {
+			float const scale = 127.5f / dev->input->fullscale;
 #ifdef USE_BCM_VC
 			struct GPU_FFT_COMPLEX *ptr = fft->in;
 			for(size_t b = 0; b < FFT_BATCH; b++, ptr += fft->step) {
-				for(size_t i = 0; i < fft_size; i++) {
-					float *buf2 = (float *)(dev->input->buffer + dev->input->bufs + b * bps + i * dev->input->bytes_per_sample * 2);
-					ptr[i].re = buf2[0] / dev->input->fullscale * 127.5f * window[i*2];
-					ptr[i].im = buf2[1] / dev->input->fullscale * 127.5f * window[i*2];
+				float *buf2 = (float *)(dev->input->buffer + dev->input->bufs + b * bps);
+				for(size_t i = 0; i < fft_size; i++, buf2 += 2) {
+					ptr[i].re = scale * buf2[0] * window[i*2];
+					ptr[i].im = scale * buf2[1] * window[i*2];
 				}
 			}
 #else
-			for(size_t i = 0; i < fft_size; i++) {
-				float *buf2 = (float *)(dev->input->buffer + dev->input->bufs + i * dev->input->bytes_per_sample * 2);
-				fftin[i][0] = buf2[0] / dev->input->fullscale * 127.5f * window[i*2];
-				fftin[i][1] = buf2[1] / dev->input->fullscale * 127.5f * window[i*2];
+			float *buf2 = (float *)(dev->input->buffer + dev->input->bufs);
+			for(size_t i = 0; i < fft_size; i++, buf2 += 2) {
+				fftin[i][0] = scale * buf2[0] * window[i*2];
+				fftin[i][1] = scale * buf2[1] * window[i*2];
 			}
 #endif
 		} else {	// S8 or U8
@@ -424,15 +453,17 @@ void demodulate() {
 				sfa.dest+= fft->step;
 			}
 #elif defined (__arm__) || defined (__aarch64__)
-			for (size_t i = 0; i < fft_size; i++) {
-				unsigned char* buf2 = dev->input->buffer + dev->input->bufs + i * dev->input->bytes_per_sample * 2;
-				fftin[i][0] = levels_ptr[*(buf2)] * window[i*2];
-				fftin[i][1] = levels_ptr[*(buf2+1)] * window[i*2];
+			unsigned char* buf2 = dev->input->buffer + dev->input->bufs;
+			for (size_t i = 0; i < fft_size; i++, buf2 += 2) {
+				float re = levels_ptr[buf2[0]] * window[i*2];
+				float im = levels_ptr[buf2[1]] * window[i*2];
+				fftin[i][0] = re;
+				fftin[i][1] = im;
 			}
 #else /* x86 */
-			for (size_t i = 0; i < fft_size; i += 2) {
-				unsigned char* buf2 = dev->input->buffer + dev->input->bufs + i * dev->input->bytes_per_sample * 2;
-				__m128 a = _mm_set_ps(levels_ptr[*(buf2 + 3)], levels_ptr[*(buf2 + 2)], levels_ptr[*(buf2 + 1)], levels_ptr[*(buf2)]);
+			unsigned char* buf2 = dev->input->buffer + dev->input->bufs;
+			for (size_t i = 0; i < fft_size; i += 2, buf2 += 4) {
+				__m128 a = _mm_set_ps(levels_ptr[buf2[3]], levels_ptr[buf2[2]], levels_ptr[buf2[1]], levels_ptr[buf2[0]]);
 				__m128 b = _mm_load_ps(&window[i * 2]);
 				a = _mm_mul_ps(a, b);
 				_mm_store_ps(&fftin[i][0], a);
@@ -442,7 +473,7 @@ void demodulate() {
 #ifdef USE_BCM_VC
 		gpu_fft_execute(fft);
 #else
-		fftwf_execute(fft);
+		fftwf_execute(demod_params->fft);
 #endif
 
 #ifdef USE_BCM_VC
@@ -478,9 +509,6 @@ void demodulate() {
 		dev->waveend += FFT_BATCH;
 
 		if (dev->waveend >= WAVE_BATCH + AGC_EXTRA) {
-			if (tui) {
-				GOTOXY(0, device_num * 17 + dev->row + 3);
-			}
 			for (int i = 0; i < dev->channel_count; i++) {
 				AFC afc(dev, i);
 				channel_t* channel = dev->channels + i;
@@ -511,7 +539,7 @@ void demodulate() {
 						channel->agcsq = max(channel->agcsq - 1, 1);
 						if (channel->agcsq == 1 && fparms->agcavgslow > sqlevel) {
 							channel->agcsq = -AGC_EXTRA * 2;
-							channel->axcindicate = '*';
+							channel->axcindicate = SIGNAL;
 							if(channel->modulation == MOD_AM) {
 							// fade in
 								for (int k = j - AGC_EXTRA; k < j; k++) {
@@ -532,7 +560,7 @@ void demodulate() {
 						channel->agcsq = min(channel->agcsq + 1, -1);
 						if ((channel->agcsq == -1 && fparms->agcavgslow < sqlevel) || fparms->agclow == AGC_EXTRA - 12) {
 							channel->agcsq = AGC_EXTRA * 2;
-							channel->axcindicate = ' ';
+							channel->axcindicate = NO_SIGNAL;
 							if(channel->modulation == MOD_AM) {
 								// fade out
 								for (int k = j - AGC_EXTRA + 1; k < j; k++) {
@@ -541,25 +569,50 @@ void demodulate() {
 							}
 						}
 					}
-					if(channel->agcsq != -1) {
+
+					bool signal_filtered = false;
+					if(channel->agcsq < 0 && channel->needs_raw_iq) {
+						// remove phase rotation introduced by FFT sliding window
+						float swf, cwf, re, im;
+						sincosf_lut(channel->dm_phi, &swf, &cwf);
+						multiply(channel->iq_in[2*(j - AGC_EXTRA)], channel->iq_in[2*(j - AGC_EXTRA)+1], cwf, -swf, &re, &im);
+						channel->dm_phi += channel->dm_dphi;
+						channel->dm_phi &= 0xffffff;
+
+						// apply lowpass filter, will be a no-op if not configured
+						fparms->lowpass_filter.apply(re, im);
+
+						// update I/Q and wave
+						channel->iq_in[2*(j - AGC_EXTRA)] = re;
+						channel->iq_in[2*(j - AGC_EXTRA)+1] = im;
+						channel->wavein[j] = sqrt(re * re + im * im);
+
+						if(fparms->lowpass_filter.enabled()) {
+							fparms->filter_avg = fparms->filter_avg * 0.999f + channel->wavein[j] * 0.001f;
+
+							if (fparms->filter_avg < sqlevel) {
+								signal_filtered = true;
+								channel->axcindicate = NO_SIGNAL;
+							} else {
+								channel->axcindicate = SIGNAL;
+							}
+						}
+					}
+					if(channel->agcsq != -1 || signal_filtered) {
 						channel->waveout[j] = 0;
 						if(channel->has_iq_outputs) {
 							channel->iq_out[2*(j - AGC_EXTRA)] = 0;
 							channel->iq_out[2*(j - AGC_EXTRA)+1] = 0;
 						}
 					} else {
-						if(channel->needs_raw_iq) {
-// remove phase rotation introduced by FFT sliding window
-							sincosf_lut(channel->dm_phi, &swf, &cwf);
-							multiply(channel->iq_in[2*(j - AGC_EXTRA)], channel->iq_in[2*(j - AGC_EXTRA)+1],
-							cwf, -swf, &derotated_r, &derotated_j);
-							channel->dm_phi += channel->dm_dphi;
-							channel->dm_phi &= 0xffffff;
-							if(channel->has_iq_outputs) {
-								channel->iq_out[2*(j - AGC_EXTRA)] = derotated_r;
-								channel->iq_out[2*(j - AGC_EXTRA)+1] = derotated_j;
-							}
+						const float &re = channel->iq_in[2*(j - AGC_EXTRA)];
+						const float &im = channel->iq_in[2*(j - AGC_EXTRA)+1];
+
+						if(channel->has_iq_outputs) {
+							channel->iq_out[2*(j - AGC_EXTRA)] = re;
+							channel->iq_out[2*(j - AGC_EXTRA)+1] = im;
 						}
+
 						if(channel->modulation == MOD_AM) {
 							channel->waveout[j] = (channel->wavein[j - AGC_EXTRA] - fparms->agcavgfast) / (fparms->agcavgfast * 1.5f);
 							if (abs(channel->waveout[j]) > 0.8f) {
@@ -571,18 +624,21 @@ void demodulate() {
 						else if(channel->modulation == MOD_NFM) {
 // FM demod
 							if(fm_demod == FM_FAST_ATAN2) {
-								channel->waveout[j] = polar_disc_fast(derotated_r, derotated_j, channel->pr, channel->pj);
+								channel->waveout[j] = polar_disc_fast(re, im, channel->pr, channel->pj);
 							} else if(fm_demod == FM_QUADRI_DEMOD) {
-								channel->waveout[j] = fm_quadri_demod(derotated_r, derotated_j, channel->pr, channel->pj);
+								channel->waveout[j] = fm_quadri_demod(re, im, channel->pr, channel->pj);
 							}
-							channel->pr = derotated_r;
-							channel->pj = derotated_j;
+							channel->pr = re;
+							channel->pj = im;
 // de-emphasis IIR + DC blocking
 							fparms->agcavgfast = fparms->agcavgfast * 0.995f + channel->waveout[j] * 0.005f;
 							channel->waveout[j] -= fparms->agcavgfast;
 							channel->waveout[j] = channel->waveout[j] * (1.0f - channel->alpha) + channel->waveout[j-1] * channel->alpha;
 						}
 #endif // NFM
+
+// apply the notch filter.  If no filter configured, this will no-op
+						fparms->notch_filter.apply(channel->waveout[j]);
 					}
 				}
 				memmove(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * sizeof(float));
@@ -593,22 +649,29 @@ void demodulate() {
 #ifdef USE_BCM_VC
 				afc.finalize(dev, i, fft->out);
 #else
-				afc.finalize(dev, i, fftout);
+				afc.finalize(dev, i, demod_params->fftout);
 #endif
 
 				if (tui) {
-					if(dev->mode == R_SCAN)
-						printf("%4.0f/%3.0f%c %7.3f",
+					if(dev->mode == R_SCAN) {
+						GOTOXY(0, device_num * 17 + dev->row + 3);
+						printf("%4.0f/%3.0f%c %7.3f ",
 							fparms->agcavgslow,
 							(fparms->sqlevel >= 0 ? fparms->sqlevel : fparms->agcmin),
 							channel->axcindicate,
 							(dev->channels[0].freqlist[channel->freq_idx].frequency / 1000000.0));
-					else
+					} else {
+						GOTOXY(i*10, device_num * 17 + dev->row + 3);
 						printf("%4.0f/%3.0f%c ",
 							fparms->agcavgslow,
 							(fparms->sqlevel >= 0 ? fparms->sqlevel : fparms->agcmin),
 							channel->axcindicate);
+					}
 					fflush(stdout);
+				}
+
+				if (channel->axcindicate != NO_SIGNAL) {
+					channel->freqlist[channel->freq_idx].active_counter++;
 				}
 			}
 			dev->waveavail = 1;
@@ -627,7 +690,7 @@ void demodulate() {
 		}
 
 		dev->input->bufs = (dev->input->bufs + bps * FFT_BATCH) % dev->input->buf_size;
-		device_num = (device_num + 1) % device_count;
+		device_num = next_device(demod_params, device_num);
 	}
 }
 
@@ -642,7 +705,7 @@ void usage() {
 #if DEBUG
 	cout<<"\t-d <file>\t\tLog debugging information to <file> (default is "<<DEBUG_PATH<<")\n";
 #endif
-	cout<<"\t-e\t\t\tPrint messages to standard error (disables syslog logging\n";
+	cout<<"\t-e\t\t\tPrint messages to standard error (disables syslog logging)\n";
 	cout<<"\t-c <config_file_path>\tUse non-default configuration file\n\t\t\t\t(default: "<<CFGFILE<<")\n\
 \t-v\t\t\tDisplay version and exit\n";
 	exit(EXIT_SUCCESS);
@@ -659,6 +722,9 @@ static int count_devices_running() {
 }
 
 int main(int argc, char* argv[]) {
+#ifdef WITH_PROFILING
+	ProfilerStart("rtl_airband.prof");
+#endif
 #pragma GCC diagnostic ignored "-Wwrite-strings"
 	char *cfgfile = CFGFILE;
 	char *pidfile = PIDFILE;
@@ -766,8 +832,17 @@ int main(int argc, char* argv[]) {
 		}
 		if(root.exists("localtime") && (bool)root["localtime"] == true)
 			use_localtime = true;
+		if(root.exists("multiple_demod_threads") && (bool)root["multiple_demod_threads"] == true) {
+#ifdef USE_BCM_VC
+			cerr<<"Using multiple_demod_threads not supported with BCM VideoCore for FFT\n";
+			exit(1);
+#endif
+			multiple_demod_threads = true;
+		}
 		if(root.exists("log_scan_activity") && (bool)root["log_scan_activity"] == true)
 			log_scan_activity = true;
+		if(root.exists("stats_filepath"))
+			stats_filepath = strdup(root["stats_filepath"]);
 #ifdef NFM
 		if(root.exists("tau"))
 			alpha = ((int)root["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)root["tau"])));
@@ -822,19 +897,19 @@ int main(int argc, char* argv[]) {
 			mixer_t *m = &mixers[z];
 			debug_print("mixer[%d]: name=%s, input_count=%d, output_count=%d\n", z, m->name, m->input_count, m->channel.output_count);
 		}
-	} catch(FileIOException e) {
+	} catch(const FileIOException &e) {
 			cerr<<"Cannot read configuration file "<<cfgfile<<"\n";
 			error();
-	} catch(ParseException e) {
+	} catch(const ParseException &e) {
 			cerr<<"Error while parsing configuration file "<<cfgfile<<" line "<<e.getLine()<<": "<<e.getError()<<"\n";
 			error();
-	} catch(SettingNotFoundException e) {
+	} catch(const SettingNotFoundException &e) {
 			cerr<<"Configuration error: mandatory parameter missing: "<<e.getPath()<<"\n";
 			error();
-	} catch(SettingTypeException e) {
+	} catch(const SettingTypeException &e) {
 			cerr<<"Configuration error: invalid parameter type: "<<e.getPath()<<"\n";
 			error();
-	} catch(ConfigException e) {
+	} catch(const ConfigException &e) {
 			cerr<<"Unhandled config exception\n";
 			error();
 	}
@@ -888,7 +963,7 @@ int main(int argc, char* argv[]) {
 			continue;		// no inputs connected = no need to initialize output
 		channel_t *channel = &mixers[i].channel;
 		if(channel->need_mp3)
-			channel->lame = airlame_init(mixers[i].channel.mode, 0, 0);
+			channel->lame = airlame_init(mixers[i].channel.mode, mixers[i].channel.highpass, mixers[i].channel.lowpass);
 		for (int k = 0; k < channel->output_count; k++) {
 			output_t *output = channel->outputs + k;
 			if(output->type == O_ICECAST) {
@@ -906,8 +981,11 @@ int main(int argc, char* argv[]) {
 		for (int j = 0; j < dev->channel_count; j++) {
 			channel_t* channel = dev->channels + j;
 
+			// If the channel has icecast or MP3 file output, we will attempt to
+			// initialize a separate LAME context for MP3 encoding.
 			if(channel->need_mp3)
 				channel->lame = airlame_init(channel->mode, channel->highpass, channel->lowpass);
+
 			for (int k = 0; k < channel->output_count; k++) {
 				output_t *output = channel->outputs + k;
 				if(output->type == O_ICECAST) {
@@ -980,10 +1058,28 @@ int main(int argc, char* argv[]) {
 #endif
 	sincosf_lut_init();
 
-	demodulate();
+	if (!multiple_demod_threads) {
+		demod_params_t params;
+		init_demod(&params, 0, device_count - 1);
+		demodulate(&params);
+	} else {
+		demod_params_t *params = (demod_params_t *)XCALLOC(device_count, sizeof(demod_params_t));
+		THREAD *threads = (THREAD *)XCALLOC(device_count, sizeof(THREAD));
+		for (int i = 0; i < device_count; i++) {
+			init_demod(&params[i], i, i);
+		}
+		for (int i = 0; i < device_count; i++) {
+			pthread_create(&threads[i], NULL, &demodulate, &params[i]);
+		}
+		for (int i = 0; i < device_count; i++) {
+			pthread_join(threads[i], NULL);
+		}
+	}
 
 	log(LOG_INFO, "Cleaning up\n");
 	for (int i = 0; i < device_count; i++) {
+		if(devices[i].mode == R_SCAN)
+			pthread_join(devices[i].controller_thread, NULL);
 		if(input_stop(devices[i].input) != 0 || devices[i].input->state != INPUT_STOPPED) {
 			if(errno != 0) {
 				log(LOG_ERR, "Failed do stop device #%d: %s\n", i, strerror(errno));
@@ -991,12 +1087,177 @@ int main(int argc, char* argv[]) {
 				log(LOG_ERR, "Failed do stop device #%d\n", i);
 			}
 		}
-		if(devices[i].mode == R_SCAN)
-			pthread_join(devices[i].controller_thread, NULL);
 	}
 	log(LOG_INFO, "Input threads closed\n");
+
+	for (int i = 0; i < device_count; i++) {
+		device_t* dev = devices + i;
+		disable_device_outputs(dev);
+
+		for (int j = 0; j < dev->channel_count; j++) {
+			channel_t* channel = dev->channels + j;
+			if(channel->need_mp3 && channel->lame)
+				lame_close(channel->lame);
+		}
+	}
+
 	close_debug();
-// FIXME: pulseaudio cleanup
+#ifdef WITH_PROFILING
+	ProfilerStop();
+#endif
 	return 0;
 }
+
+// Default constructor is no filter
+NotchFilter::NotchFilter(void) : enabled_(false) {
+}
+
+// Notch Filter based on https://www.dsprelated.com/showcode/173.php
+NotchFilter::NotchFilter(float notch_freq, float sample_freq, float q): enabled_(true), x{0.0}, y{0.0} {
+	if (notch_freq <= 0.0) {
+		debug_print("Invalid frequency %f Hz, disabling notch filter\n", notch_freq);
+		enabled_ = false;
+		return;
+	}
+
+	debug_print("Adding notch filter for %f Hz with parameters {%f, %f}\n", notch_freq, sample_freq, q);
+
+	float wo = 2*M_PI*(notch_freq/sample_freq);
+
+	e = 1/(1 + tan(wo/(q*2)));
+	p = cos(wo);
+	d[0] = e;
+	d[1] = 2*e*p;
+	d[2] = (2*e-1);
+
+	debug_print("wo:%f e:%f p:%f d:{%f,%f,%f}\n", wo, e, p, d[0], d[1], d[2]);
+}
+
+void NotchFilter::apply(float &value) {
+	if (!enabled_) {
+		return;
+	}
+
+	x[0] = x[1];
+	x[1] = x[2];
+	x[2] = value;
+
+	y[0] = y[1];
+	y[1] = y[2];
+	y[2] = d[0]*x[2] - d[1]*x[1] + d[0]*x[0] + d[1]*y[1] - d[2]*y[0];
+
+	value = y[2];
+}
+
+// Default constructor is no filter
+LowpassFilter::LowpassFilter(void) : enabled_(false) {
+}
+
+// 2nd order lowpass Bessel filter, based entirely on a simplification of https://www-users.cs.york.ac.uk/~fisher/mkfilter/
+LowpassFilter::LowpassFilter(float freq, float sample_freq) : enabled_(true) {
+	if (freq <= 0.0) {
+		debug_print("Invalid frequency %f Hz, disabling lowpass filter\n", freq);
+		enabled_ = false;
+		return;
+	}
+
+	debug_print("Adding lowpass filter at %f Hz with a sample rate of %f\n", freq, sample_freq);
+
+	double raw_alpha = (double)freq/sample_freq;
+	double warped_alpha = tan(M_PI * raw_alpha) / M_PI;
+
+	complex<double> zeros[2] = {-1.0, -1.0};
+	complex<double> poles[2];
+	poles[0] = blt(M_PI * 2 * warped_alpha * complex<double>(-1.10160133059e+00, 6.36009824757e-01));
+	poles[1] = blt(M_PI * 2 * warped_alpha * conj(complex<double>(-1.10160133059e+00, 6.36009824757e-01)));
+
+	complex<double> topcoeffs[3];
+	complex<double> botcoeffs[3];
+	expand(zeros, 2, topcoeffs);
+	expand(poles, 2, botcoeffs);
+	complex<double> gain_complex = evaluate(topcoeffs, 2, botcoeffs, 2, 1.0);
+	gain = hypot(gain_complex.imag(), gain_complex.real());
+
+	for (int i = 0; i <= 2; i++)
+	{
+		ycoeffs[i] = -(botcoeffs[i].real() / botcoeffs[2].real());
+	}
+
+	debug_print("gain: %f, ycoeffs: {%f, %f}\n", gain, ycoeffs[0], ycoeffs[1]);
+}
+
+complex<double> LowpassFilter::blt(complex<double> pz)
+{
+	return (2.0 + pz) / (2.0 - pz);
+}
+
+/* evaluate response, substituting for z */
+complex<double> LowpassFilter::evaluate(complex<double> topco[], int nz, complex<double> botco[], int np, complex<double> z)
+{
+	return eval(topco, nz, z) / eval(botco, np, z);
+}
+
+/* evaluate polynomial in z, substituting for z */
+complex<double> LowpassFilter::eval(complex<double> coeffs[], int npz, complex<double> z)
+{
+	complex<double> sum (0.0);
+	for (int i = npz; i >= 0; i--) {
+		sum = (sum * z) + coeffs[i];
+	}
+	return sum;
+}
+
+/* compute product of poles or zeros as a polynomial of z */
+void LowpassFilter::expand(complex<double> pz[], int npz, complex<double> coeffs[])
+{
+	coeffs[0] = 1.0;
+	for (int i = 0; i < npz; i++)
+	{
+		coeffs[i+1] = 0.0;
+	}
+	for (int i = 0; i < npz; i++)
+	{
+		multin(pz[i], npz, coeffs);
+	}
+	/* check computed coeffs of z^k are all real */
+	for (int i = 0; i < npz+1; i++)
+	{
+		if (fabs(coeffs[i].imag()) > 1e-10)
+		{
+			log(LOG_ERR, "coeff of z^%d is not real; poles/zeros are not complex conjugates\n", i);
+			error();
+		}
+	}
+}
+
+void LowpassFilter::multin(complex<double> w, int npz, complex<double> coeffs[])
+{
+	/* multiply factor (z-w) into coeffs */
+	complex<double> nw = -w;
+	for (int i = npz; i >= 1; i--)
+	{
+		coeffs[i] = (nw * coeffs[i]) + coeffs[i-1];
+	}
+	coeffs[0] = nw * coeffs[0];
+}
+
+void LowpassFilter::apply(float &r, float &j) {
+	if (!enabled_) {
+		return;
+	}
+
+	complex<float> input(r, j);
+
+	xv[0] = xv[1];
+	xv[1] = xv[2];
+	xv[2] = input / gain;
+
+	yv[0] = yv[1];
+	yv[1] = yv[2];
+	yv[2] = (xv[0] + xv[2]) + (2.0f * xv[1]) + (ycoeffs[0] * yv[0]) + (ycoeffs[1] * yv[1]);
+
+	r = yv[2].real();
+	j = yv[2].imag();
+}
+
 // vim: ts=4

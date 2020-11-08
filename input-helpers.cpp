@@ -23,7 +23,8 @@
 #define __USE_MINGW_ANSI_STDIO 1
 #endif
 
-#include <string.h>		// memcpy
+#include <iostream>			// cerr
+#include <string.h>			// memcpy
 #include <pthread.h>		// pthread_mutex_lock, unlock
 #include "input-common.h"	// input_t
 #include "rtl_airband.h"	// debug_print
@@ -39,6 +40,7 @@
  * without wrapping.
  */
 void circbuffer_append(input_t * const input, unsigned char *buf, size_t len) {
+	if(len == 0) return;
 	pthread_mutex_lock(&input->buffer_lock);
 	size_t space_left = input->buf_size - input->bufe;
 	if(space_left >= len) {
@@ -58,6 +60,14 @@ void circbuffer_append(input_t * const input, unsigned char *buf, size_t len) {
 			space_left, len, input->bufe, len - space_left,
 			std::min(len - space_left, 2 * input->bytes_per_sample * fft_size));
 	}
+
+	size_t old_end = input->bufe;
 	input->bufe = (input->bufe + len) % input->buf_size;
+	if(old_end < input->bufs && input->bufe >= input->bufs) {
+		std::cerr << "Warning: buffer overflow\n";
+		input->overflow_count++;
+	}
 	pthread_mutex_unlock(&input->buffer_lock);
 }
+
+// vim: ts=4

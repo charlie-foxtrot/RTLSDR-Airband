@@ -134,7 +134,7 @@ static bool mix_waveforms(float *sum, float *in, float mult, int size) {
  *       interval. Any input which is still not ready, is skipped (filled with 0s), because
  *       here we must emit the mixed audio to keep the desired audio bitrate.
  */
-void *mixer_thread(void *params) {
+void *mixer_thread(void *) {
 	struct timeval ts, te;
 	int interval_usec = 1e+6 * WAVE_BATCH / WAVE_RATE / MIX_DIVISOR;
 	if(mixer_count <= 0) return 0;
@@ -163,17 +163,17 @@ void *mixer_thread(void *params) {
 						memset(channel->waveout, 0, WAVE_BATCH * sizeof(float));
 						if(channel->mode == MM_STEREO)
 							memset(channel->waveout_r, 0, WAVE_BATCH * sizeof(float));
-						channel->axcindicate = ' ';
+						channel->axcindicate = NO_SIGNAL;
 						channel->state = CH_WORKING;
 					}
 					debug_bulk_print("mixer[%d]: ampleft=%.1f ampright=%.1f\n", i, input->ampfactor * input->ampl, input->ampfactor * input->ampr);
 					/* left channel */
 					if(mix_waveforms(channel->waveout, input->wavein, input->ampfactor * input->ampl, WAVE_BATCH))
-						channel->axcindicate = '*';
+						channel->axcindicate = SIGNAL;
 					/* right channel */
 					if(channel->mode == MM_STEREO) {
 						if(mix_waveforms(channel->waveout_r, input->wavein, input->ampfactor * input->ampr, WAVE_BATCH))
-							channel->axcindicate = '*';
+							channel->axcindicate = SIGNAL;
 					}
 					input->ready = false;
 					RESET_BIT(mixer->inputs_todo, j);

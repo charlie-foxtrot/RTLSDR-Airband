@@ -26,6 +26,7 @@
 #include <string.h>		// memcpy, strcmp
 #include <syslog.h>		// LOG_* macros
 #include <libconfig.h++>	// Setting
+#include <SoapySDR/Version.h>   // SOAPY_SDR_API_VERSION
 #include <SoapySDR/Device.h>	// SoapySDRDevice, SoapySDRDevice_makeStrArgs
 #include <SoapySDR/Formats.h>	// SOAPY_SDR_CS constants
 #include "input-common.h"	// input_t, sample_format_t, input_state_t, MODULE_EXPORT
@@ -188,12 +189,7 @@ int soapysdr_parse_config(input_t * const input, libconfig::Setting &cfg) {
 		}
 	}
 	if(cfg.exists("channel")) {
-		dev_data->channel = (int)cfg["channel"];
-		if(dev_data->channel < 0) {
-			cerr<<"SoapySDR configuration error: device '"<<dev_data->device_string<<
-				"': channel number must be positive\n";
-			error();
-		}
+		dev_data->channel = (size_t)(int)cfg["channel"];
 	}
 	if(cfg.exists("antenna")) {
 		dev_data->antenna = strdup(cfg["antenna"]);
@@ -312,8 +308,13 @@ void *soapysdr_rx_thread(void *ctx) {
 	size_t num_elems = SOAPYSDR_BUFSIZE / (2 * input->bytes_per_sample);
 
 	SoapySDRStream *rxStream = NULL;
-	if(SoapySDRDevice_setupStream(sdr, &rxStream, SOAPY_SDR_RX, dev_data->sample_format,
-	(size_t * const)&dev_data->channel, 1, NULL) != 0) {
+#if SOAPY_SDR_API_VERSION < 0x00080000
+		if(SoapySDRDevice_setupStream(sdr, &rxStream, SOAPY_SDR_RX, dev_data->sample_format,
+				&dev_data->channel, 1, NULL) != 0) {
+#else
+		if((rxStream = SoapySDRDevice_setupStream(sdr, SOAPY_SDR_RX, dev_data->sample_format,
+				&dev_data->channel, 1, NULL)) == NULL) {
+#endif
 		log(LOG_ERR, "Failed to set up stream for SoapySDR device '%s': %s\n",
 			dev_data->device_string, SoapySDRDevice_lastError());
 		input->state = INPUT_FAILED;

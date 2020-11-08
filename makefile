@@ -8,7 +8,7 @@ BINDIR = $(PREFIX)/bin
 export DEBUG ?= 0
 export WITH_RTLSDR ?= 1
 export CC = g++
-export CFLAGS = -O3 -g -Wall -DSYSCONFDIR=\"$(SYSCONFDIR)\" -DDEBUG=$(DEBUG)
+export CFLAGS = -O3 -g -Wall -Wextra -DSYSCONFDIR=\"$(SYSCONFDIR)\" -DDEBUG=$(DEBUG)
 RTL_AIRBAND_VERSION:=\"$(shell git describe --always --tags --dirty 2>/dev/null)\"
 ifneq ($(RTL_AIRBAND_VERSION), \"\")
   CFLAGS+=-DRTL_AIRBAND_VERSION=$(RTL_AIRBAND_VERSION)
@@ -23,7 +23,7 @@ SUBDIRS = hello_fft
 CLEANDIRS = $(SUBDIRS:%=clean-%)
 
 BIN = rtl_airband
-OBJ = rtl_airband.o input-common.o input-helpers.o output.o config.o util.o mixer.o
+OBJ = rtl_airband.o input-common.o input-helpers.o input-file.o output.o config.o util.o mixer.o
 FFT = hello_fft/hello_fft.a
 
 .PHONY: all clean install help $(SUBDIRS) $(CLEANDIRS)
@@ -91,6 +91,11 @@ ifeq ($(WITH_SOAPYSDR), 1)
   LDLIBS += -lSoapySDR
 endif
 
+ifeq ($(WITH_PROFILING), 1)
+  CFLAGS += -DWITH_PROFILING
+  LDLIBS += -lprofiler
+endif
+
 ifeq ($(UNKNOWN_PLATFORM),1)
   DEPS =
 endif
@@ -130,6 +135,8 @@ input-mirisdr.o: rtl_airband.h input-common.h input-helpers.h input-mirisdr.h
 input-rtlsdr.o: rtl_airband.h input-common.h input-helpers.h input-rtlsdr.h
 
 input-soapysdr.o: rtl_airband.h input-common.h input-helpers.h input-soapysdr.h
+
+input-file.o: rtl_airband.h input-common.h input-helpers.h input-file.h
 
 mixer.o: rtl_airband.h
 

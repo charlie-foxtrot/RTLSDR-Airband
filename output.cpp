@@ -18,6 +18,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <stdio.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -90,12 +91,12 @@ void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 	if (ret == SHOUTERR_SUCCESS)
 		ret = SHOUTERR_CONNECTED;
 
-	if (ret == SHOUTERR_BUSY)
+	if (ret == SHOUTERR_BUSY || ret == SHOUTERR_RETRY)
 		log(LOG_NOTICE, "Connecting to %s:%d/%s...\n",
 			icecast->hostname, icecast->port, icecast->mountpoint);
 
 	int shout_timeout = 30 * 5;		// 30 * 5 * 200ms = 30s
-	while (ret == SHOUTERR_BUSY && shout_timeout-- > 0) {
+	while ((ret == SHOUTERR_BUSY || ret == SHOUTERR_RETRY) && shout_timeout-- > 0) {
 		SLEEP(200);
 		ret = shout_get_connected(shouttemp);
 	}
@@ -135,7 +136,7 @@ lame_t airlame_init(mix_modes mixmode, int highpass, int lowpass) {
 		lame_set_num_channels(lame, 1);
 		lame_set_mode(lame, MONO);
 	}
-	debug_print("mixmode=%s\n", mixmode == MM_STEREO ? "MM_STEREO" : "MM_MONO");
+	debug_print("lame init with mixmode=%s\n", mixmode == MM_STEREO ? "MM_STEREO" : "MM_MONO");
 	lame_init_params(lame);
 	return lame;
 }
@@ -152,6 +153,9 @@ public:
 		int samples = (msec * WAVE_RATE) / 1000;
 		float *buf = (float *)XCALLOC(samples, sizeof(float));
 
+		debug_print("LameTone with mixmode=%s msec=%d hz=%u\n",
+					mixmode == MM_STEREO ? "MM_STEREO" : "MM_MONO",
+					msec, hz);
 		if (hz > 0) {
 			const float period = 1.0 / (float)hz;
 			const float sample_time = 1.0 / (float)WAVE_RATE;
@@ -201,17 +205,21 @@ public:
 	}
 };
 
-static int fdata_open(file_data *fdata, const char *filename, mix_modes mixmode, int is_audio) {
-	fdata->f = fopen(filename, fdata->append ? "a+" : "w");
+static int fdata_open(file_data *fdata, mix_modes mixmode, int is_audio) {
+	fdata->f = fopen(fdata->file_path, fdata->append ? "a+" : "w");
 	if(fdata->f == NULL)
 		return -1;
 
-	struct stat st = {0};
+	struct stat st = {};
 	if (!fdata->append || fstat(fileno(fdata->f), &st)!=0 || st.st_size == 0) {
-		log(LOG_INFO, "Writing to %s\n", filename);
+		if(!fdata->split_on_transmission) {
+			log(LOG_INFO, "Writing to %s\n", fdata->file_path);
+		} else {
+			debug_print("Writing to %s\n\n", fdata->file_path);
+		}
 		return 0;
 	}
-	log(LOG_INFO, "Appending from pos %llu to %s\n", (unsigned long long)st.st_size, filename);
+	log(LOG_INFO, "Appending from pos %llu to %s\n", (unsigned long long)st.st_size, fdata->file_path);
 
 	if(is_audio) {
 		//fill missing space with marker tones
@@ -243,13 +251,124 @@ static int fdata_open(file_data *fdata, const char *filename, mix_modes mixmode,
 	}
 	return 0;
 }
+static double delta_sec(const timeval *start, const timeval *stop) {
+	timeval delta;
+	timersub(stop, start, &delta);
+	return delta.tv_sec + delta.tv_usec/1000000.0;
+}
 
+// Buffer used by each lame encode. Each channel is handled sequentially by
+// the output thread, so this is reused sequentially.
 unsigned char lamebuf[LAMEBUF_SIZE];
+
+static void close_file(channel_t *channel, file_data *fdata) {
+	if (!fdata) {
+		return;
+	}
+
+	if(fdata->type == O_FILE && fdata->f && channel->lame) {
+		int encoded = lame_encode_flush_nogap(channel->lame, lamebuf, LAMEBUF_SIZE);
+		debug_print("closing file %s flushed %d\n", fdata->file_path, encoded);
+
+		if (encoded > 0) {
+			size_t written = fwrite((void *)lamebuf, 1, (size_t)encoded, fdata->f);
+			if (written == 0 || written < (size_t)encoded)
+				log(LOG_WARNING, "Problem writing %s (%s)\n", fdata->file_path, strerror(errno));
+		}
+	}
+
+	if(fdata->f) {
+		fclose(fdata->f);
+		fdata->f = NULL;
+	}
+	free(fdata->file_path);
+	fdata->file_path = NULL;
+}
+
+static void close_file_check(channel_t *channel, file_data *fdata) {
+	static const double MIN_TRANSMISSION_TIME_SEC = 1.0;
+	static const double MAX_TRANSMISSION_TIME_SEC = 60.0 * 60.0;
+	static const double MAX_TRANSMISSION_IDLE_SEC = 0.5;
+
+	if (!fdata || !fdata->f) {
+		return;
+	}
+
+	timeval current_time;
+	gettimeofday(&current_time, NULL);
+
+	if (fdata->split_on_transmission) {
+		double duration_sec = delta_sec(&fdata->open_time, &current_time);
+		double idle_sec = delta_sec(&fdata->last_write_time, &current_time);
+
+		if (duration_sec > MAX_TRANSMISSION_TIME_SEC || (duration_sec > MIN_TRANSMISSION_TIME_SEC && idle_sec > MAX_TRANSMISSION_IDLE_SEC)) {
+			debug_print("closing file %s, duration %f sec, idle %f sec\n", fdata->file_path, duration_sec, idle_sec);
+			close_file(channel, fdata);
+		}
+		return;
+	}
+
+	// Check if the hour boundary was just crossed.  NOTE: Actual hour number doesn't matter but still
+	// need to use localtime if enabled (some timezones have partial hour offsets)
+	int start_hour;
+	int current_hour;
+	if (use_localtime) {
+		start_hour = localtime(&(fdata->open_time.tv_sec))->tm_hour;
+		current_hour = localtime(&current_time.tv_sec)->tm_hour;
+	} else {
+		start_hour = gmtime(&(fdata->open_time.tv_sec))->tm_hour;
+		current_hour = gmtime(&current_time.tv_sec)->tm_hour;
+	}
+	if (start_hour != current_hour) {
+		debug_print("closing file %s after crossing hour boundary\n", fdata->file_path);
+		close_file(channel, fdata);
+	}
+}
+
+static bool open_file_check(channel_t *channel, file_data *fdata, mix_modes mixmode, int is_audio) {
+	if (!fdata) {
+		return false;
+	}
+
+	// Start by trying to close the current file incase this just crossed an hour boundary
+	close_file_check(channel, fdata);
+
+	if (fdata->f) {
+		return true;
+	}
+
+	timeval current_time;
+	gettimeofday(&current_time, NULL);
+	struct tm *time;
+	if (use_localtime) {
+		time = localtime(&current_time.tv_sec);
+	} else {
+		time = gmtime(&current_time.tv_sec);
+	}
+
+	char timestamp[32];
+	if(strftime(timestamp, sizeof(timestamp), fdata->split_on_transmission ? "_%Y%m%d_%H%M%S" : "_%Y%m%d_%H", time) == 0) {
+		log(LOG_NOTICE, "strftime returned 0\n");
+		return false;
+	}
+	fdata->file_path = (char *)XCALLOC(1, strlen(fdata->basename) + strlen(timestamp) + strlen(fdata->suffix) + 1);
+	sprintf(fdata->file_path, "%s%s%s", fdata->basename, timestamp, fdata->suffix);
+	fdata->open_time = fdata->last_write_time = current_time;
+
+	if (fdata_open(fdata, mixmode, is_audio) < 0) {
+		log(LOG_WARNING, "Cannot open output file %s (%s)\n", fdata->file_path, strerror(errno));
+		return false;
+	}
+
+	return true;
+}
+
 int16_t iq_buf[2 * WAVE_BATCH];
+// Create all the output for a particular channel.
 void process_outputs(channel_t *channel, int cur_scan_freq) {
 	int mp3_bytes = 0;
 	if(channel->need_mp3) {
-		debug_bulk_print("channel->mode=%s\n", channel->mode == MM_STEREO ? "MM_STEREO" : "MM_MONO");
+		//debug_bulk_print("channel->mode=%s\n", channel->mode == MM_STEREO ? "MM_STEREO" : "MM_MONO");
 		mp3_bytes = lame_encode_buffer_ieee_float(
 			channel->lame,
 			channel->waveout,
@@ -258,19 +377,14 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 			lamebuf,
 			LAMEBUF_SIZE
 		);
-// FIXME: we should not return here, because there might be some non-mp3 outputs
-// which can be handled even if MP3 encoder has errored.
-		if (mp3_bytes < 0) {
+		if (mp3_bytes < 0)
 			log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n", mp3_bytes);
-			return;
-		} else if (mp3_bytes == 0)
-			return;
 	}
 	for (int k = 0; k < channel->output_count; k++) {
 		if(channel->outputs[k].enabled == false) continue;
 		if(channel->outputs[k].type == O_ICECAST) {
 			icecast_data *icecast = (icecast_data *)(channel->outputs[k].data);
-			if(icecast->shout == NULL) continue;
+			if(icecast->shout == NULL || mp3_bytes <= 0) continue;
 			int ret = shout_send(icecast->shout, lamebuf, mp3_bytes);
 			if (ret != SHOUTERR_SUCCESS || shout_queuelen(icecast->shout) > MAX_SHOUT_QUEUELEN) {
 				if (shout_queuelen(icecast->shout) > MAX_SHOUT_QUEUELEN)
@@ -296,39 +410,21 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 			}
 		} else if(channel->outputs[k].type == O_FILE || channel->outputs[k].type == O_RAWFILE) {
 			file_data *fdata = (file_data *)(channel->outputs[k].data);
-			if(fdata->continuous == false && channel->axcindicate == ' ' && channel->outputs[k].active == false) continue;
-			time_t t = time(NULL);
-			struct tm *tmp;
-			if(use_localtime)
-				tmp = localtime(&t);
-			else
-				tmp = gmtime(&t);
 
-			char suffix[32];
-			if(strftime(suffix, sizeof(suffix),
-				channel->outputs[k].type == O_FILE ? "_%Y%m%d_%H.mp3" : "_%Y%m%d_%H.cs16",
-			tmp) == 0) {
-				log(LOG_NOTICE, "strftime returned 0\n");
+			if(fdata->continuous == false && channel->axcindicate == NO_SIGNAL && channel->outputs[k].active == false) {
+				close_file_check(channel, fdata);
 				continue;
 			}
-			if(fdata->suffix == NULL || strcmp(suffix, fdata->suffix)) {	// need to open new file
-				fdata->suffix = strdup(suffix);
-				char *filename = (char *)XCALLOC(1, strlen(fdata->dir) + strlen(fdata->prefix) + strlen(fdata->suffix) + 2);
-				sprintf(filename, "%s/%s%s", fdata->dir, fdata->prefix, fdata->suffix);
-				if(fdata->f != NULL) {
-					//todo: finalize file stream with lame_encode_flush_nogap
-					fclose(fdata->f);
-					fdata->f = NULL;
-				}
-				int r = fdata_open(fdata, filename, channel->mode, (channel->outputs[k].type == O_RAWFILE ? 0 : 1));
-				if (r<0) {
-					log(LOG_WARNING, "Cannot open output file %s (%s), output disabled\n", filename, strerror(errno));
-					channel->outputs[k].enabled = false;
-					free(filename);
-					continue;
-				}
-				free(filename);
-			}
+
+			if(channel->outputs[k].type == O_FILE && mp3_bytes <= 0)
+				continue;
+
+			if (!open_file_check(channel, fdata, channel->mode, (channel->outputs[k].type == O_RAWFILE ? 0 : 1))) {
+				log(LOG_WARNING, "Output disabled\n");
+				channel->outputs[k].enabled = false;
+				continue;
+			};
+
 			size_t buflen = 0, written = 0;
 			void *dataptr = NULL;
 			if(channel->outputs[k].type == O_FILE) {
@@ -343,23 +439,23 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 			written = fwrite(dataptr, 1, buflen, fdata->f);
 			if(written < buflen) {
 				if(ferror(fdata->f))
-					log(LOG_WARNING, "Cannot write to %s/%s%s (%s), output disabled\n",
-						fdata->dir, fdata->prefix, fdata->suffix, strerror(errno));
+					log(LOG_WARNING, "Cannot write to %s (%s), output disabled\n",
+						fdata->file_path, strerror(errno));
 				else
-					log(LOG_WARNING, "Short write on %s/%s%s, output disabled\n",
-						fdata->dir, fdata->prefix, fdata->suffix);
-				fclose(fdata->f);
-				fdata->f = NULL;
+					log(LOG_WARNING, "Short write on %s, output disabled\n",
+						fdata->file_path);
+				close_file(channel, fdata);
 				channel->outputs[k].enabled = false;
 			}
-			channel->outputs[k].active = (channel->axcindicate != ' ');
+			channel->outputs[k].active = (channel->axcindicate != NO_SIGNAL);
+			gettimeofday(&fdata->last_write_time, NULL);
 		} else if(channel->outputs[k].type == O_MIXER) {
 			mixer_data *mdata = (mixer_data *)(channel->outputs[k].data);
 			mixer_put_samples(mdata->mixer, mdata->input, channel->waveout, WAVE_BATCH);
 #ifdef PULSE
 		} else if(channel->outputs[k].type == O_PULSE) {
 			pulse_data *pdata = (pulse_data *)(channel->outputs[k].data);
-			if(pdata->continuous == false && channel->axcindicate == ' ')
+			if(pdata->continuous == false && channel->axcindicate == NO_SIGNAL)
 				continue;
 
 			pulse_write_stream(pdata, channel->mode, channel->waveout, channel->waveout_r, (size_t)WAVE_BATCH * sizeof(float));
@@ -380,12 +476,9 @@ void disable_channel_outputs(channel_t *channel) {
 			shout_close(icecast->shout);
 			shout_free(icecast->shout);
 			icecast->shout = NULL;
-		} else if(output->type == O_FILE) {
+		} else if(output->type == O_FILE || output->type == O_RAWFILE) {
 			file_data *fdata = (file_data *)(channel->outputs[k].data);
-			if(fdata->f == NULL) continue;
-			//todo: finalize file stream with lame_encode_flush_nogap
-			fclose(fdata->f);
-			fdata->f = NULL;
+			close_file(channel, fdata);
 		} else if(output->type == O_MIXER) {
 			mixer_data *mdata = (mixer_data *)(output->data);
 			mixer_disable_input(mdata->mixer, mdata->input);
@@ -399,16 +492,100 @@ void disable_channel_outputs(channel_t *channel) {
 }
 
 void disable_device_outputs(device_t *dev) {
+	log(LOG_INFO, "Disabling device output");
 	for(int j = 0; j < dev->channel_count; j++) {
 		disable_channel_outputs(dev->channels + j);
 	}
 }
 
-void* output_thread(void* params) {
+static void print_channel_metric(FILE *f, char const *name, float freq, char *label) {
+	fprintf(f, "%s{freq=\"%.3f\"", name, freq / 1000000.0);
+	if (label != NULL) {
+		fprintf(f, ",label=\"%s\"", label);
+	}
+	fprintf(f, "}");
+}
+
+static void output_channel_noise_levels(FILE *f) {
+	fprintf(f, "# HELP channel_noise_level Measure of agcmin.\n"
+			"# TYPE channel_noise_level gauge\n");
+
+	for (int i = 0; i < device_count; i++) {
+		device_t* dev = devices + i;
+		for (int j = 0; j < dev->channel_count; j++) {
+			channel_t* channel = devices[i].channels + j;
+			for (int k = 0; k < channel->freq_count; k++) {
+				print_channel_metric(f, "channel_noise_level", channel->freqlist[k].frequency, channel->freqlist[k].label);
+				fprintf(f, "\t%.3f\n", channel->freqlist[k].agcmin);
+			}
+		}
+	}
+	fprintf(f, "\n");
+}
+
+static void output_channel_activity_counters(FILE *f) {
+	fprintf(f, "# HELP channel_activity_counter Loops of output_thread with frequency active.\n"
+			"# TYPE channel_activity_counter counter\n");
+
+	for (int i = 0; i < device_count; i++) {
+		device_t* dev = devices + i;
+		for (int j = 0; j < dev->channel_count; j++) {
+			channel_t* channel = devices[i].channels + j;
+			for (int k = 0; k < channel->freq_count; k++) {
+				print_channel_metric(f, "channel_activity_counter", channel->freqlist[k].frequency, channel->freqlist[k].label);
+				fprintf(f, "\t%zu\n", channel->freqlist[k].active_counter);
+			}
+		}
+	}
+	fprintf(f, "\n");
+}
+
+static void output_device_buffer_overflows(FILE *f) {
+	fprintf(f, "# HELP buffer_overflow_count Number of times a device's buffer has overflowed.\n"
+			"# TYPE buffer_overflow_count counter\n");
+
+	for (int i = 0; i < device_count; i++) {
+		device_t* dev = devices + i;
+		fprintf(f, "buffer_overflow_count{device=\"%d\"}\t%zu\n", i , dev->input->overflow_count);
+	}
+	fprintf(f, "\n");
+}
+
+
+void write_stats_file(timeval *last_stats_write) {
+	if (!stats_filepath) {
+		return;
+	}
+
+	timeval current_time;
+	gettimeofday(&current_time, NULL);
+
+	static const double STATS_FILE_TIMING = 15.0;
+	if (delta_sec(last_stats_write, &current_time) < STATS_FILE_TIMING) {
+		return;
+	}
+
+	*last_stats_write = current_time;
+
+	FILE *file = fopen(stats_filepath, "w");
+	if (!file) {
+		log(LOG_WARNING, "Cannot open output file %s (%s)\n", stats_filepath, strerror(errno));
+		return;
+	}
+
+	output_channel_activity_counters(file);
+	output_channel_noise_levels(file);
+	output_device_buffer_overflows(file);
+
+	fclose(file);
+}
+
+void* output_thread(void*) {
 	struct freq_tag tag;
 	struct timeval tv;
 	int new_freq = -1;
-	struct timeval ts, te;
+	timeval ts, te;
+	timeval last_stats_write = {0, 0};
 
 	if(DEBUG) gettimeofday(&ts, NULL);
 	while (!do_exit) {
@@ -452,12 +629,13 @@ void* output_thread(void* params) {
 // in multichannel mode
 			new_freq = -1;
 		}
+		write_stats_file(&last_stats_write);
 	}
 	return 0;
 }
 
 // reconnect as required
-void* output_check_thread(void* params) {
+void* output_check_thread(void*) {
 	while (!do_exit) {
 		SLEEP(10000);
 		for (int i = 0; i < device_count; i++) {

@@ -21,6 +21,7 @@
 #ifndef _RTL_AIRBAND_H
 #define _RTL_AIRBAND_H 1
 #include <cstdio>
+#include <complex>
 #include <stdint.h>		// uint32_t
 #include <pthread.h>
 #include <sys/time.h>
@@ -29,6 +30,8 @@
 #include <libconfig.h++>
 #ifdef USE_BCM_VC
 #include "hello_fft/gpu_fft.h"
+#else
+#include <fftw3.h>
 #endif
 #ifdef PULSE
 #include <pulse/context.h>
@@ -77,7 +80,7 @@
 #define LAMEBUF_SIZE 22000 //todo: calculate
 #define MIX_DIVISOR 2
 
-#define ONES(x) ~(~0 << (x))
+#define ONES(x) ~(~0U << (x))
 #define SET_BIT(a, x) (a) |= (1 << (x))
 #define RESET_BIT(a, x) (a) &= ~(1 << (x))
 #define IS_SET(a, x) (a) & (1 << (x))
@@ -97,8 +100,19 @@ extern "C" void samplefft(sample_fft_arg *a, unsigned char* buffer, float* windo
 
 //#define AFC_LOGGING
 
+enum status {NO_SIGNAL = ' ', SIGNAL = '*', AFC_UP = '<', AFC_DOWN = '>' };
 enum ch_states { CH_DIRTY, CH_WORKING, CH_READY };
 enum mix_modes { MM_MONO, MM_STEREO };
+enum output_type {
+	O_ICECAST,
+	O_FILE,
+	O_RAWFILE,
+	O_MIXER
+#ifdef PULSE
+	, O_PULSE
+#endif
+};
+
 struct icecast_data {
 	const char *hostname;
 	int port;
@@ -113,12 +127,16 @@ struct icecast_data {
 };
 
 struct file_data {
-	const char *dir;
-	const char *prefix;
+	char *basename;
 	char *suffix;
+	char *file_path;
 	bool continuous;
 	bool append;
+	bool split_on_transmission;
+	timeval open_time;
+	timeval last_write_time;
 	FILE *f;
+	enum output_type type;
 };
 
 #ifdef PULSE
@@ -140,15 +158,6 @@ struct mixer_data {
 	int input;
 };
 
-enum output_type {
-	O_ICECAST,
-	O_FILE,
-	O_RAWFILE,
-	O_MIXER
-#ifdef PULSE
-	, O_PULSE
-#endif
-};
 struct output_t {
 	enum output_type type;
 	bool enabled;
@@ -168,14 +177,57 @@ enum modulations {
 #endif
 };
 
+class NotchFilter
+{
+public:
+	NotchFilter(void);
+	NotchFilter(float notch_freq, float sample_freq, float q);
+	void apply(float &value);
+
+private:
+	bool enabled_;
+	float e;
+	float p;
+	float d[3];
+	float x[3];
+	float y[3];
+};
+
+class LowpassFilter
+{
+public:
+	LowpassFilter(void);
+	LowpassFilter(float freq, float sample_freq);
+	void apply(float &r, float &j);
+	bool enabled(void) const {return enabled_;}
+
+private:
+	static std::complex<double> blt(std::complex<double> pz);
+	static void expand(std::complex<double> pz[], int npz, std::complex<double> coeffs[]);
+	static void multin(std::complex<double> w, int npz, std::complex<double> coeffs[]);
+	static std::complex<double> evaluate(std::complex<double> topco[], int nz, std::complex<double> botco[], int np, std::complex<double> z);
+	static std::complex<double> eval(std::complex<double> coeffs[], int npz, std::complex<double> z);
+
+	bool enabled_;
+	float ycoeffs[3];
+	float gain;
+
+	std::complex<float> xv[3];
+	std::complex<float> yv[3];
+};
+
 struct freq_t {
 	int frequency;				// scan frequency
 	char *label;				// frequency label
 	float agcavgfast;			// average power, for AGC
 	float agcavgslow;			// average power, for squelch level detection
+	float filter_avg;			// average power, for post-filter squelch level detection
 	float agcmin;				// noise level
 	int sqlevel;				// manually configured squelch level
-	int agclow;				// low level sample count
+	int agclow;					// low level sample count
+	size_t active_counter;		// count of loops where channel has signal
+	NotchFilter notch_filter;	// notch filter - good to remove CTCSS tones
+	LowpassFilter lowpass_filter;	// lowpass filter, applied to I/Q after derotation, set at bandwidth/2 to remove out of band noise
 };
 struct channel_t {
 	float wavein[WAVE_LEN];		// FFT output waveform
@@ -192,8 +244,8 @@ struct channel_t {
 	uint32_t dm_dphi, dm_phi;	// derotation frequency and current phase value
 	enum modulations modulation;
 	enum mix_modes mode;		// mono or stereo
-	int agcsq;					// squelch status, 0 = signal, 1 = suppressed
-	char axcindicate;			// squelch/AFC status indicator: ' ' - no signal; '*' - has signal; '>', '<' - signal tuned by AFC
+	int agcsq;					// squelch status, negative: signal, positive: suppressed
+	status axcindicate;
 	unsigned char afc;			//0 - AFC disabled; 1 - minimal AFC; 2 - more aggressive AFC and so on to 255
 	struct freq_t *freqlist;
 	int freq_count;
@@ -206,7 +258,7 @@ struct channel_t {
 	output_t *outputs;
 	int highpass;               // highpass filter cutoff
 	int lowpass;                // lowpass filter cutoff
-	lame_t lame;
+	lame_t lame;                // Context for LAME MP3 encoding if needed
 };
 
 enum rec_modes { R_MULTICHANNEL, R_SCAN };
@@ -250,6 +302,17 @@ struct mixer_t {
 	mixinput_t inputs[MAX_MIXINPUTS];
 };
 
+struct demod_params_t {
+	int start_device;
+	int end_device;
+
+#ifndef USE_BCM_VC
+	fftwf_plan fft;
+	fftwf_complex* fftin;
+	fftwf_complex* fftout;
+#endif
+};
+
 // output.cpp
 lame_t airlame_init(mix_modes mixmode, int highpass, int lowpass);
 void shout_setup(icecast_data *icecast, mix_modes mixmode);
@@ -260,6 +323,8 @@ void *output_thread(void* params);
 
 // rtl_airband.cpp
 extern bool use_localtime;
+extern bool multiple_demod_threads;
+extern char *stats_filepath;
 extern size_t fft_size, fft_size_log;
 extern int device_count, mixer_count;
 extern int shout_metadata_delay, do_syslog, foreground;

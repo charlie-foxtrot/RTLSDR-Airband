@@ -61,12 +61,45 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			channel->outputs[oo].data = XCALLOC(1, sizeof(struct file_data));
 			channel->outputs[oo].type = O_FILE;
 			file_data *fdata = (file_data *)(channel->outputs[oo].data);
-			fdata->dir = strdup(outs[o]["directory"]);
-			fdata->prefix = strdup(outs[o]["filename_template"]);
+
+			fdata->type = O_FILE;
+			if (!outs[o].exists("directory") || !outs[o].exists("filename_template")) {
+				if(parsing_mixers) {
+					cerr<<"Configuration error: mixers.["<<i<<"] outputs.["<<o<<"]: both directory and filename_template required for file\n";
+				} else {
+					cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: both directory and filename_template required for file\n";
+				}
+				error();
+			}
+			fdata->basename = (char *)XCALLOC(1, strlen(outs[o]["directory"]) + strlen(outs[o]["filename_template"]) + 2);
+			sprintf(fdata->basename, "%s/%s", (const char *)outs[o]["directory"], (const char *)outs[o]["filename_template"]);
+
+			if (outs[o].exists("include_freq") && (bool)(outs[o]["include_freq"]) && channel->freq_count == 1) {
+				char tmp[64];
+				snprintf(tmp, sizeof(tmp), "_%d.mp3", channel->freqlist[0].frequency);
+				fdata->suffix = strdup(tmp);
+			} else {
+				fdata->suffix = strdup(".mp3");
+			}
+
 			fdata->continuous = outs[o].exists("continuous") ?
 				(bool)(outs[o]["continuous"]) : false;
 			fdata->append = (!outs[o].exists("append")) || (bool)(outs[o]["append"]);
+			fdata->split_on_transmission = outs[o].exists("split_on_transmission") ?
+				(bool)(outs[o]["split_on_transmission"]) : false;
 			channel->need_mp3 = 1;
+
+			if(fdata->split_on_transmission) {
+				if (parsing_mixers) {
+					cerr<<"Configuration error: mixers.["<<i<<"] outputs.["<<o<<"]: split_on_transmission is not allowed for mixers\n";
+					error();
+				}
+				if(fdata->continuous) {
+					cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: can't have both continuous and split_on_transmission\n";
+					error();
+				}
+			}
+
 		} else if(!strncmp(outs[o]["type"], "rawfile", 7)) {
 			if(parsing_mixers) {	// rawfile outputs not allowed for mixers
 				cerr<<"Configuration error: mixers.["<<i<<"] outputs["<<o<<"]: rawfile output is not allowed for mixers\n";
@@ -75,15 +108,38 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			channel->outputs[oo].data = XCALLOC(1, sizeof(struct file_data));
 			channel->outputs[oo].type = O_RAWFILE;
 			file_data *fdata = (file_data *)(channel->outputs[oo].data);
-			fdata->dir = strdup(outs[o]["directory"]);
-			fdata->prefix = strdup(outs[o]["filename_template"]);
+
+			fdata->type = O_RAWFILE;
+			if (!outs[o].exists("directory") || !outs[o].exists("filename_template")) {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: both directory and filename_template required for file\n";
+				error();
+			}
+
+			fdata->basename = (char *)XCALLOC(1, strlen(outs[o]["directory"]) + strlen(outs[o]["filename_template"]) + 2);
+			sprintf(fdata->basename, "%s/%s", (const char *)outs[o]["directory"], (const char *)outs[o]["filename_template"]);
+
+			if (outs[o].exists("include_freq") && (bool)(outs[o]["include_freq"]) && channel->freq_count == 1) {
+				char tmp[64];
+				snprintf(tmp, sizeof(tmp), "_%d.cs16", channel->freqlist[0].frequency);
+				fdata->suffix = strdup(tmp);
+			} else {
+				fdata->suffix = strdup(".cs16");
+			}
+
 			fdata->continuous = outs[o].exists("continuous") ?
 				(bool)(outs[o]["continuous"]) : false;
 			fdata->append = (!outs[o].exists("append")) || (bool)(outs[o]["append"]);
+			fdata->split_on_transmission = outs[o].exists("split_on_transmission") ?
+				(bool)(outs[o]["split_on_transmission"]) : false;
 			channel->needs_raw_iq = channel->has_iq_outputs = 1;
+
+			if(fdata->continuous && fdata->split_on_transmission) {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: can't have both continuous and split_on_transmission\n";
+				error();
+			}
 		} else if(!strncmp(outs[o]["type"], "mixer", 5)) {
 			if(parsing_mixers) {	// mixer outputs not allowed for mixers
-				cerr<<"Configuration error: mixers.["<<i<<"] outputs["<<o<<"]: mixer output is not allowed for mixers\n";
+				cerr<<"Configuration error: mixers.["<<i<<"] outputs.["<<o<<"]: mixer output is not allowed for mixers\n";
 				error();
 			}
 			channel->outputs[oo].data = XCALLOC(1, sizeof(struct mixer_data));
@@ -91,7 +147,7 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			mixer_data *mdata = (mixer_data *)(channel->outputs[oo].data);
 			const char *name = (const char *)outs[o]["name"];
 			if((mdata->mixer = getmixerbyname(name)) == NULL) {
-				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown mixer \""<<name<<"\"\n";
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: unknown mixer \""<<name<<"\"\n";
 				error();
 			}
 			float ampfactor = outs[o].exists("ampfactor") ?
@@ -99,11 +155,11 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			float balance = outs[o].exists("balance") ?
 				(float)outs[o]["balance"] : 0.0f;
 			if(balance < -1.0f || balance > 1.0f) {
-				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: balance out of allowed range <-1.0;1.0>\n";
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: balance out of allowed range <-1.0;1.0>\n";
 				error();
 			}
 			if((mdata->input = mixer_connect_input(mdata->mixer, ampfactor, balance)) < 0) {
-				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: "\
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: "\
 					"could not connect to mixer "<<name<<": "<<mixer_get_error()<<"\n";
 					error();
 			}
@@ -125,7 +181,7 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				pdata->stream_name = strdup(outs[o]["stream_name"]);
 			} else {
 				if(parsing_mixers) {
-					cerr<<"Configuration error: mixers.["<<i<<"] outputs["<<o<<"]: PulseAudio outputs of mixers must have stream_name defined\n";
+					cerr<<"Configuration error: mixers.["<<i<<"] outputs.["<<o<<"]: PulseAudio outputs of mixers must have stream_name defined\n";
 					error();
 				}
 				char buf[1024];
@@ -134,7 +190,7 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			}
 #endif
 		} else {
-			cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs["<<o<<"]: unknown output type\n";
+			cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: unknown output type\n";
 			error();
 		}
 		channel->outputs[oo].enabled = true;
@@ -156,9 +212,11 @@ static struct freq_t *mk_freqlist( int n )
 		fl[i].label = NULL;
 		fl[i].agcavgfast = 0.5f;
 		fl[i].agcavgslow = 0.5f;
+		fl[i].filter_avg = 0.5f;
 		fl[i].agcmin = 100.0f;
 		fl[i].agclow = 0;
 		fl[i].sqlevel = -1;
+		fl[i].active_counter = 0;
 	}
 	return fl;
 }
@@ -201,7 +259,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			channel->waveout[k] = 0.5;
 		}
 		channel->agcsq = 1;
-		channel->axcindicate = ' ';
+		channel->axcindicate = NO_SIGNAL;
 		channel->modulation = MOD_AM;
 		channel->mode = MM_MONO;
 		channel->need_mp3 = 0;
@@ -228,6 +286,10 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			channel->freqlist = mk_freqlist( 1 );
 			channel->freqlist[0].frequency = parse_anynum2int(chans[j]["freq"]);
 			warn_if_freq_not_in_range(i, j, channel->freqlist[0].frequency, dev->input->centerfreq, dev->input->sample_rate);
+			if (chans[j].exists("label"))
+			{
+				channel->freqlist[0].label = strdup(chans[j]["label"]);
+			}
 		} else { /* R_SCAN */
 			channel->freq_count = chans[j]["freqs"].getLength();
 			if(channel->freq_count < 1) {
@@ -242,6 +304,16 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			}
 			if(chans[j].exists("squelch") && libconfig::Setting::TypeList == chans[j]["squelch"].getType() && chans[j]["squelch"].getLength() < channel->freq_count) {
 				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch should be an int or a list with at least "
+					<<channel->freq_count<<" elements\n";
+				error();
+			}
+			if(chans[j].exists("notch") && libconfig::Setting::TypeList == chans[j]["notch"].getType() && chans[j]["notch"].getLength() < channel->freq_count) {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: notch should be an float or a list of floats with at least "
+					<<channel->freq_count<<" elements\n";
+				error();
+			}
+			if(chans[j].exists("notch_q") && libconfig::Setting::TypeList == chans[j]["notch_q"].getType() && chans[j]["notch_q"].getLength() < channel->freq_count) {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: notch_q should be a float or a list of floats with at least "
 					<<channel->freq_count<<" elements\n";
 				error();
 			}
@@ -278,6 +350,74 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				error();
 			}
 		}
+		if(chans[j].exists("notch")) {
+			static const float default_q = 10.0;
+
+			if(chans[j].exists("notch_q") && chans[j]["notch"].getType() != chans[j]["notch_q"].getType()) {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: notch_q (if set) must be the same type as notch - "
+					<<"float or a list of floats with at least "<<channel->freq_count<<" elements\n";
+				error();
+			}
+			if(libconfig::Setting::TypeList == chans[j]["notch"].getType()) {
+				for(int f = 0; f<channel->freq_count; f++) {
+					float freq = (float)chans[j]["notch"][f];
+					float q = chans[j].exists("notch_q") ? (float)chans[j]["notch_q"][f] : default_q;
+					if (q <= 0.0) {
+						cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] freq.["<<f<<"]: invalid value for notch_q: "
+							<<q<<" (must be greater than 0.0)\n";
+						error();
+					}
+					if(freq <= 0) {
+						cerr << "devices.["<<i<<"] channels.["<<j<<"] freq.["<<f<<"]: invalid value for notch: "<<freq<<", ignoring\n";
+					} else {
+						channel->freqlist[f].notch_filter = NotchFilter(freq, WAVE_RATE, q);
+					}
+				}
+			} else if(libconfig::Setting::TypeFloat == chans[j]["notch"].getType() ) {
+				float freq = (float)chans[j]["notch"];
+				float q = chans[j].exists("notch_q") ? (float)chans[j]["notch_q"] : default_q;
+				if (q <= 0.0) {
+					cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: invalid value for notch_q: "
+						<<q<<" (must be greater than 0.0)\n";
+					error();
+				}
+				for(int f = 0; f<channel->freq_count; f++) {
+					if(freq <= 0) {
+						cerr << "devices.["<<i<<"] channels.["<<j<<"]: freq value '"<<freq<<"' invalid, ignoring\n";
+					} else {
+						channel->freqlist[f].notch_filter = NotchFilter(freq, WAVE_RATE, q);
+					}
+				}
+			} else {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: notch should be an float or a list of floats with at least "
+					<<channel->freq_count<<" elements\n";
+				error();
+			}
+		}
+		if(chans[j].exists("bandwidth")) {
+			channel->needs_raw_iq = 1;
+
+			if(libconfig::Setting::TypeList == chans[j]["bandwidth"].getType()) {
+				for(int f = 0; f<channel->freq_count; f++) {
+					int bandwidth = parse_anynum2int(chans[j]["bandwidth"][f]);
+					if(bandwidth <= 0) {
+						cerr << "devices.["<<i<<"] channels.["<<j<<"] freq.["<<f<<"]: bandwidth value '"<<bandwidth<<"' invalid, ignoring\n";
+					} else {
+						channel->freqlist[f].lowpass_filter = LowpassFilter((float)bandwidth/2, WAVE_RATE);
+					}
+				}
+			} else {
+				int bandwidth = parse_anynum2int(chans[j]["bandwidth"]);
+				if(bandwidth <= 0) {
+					cerr << "devices.["<<i<<"] channels.["<<j<<"]: bandwidth value '"<<bandwidth<<"' invalid, ignoring\n";
+				} else {
+					for(int f = 0; f<channel->freq_count; f++) {
+						channel->freqlist[f].lowpass_filter = LowpassFilter((float)bandwidth/2, WAVE_RATE);
+					}
+				}
+			}
+		}
+
 #ifdef NFM
 		if(chans[j].exists("tau")) {
 			channel->alpha = ((int)chans[j]["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)chans[j]["tau"])));
@@ -423,6 +563,7 @@ int parse_devices(libconfig::Setting &devs) {
 		dev->input->buffer = (unsigned char *)XCALLOC(sizeof(unsigned char),
 			dev->input->buf_size + 2 * dev->input->bytes_per_sample * fft_size);
 		dev->input->bufs = dev->input->bufe = 0;
+		dev->input->overflow_count = 0;
 		dev->waveend = dev->waveavail = dev->row = dev->tq_head = dev->tq_tail = 0;
 		dev->last_frequency = -1;
 
@@ -468,6 +609,8 @@ int parse_mixers(libconfig::Setting &mx) {
 		mixer->name = strdup(name);
 		mixer->interval = MIX_DIVISOR;
 		channel_t *channel = &mixer->channel;
+		channel->highpass = mx[i].exists("highpass") ? (int)mx[i]["highpass"] : 100;
+		channel->lowpass = mx[i].exists("lowpass") ? (int)mx[i]["lowpass"] : 2500;
 		channel->mode = MM_MONO;
 		libconfig::Setting &outputs = mx[i]["outputs"];
 		channel->output_count = outputs.getLength();

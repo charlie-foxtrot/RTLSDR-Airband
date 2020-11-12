@@ -91,12 +91,12 @@ void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 	if (ret == SHOUTERR_SUCCESS)
 		ret = SHOUTERR_CONNECTED;
 
-	if (ret == SHOUTERR_BUSY)
+	if (ret == SHOUTERR_BUSY || ret == SHOUTERR_RETRY)
 		log(LOG_NOTICE, "Connecting to %s:%d/%s...\n",
 			icecast->hostname, icecast->port, icecast->mountpoint);
 
 	int shout_timeout = 30 * 5;		// 30 * 5 * 200ms = 30s
-	while (ret == SHOUTERR_BUSY && shout_timeout-- > 0) {
+	while ((ret == SHOUTERR_BUSY || ret == SHOUTERR_RETRY) && shout_timeout-- > 0) {
 		SLEEP(200);
 		ret = shout_get_connected(shouttemp);
 	}
@@ -368,7 +368,7 @@ int16_t iq_buf[2 * WAVE_BATCH];
 void process_outputs(channel_t *channel, int cur_scan_freq) {
 	int mp3_bytes = 0;
 	if(channel->need_mp3) {
-		debug_bulk_print("channel->mode=%s\n", channel->mode == MM_STEREO ? "MM_STEREO" : "MM_MONO");
+		//debug_bulk_print("channel->mode=%s\n", channel->mode == MM_STEREO ? "MM_STEREO" : "MM_MONO");
 		mp3_bytes = lame_encode_buffer_ieee_float(
 			channel->lame,
 			channel->waveout,
@@ -377,19 +377,14 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 			lamebuf,
 			LAMEBUF_SIZE
 		);
-		// FIXME: we should not return here, because there might be some non-mp3 outputs
-		// which can be handled even if MP3 encoder has errored.
-		if (mp3_bytes < 0) {
+		if (mp3_bytes < 0)
 			log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n", mp3_bytes);
-			return;
-		} else if (mp3_bytes == 0)
-			return;
 	}
 	for (int k = 0; k < channel->output_count; k++) {
 		if(channel->outputs[k].enabled == false) continue;
 		if(channel->outputs[k].type == O_ICECAST) {
 			icecast_data *icecast = (icecast_data *)(channel->outputs[k].data);
-			if(icecast->shout == NULL) continue;
+			if(icecast->shout == NULL || mp3_bytes <= 0) continue;
 			int ret = shout_send(icecast->shout, lamebuf, mp3_bytes);
 			if (ret != SHOUTERR_SUCCESS || shout_queuelen(icecast->shout) > MAX_SHOUT_QUEUELEN) {
 				if (shout_queuelen(icecast->shout) > MAX_SHOUT_QUEUELEN)
@@ -420,6 +415,9 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 				close_file_check(channel, fdata);
 				continue;
 			}
+
+			if(channel->outputs[k].type == O_FILE && mp3_bytes <= 0)
+				continue;
 
 			if (!open_file_check(channel, fdata, channel->mode, (channel->outputs[k].type == O_RAWFILE ? 0 : 1))) {
 				log(LOG_WARNING, "Output disabled\n");

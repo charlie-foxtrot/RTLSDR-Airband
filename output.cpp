@@ -28,6 +28,11 @@
 #include <ogg/ogg.h>
 #include <vorbis/vorbisenc.h>
 #include <shout/shout.h>
+// SHOUTERR_RETRY is available since libshout 2.4.0.
+// Set it to an impossible value if it's not there.
+#ifndef SHOUTERR_RETRY
+#define SHOUTERR_RETRY (-255)
+#endif
 #include <lame/lame.h>
 #ifdef PULSE
 #include <pulse/pulseaudio.h>

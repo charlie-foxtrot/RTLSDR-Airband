@@ -1,5 +1,9 @@
 # NEWS
 
+Version 3.2.1 (Nov 13, 2020):
+
+* Fixed a compile error when using libshout older than 2.4.0
+
 Version 3.2.0 (Nov 08, 2020):
 
 * Added `split_per_transmission` output file option which allows creating

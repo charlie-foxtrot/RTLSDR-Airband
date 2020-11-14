@@ -201,7 +201,7 @@ public:
 		if (!_data || _bytes<=0)
 			return 1;
 
-		if(fwrite(_data, 1, _bytes, f) != (unsigned int)_bytes) {
+		if (fwrite(_data, 1, _bytes, f) != (unsigned int)_bytes) {
 			log(LOG_WARNING, "LameTone: failed to write %d bytes\n", _bytes);
 			return -1;
 		}
@@ -210,24 +210,33 @@ public:
 	}
 };
 
-static int fdata_open(file_data *fdata, mix_modes mixmode, int is_audio) {
+/*
+ * Open output file (mp3 or raw IQ) for append or initial write.
+ * If appending to an audio file, insert discontinuity indictor tones
+ * as well as the appropriate amount of silence when in continuous mode.
+ */
+static int open_file(file_data *fdata, mix_modes mixmode, int is_audio) {
 	fdata->f = fopen(fdata->file_path, fdata->append ? "a+" : "w");
-	if(fdata->f == NULL)
+	if (fdata->f == NULL)
 		return -1;
 
 	struct stat st = {};
-	if (!fdata->append || fstat(fileno(fdata->f), &st)!=0 || st.st_size == 0) {
+	if (!fdata->append ||
+		fstat(fileno(fdata->f), &st) != 0 || st.st_size == 0) {
 		if(!fdata->split_on_transmission) {
 			log(LOG_INFO, "Writing to %s\n", fdata->file_path);
 		} else {
-			debug_print("Writing to %s\n\n", fdata->file_path);
+			debug_print("Writing to %s\n", fdata->file_path);
 		}
 		return 0;
 	}
-	log(LOG_INFO, "Appending from pos %llu to %s\n", (unsigned long long)st.st_size, fdata->file_path);
+	log(LOG_INFO, "Appending from pos %llu to %s\n",
+		(unsigned long long)st.st_size, fdata->file_path);
+	debug_print("Appending from pos %llu to %s\n",
+		(unsigned long long)st.st_size, fdata->file_path);
 
-	if(is_audio) {
-		//fill missing space with marker tones
+	if (is_audio) {
+		// fill missing space with marker tones
 		LameTone lt_a(mixmode, 120, 2222);
 		LameTone lt_b(mixmode, 120, 1111);
 		LameTone lt_c(mixmode, 120, 555);
@@ -235,12 +244,15 @@ static int fdata_open(file_data *fdata, mix_modes mixmode, int is_audio) {
 		int r = lt_a.write(fdata->f);
 		if (r==0) r = lt_b.write(fdata->f);
 		if (r==0) r = lt_c.write(fdata->f);
+
+		// fill in time delta with silence if continuous output mode
 		if (fdata->continuous) {
 			time_t now = time(NULL);
 			if (now > st.st_mtime ) {
 				time_t delta = now - st.st_mtime;
 				if (delta > 3600) {
-					log(LOG_WARNING, "Too big time difference: %llu sec, limiting to one hour\n", (unsigned long long)delta);
+					log(LOG_WARNING, "Too big time difference: %llu sec, limiting to one hour\n",
+						(unsigned long long)delta);
 					delta = 3600;
 				}
 				LameTone lt_silence(mixmode, 1000);
@@ -248,6 +260,7 @@ static int fdata_open(file_data *fdata, mix_modes mixmode, int is_audio) {
 					r = lt_silence.write(fdata->f);
 			}
 		}
+
 		if (r==0) r = lt_c.write(fdata->f);
 		if (r==0) r = lt_b.write(fdata->f);
 		if (r==0) r = lt_a.write(fdata->f);
@@ -282,7 +295,7 @@ static void close_file(channel_t *channel, file_data *fdata) {
 		}
 	}
 
-	if(fdata->f) {
+	if (fdata->f) {
 		fclose(fdata->f);
 		fdata->f = NULL;
 	}
@@ -290,7 +303,14 @@ static void close_file(channel_t *channel, file_data *fdata) {
 	fdata->file_path = NULL;
 }
 
-static void close_file_check(channel_t *channel, file_data *fdata) {
+/*
+ * Close current output file based on certain conditions:
+ * If "split_on_transmission" mode is true check:
+ *   If current duration too long, or we've been idle too long
+ * else (append or continuous) check:
+ *   if hour is different.
+ */
+static void close_if_necessary(channel_t *channel, file_data *fdata) {
 	static const double MIN_TRANSMISSION_TIME_SEC = 1.0;
 	static const double MAX_TRANSMISSION_TIME_SEC = 60.0 * 60.0;
 	static const double MAX_TRANSMISSION_IDLE_SEC = 0.5;
@@ -303,11 +323,13 @@ static void close_file_check(channel_t *channel, file_data *fdata) {
 	gettimeofday(&current_time, NULL);
 
 	if (fdata->split_on_transmission) {
-		double duration_sec = delta_sec(&fdata->open_time, &current_time);
-		double idle_sec = delta_sec(&fdata->last_write_time, &current_time);
+		double duration_sec = delta_sec(&fdata->open_time,       &current_time);
+		double idle_sec     = delta_sec(&fdata->last_write_time, &current_time);
 
-		if (duration_sec > MAX_TRANSMISSION_TIME_SEC || (duration_sec > MIN_TRANSMISSION_TIME_SEC && idle_sec > MAX_TRANSMISSION_IDLE_SEC)) {
-			debug_print("closing file %s, duration %f sec, idle %f sec\n", fdata->file_path, duration_sec, idle_sec);
+		if (duration_sec > MAX_TRANSMISSION_TIME_SEC ||
+			(duration_sec > MIN_TRANSMISSION_TIME_SEC && idle_sec > MAX_TRANSMISSION_IDLE_SEC)) {
+			debug_print("closing file %s, duration %f sec, idle %f sec\n",
+						fdata->file_path, duration_sec, idle_sec);
 			close_file(channel, fdata);
 		}
 		return;
@@ -318,27 +340,35 @@ static void close_file_check(channel_t *channel, file_data *fdata) {
 	int start_hour;
 	int current_hour;
 	if (use_localtime) {
-		start_hour = localtime(&(fdata->open_time.tv_sec))->tm_hour;
+		start_hour   = localtime(&(fdata->open_time.tv_sec))->tm_hour;
 		current_hour = localtime(&current_time.tv_sec)->tm_hour;
 	} else {
-		start_hour = gmtime(&(fdata->open_time.tv_sec))->tm_hour;
+		start_hour   = gmtime(&(fdata->open_time.tv_sec))->tm_hour;
 		current_hour = gmtime(&current_time.tv_sec)->tm_hour;
 	}
+
 	if (start_hour != current_hour) {
 		debug_print("closing file %s after crossing hour boundary\n", fdata->file_path);
 		close_file(channel, fdata);
 	}
 }
 
-static bool open_file_check(channel_t *channel, file_data *fdata, mix_modes mixmode, int is_audio) {
+/*
+ * For a particular channel file output, check if there is a file currently open.
+ * If so, that file may need to be flushed and closed.
+ *
+ * If the existing open file is good for continued use, return true.
+ * Otherwise, create a file name based on the current timestamp and
+ * open that new file.  If that file open succeeded, return true.
+ */
+static bool output_file_ready(channel_t *channel, file_data *fdata, mix_modes mixmode, int is_audio) {
 	if (!fdata) {
 		return false;
 	}
 
-	// Start by trying to close the current file incase this just crossed an hour boundary
-	close_file_check(channel, fdata);
+	close_if_necessary(channel, fdata);
 
-	if (fdata->f) {
+	if (fdata->f) {     // still open
 		return true;
 	}
 
@@ -352,7 +382,9 @@ static bool open_file_check(channel_t *channel, file_data *fdata, mix_modes mixm
 	}
 
 	char timestamp[32];
-	if(strftime(timestamp, sizeof(timestamp), fdata->split_on_transmission ? "_%Y%m%d_%H%M%S" : "_%Y%m%d_%H", time) == 0) {
+	if (strftime(timestamp, sizeof(timestamp),
+				 fdata->split_on_transmission ? "_%Y%m%d_%H%M%S" : "_%Y%m%d_%H",
+				 time) == 0) {
 		log(LOG_NOTICE, "strftime returned 0\n");
 		return false;
 	}
@@ -360,7 +392,7 @@ static bool open_file_check(channel_t *channel, file_data *fdata, mix_modes mixm
 	sprintf(fdata->file_path, "%s%s%s", fdata->basename, timestamp, fdata->suffix);
 	fdata->open_time = fdata->last_write_time = current_time;
 
-	if (fdata_open(fdata, mixmode, is_audio) < 0) {
+	if (open_file(fdata, mixmode, is_audio) < 0) {
 		log(LOG_WARNING, "Cannot open output file %s (%s)\n", fdata->file_path, strerror(errno));
 		return false;
 	}
@@ -416,15 +448,17 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 		} else if(channel->outputs[k].type == O_FILE || channel->outputs[k].type == O_RAWFILE) {
 			file_data *fdata = (file_data *)(channel->outputs[k].data);
 
-			if(fdata->continuous == false && channel->axcindicate == NO_SIGNAL && channel->outputs[k].active == false) {
-				close_file_check(channel, fdata);
+			if (fdata->continuous == false &&
+				channel->axcindicate == NO_SIGNAL &&
+				channel->outputs[k].active == false) {
+				close_if_necessary(channel, fdata);
 				continue;
 			}
 
-			if(channel->outputs[k].type == O_FILE && mp3_bytes <= 0)
+			if (channel->outputs[k].type == O_FILE && mp3_bytes <= 0)
 				continue;
 
-			if (!open_file_check(channel, fdata, channel->mode, (channel->outputs[k].type == O_RAWFILE ? 0 : 1))) {
+			if (!output_file_ready(channel, fdata, channel->mode, (channel->outputs[k].type == O_RAWFILE ? 0 : 1))) {
 				log(LOG_WARNING, "Output disabled\n");
 				channel->outputs[k].enabled = false;
 				continue;
@@ -432,7 +466,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 
 			size_t buflen = 0, written = 0;
 			void *dataptr = NULL;
-			if(channel->outputs[k].type == O_FILE) {
+			if (channel->outputs[k].type == O_FILE) {
 				dataptr = lamebuf;
 				buflen = (size_t)mp3_bytes;
 			} else if(channel->outputs[k].type == O_RAWFILE) {

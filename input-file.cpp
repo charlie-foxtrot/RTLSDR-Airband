@@ -38,7 +38,7 @@ int file_parse_config(input_t * const input, libconfig::Setting &cfg) {
 	assert(dev_data != NULL);
 
 	if(cfg.exists("filepath")) {
-		dev_data->filepath = string(cfg["filepath"].c_str());
+		dev_data->filepath = (const char *)cfg["filepath"];
 	} else {
 		cerr << "File configuration error: no 'filepath' given\n";
 		error();
@@ -54,7 +54,7 @@ int file_init(input_t * const input) {
 
 	dev_data->input_file = fopen(dev_data->filepath.c_str(), "rb");
 	if(!dev_data->input_file) {
-		cerr << "File input failed to open '" << dev_data->filepath << "'\n";
+		cerr << "File input failed to open '" << dev_data->filepath << "' - " << strerror(errno) << endl;
 		error();
 	}
 

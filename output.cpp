@@ -531,7 +531,7 @@ void disable_channel_outputs(channel_t *channel) {
 }
 
 void disable_device_outputs(device_t *dev) {
-	log(LOG_INFO, "Disabling device output");
+	log(LOG_INFO, "Disabling device output\n");
 	for(int j = 0; j < dev->channel_count; j++) {
 		disable_channel_outputs(dev->channels + j);
 	}

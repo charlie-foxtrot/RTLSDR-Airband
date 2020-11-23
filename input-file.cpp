@@ -38,7 +38,7 @@ int file_parse_config(input_t * const input, libconfig::Setting &cfg) {
 	assert(dev_data != NULL);
 
 	if(cfg.exists("filepath")) {
-		dev_data->filepath = string(cfg["filepath"].c_str());
+		dev_data->filepath = strdup(cfg["filepath"]);
 	} else {
 		cerr << "File configuration error: no 'filepath' given\n";
 		error();
@@ -52,13 +52,13 @@ int file_init(input_t * const input) {
 	file_dev_data_t *dev_data = (file_dev_data_t *)input->dev_data;
 	assert(dev_data != NULL);
 
-	dev_data->input_file = fopen(dev_data->filepath.c_str(), "rb");
+	dev_data->input_file = fopen(dev_data->filepath, "rb");
 	if(!dev_data->input_file) {
 		cerr << "File input failed to open '" << dev_data->filepath << "'\n";
 		error();
 	}
 
-	log(LOG_INFO, "File input %s initialized\n", dev_data->filepath.c_str());
+	log(LOG_INFO, "File input %s initialized\n", dev_data->filepath);
 	return 0;
 }
 
@@ -79,12 +79,12 @@ void *file_rx_thread(void *ctx) {
 			break;
 		}
 		if(feof(dev_data->input_file)) {
-			log(LOG_INFO, "File '%s': hit end of file at %d, disabling\n", dev_data->filepath.c_str(), ftell(dev_data->input_file));
+			log(LOG_INFO, "File '%s': hit end of file at %d, disabling\n", dev_data->filepath, ftell(dev_data->input_file));
 			input->state = INPUT_FAILED;
 			break;
 		}
 		if(ferror(dev_data->input_file)) {
-			log(LOG_ERR, "File '%s': read error (%d), disabling\n", dev_data->filepath.c_str(), ferror(dev_data->input_file));
+			log(LOG_ERR, "File '%s': read error (%d), disabling\n", dev_data->filepath, ferror(dev_data->input_file));
 			input->state = INPUT_FAILED;
 			break;
 		}

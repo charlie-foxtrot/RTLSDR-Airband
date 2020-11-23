@@ -23,7 +23,7 @@
 #include <fstream>
 
 typedef struct {
-	std::string filepath;
+	char *filepath;
 	FILE *input_file;
 } file_dev_data_t;
 

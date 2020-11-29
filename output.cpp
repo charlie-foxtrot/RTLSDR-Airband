@@ -210,15 +210,29 @@ public:
 	}
 };
 
+int rename_if_exists(char const *oldpath, char const *newpath) {
+	int ret = rename(oldpath, newpath);
+	if(ret < 0) {
+		if(errno == ENOENT) {
+			return 0;
+		} else {
+			log(LOG_ERR, "Could not rename %s to %s: %s\n", oldpath, newpath, strerror(errno));
+		}
+	}
+	return ret;
+}
+
 /*
  * Open output file (mp3 or raw IQ) for append or initial write.
  * If appending to an audio file, insert discontinuity indictor tones
  * as well as the appropriate amount of silence when in continuous mode.
  */
 static int open_file(file_data *fdata, mix_modes mixmode, int is_audio) {
-	fdata->f = fopen(fdata->file_path, fdata->append ? "a+" : "w");
-	if (fdata->f == NULL)
+	int rename_result = rename_if_exists(fdata->file_path, fdata->file_path_tmp);
+	fdata->f = fopen(fdata->file_path_tmp, fdata->append ? "a+" : "w");
+	if (fdata->f == NULL) {
 		return -1;
+	}
 
 	struct stat st = {};
 	if (!fdata->append ||
@@ -226,14 +240,19 @@ static int open_file(file_data *fdata, mix_modes mixmode, int is_audio) {
 		if(!fdata->split_on_transmission) {
 			log(LOG_INFO, "Writing to %s\n", fdata->file_path);
 		} else {
-			debug_print("Writing to %s\n", fdata->file_path);
+			debug_print("Writing to %s\n", fdata->file_path_tmp);
 		}
 		return 0;
 	}
-	log(LOG_INFO, "Appending from pos %llu to %s\n",
-		(unsigned long long)st.st_size, fdata->file_path);
-	debug_print("Appending from pos %llu to %s\n",
-		(unsigned long long)st.st_size, fdata->file_path);
+	if(rename_result < 0) {
+		log(LOG_INFO, "Writing to %s\n", fdata->file_path);
+		debug_print("Writing to %s\n", fdata->file_path_tmp);
+	} else {
+		log(LOG_INFO, "Appending from pos %llu to %s\n",
+			(unsigned long long)st.st_size, fdata->file_path);
+		debug_print("Appending from pos %llu to %s\n",
+			(unsigned long long)st.st_size, fdata->file_path_tmp);
+	}
 
 	if (is_audio) {
 		// fill missing space with marker tones
@@ -298,9 +317,12 @@ static void close_file(channel_t *channel, file_data *fdata) {
 	if (fdata->f) {
 		fclose(fdata->f);
 		fdata->f = NULL;
+		rename_if_exists(fdata->file_path_tmp, fdata->file_path);
 	}
 	free(fdata->file_path);
 	fdata->file_path = NULL;
+	free(fdata->file_path_tmp);
+	fdata->file_path_tmp = NULL;
 }
 
 /*
@@ -388,12 +410,18 @@ static bool output_file_ready(channel_t *channel, file_data *fdata, mix_modes mi
 		log(LOG_NOTICE, "strftime returned 0\n");
 		return false;
 	}
-	fdata->file_path = (char *)XCALLOC(1, strlen(fdata->basename) + strlen(timestamp) + strlen(fdata->suffix) + 1);
+	size_t file_path_len = strlen(fdata->basename) + strlen(timestamp) + strlen(fdata->suffix) + 1;
+	fdata->file_path = (char *)XCALLOC(1, file_path_len);
 	sprintf(fdata->file_path, "%s%s%s", fdata->basename, timestamp, fdata->suffix);
+
+	static char const *tmp_suffix = ".tmp";
+	fdata->file_path_tmp = (char *)XCALLOC(1, file_path_len + strlen(tmp_suffix));
+	sprintf(fdata->file_path_tmp, "%s%s%s%s", fdata->basename, timestamp, fdata->suffix, tmp_suffix);
+
 	fdata->open_time = fdata->last_write_time = current_time;
 
 	if (open_file(fdata, mixmode, is_audio) < 0) {
-		log(LOG_WARNING, "Cannot open output file %s (%s)\n", fdata->file_path, strerror(errno));
+		log(LOG_WARNING, "Cannot open output file %s (%s)\n", fdata->file_path_tmp, strerror(errno));
 		return false;
 	}
 
@@ -531,7 +559,7 @@ void disable_channel_outputs(channel_t *channel) {
 }
 
 void disable_device_outputs(device_t *dev) {
-	log(LOG_INFO, "Disabling device output");
+	log(LOG_INFO, "Disabling device outputs\n");
 	for(int j = 0; j < dev->channel_count; j++) {
 		disable_channel_outputs(dev->channels + j);
 	}

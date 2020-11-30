@@ -674,7 +674,12 @@ void *demodulate(void *params) {
 					channel->freqlist[channel->freq_idx].active_counter++;
 				}
 			}
-			dev->waveavail = 1;
+			if (dev->waveavail == 1) {
+				debug_print("devices[%d]: output channel overrun\n", device_num);
+				dev->output_overrun_count++;
+			} else {
+				dev->waveavail = 1;
+			}
 			dev->waveend -= WAVE_BATCH;
 			if(DEBUG) {
 				gettimeofday(&te, NULL);
@@ -1093,7 +1098,18 @@ int main(int argc, char* argv[]) {
 	for (int i = 0; i < device_count; i++) {
 		device_t* dev = devices + i;
 		disable_device_outputs(dev);
+	}
 
+	if(mixer_count > 0) {
+		log(LOG_INFO, "Closing mixer thread\n");
+		pthread_join(thread4, NULL);
+	}
+	log(LOG_INFO, "Closing output thread\n");
+	safe_cond_signal(&mp3_cond, &mp3_mutex);
+	pthread_join(thread3, NULL);
+
+	for (int i = 0; i < device_count; i++) {
+		device_t* dev = devices + i;
 		for (int j = 0; j < dev->channel_count; j++) {
 			channel_t* channel = dev->channels + j;
 			if(channel->need_mp3 && channel->lame)

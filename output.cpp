@@ -613,11 +613,43 @@ static void output_device_buffer_overflows(FILE *f) {
 
 	for (int i = 0; i < device_count; i++) {
 		device_t* dev = devices + i;
-		fprintf(f, "buffer_overflow_count{device=\"%d\"}\t%zu\n", i , dev->input->overflow_count);
+		fprintf(f, "buffer_overflow_count{device=\"%d\"}\t%zu\n", i, dev->input->overflow_count);
 	}
 	fprintf(f, "\n");
 }
 
+static void output_output_overruns(FILE *f) {
+	fprintf(f, "# HELP output_overrun_count Number of times a device or mixer output has overrun.\n"
+			"# TYPE output_overrun_count counter\n");
+
+	for (int i = 0; i < device_count; i++) {
+		device_t* dev = devices + i;
+		fprintf(f, "output_overrun_count{device=\"%d\"}\t%zu\n", i, dev->output_overrun_count);
+	}
+	for (int i = 0; i < mixer_count; i++) {
+		mixer_t* mixer = mixers + i;
+		fprintf(f, "output_overrun_count{mixer=\"%d\"}\t%zu\n", i, mixer->output_overrun_count);
+	}
+	fprintf(f, "\n");
+}
+
+static void output_input_overruns(FILE *f) {
+	if (mixer_count == 0) {
+		return;
+	}
+
+	fprintf(f, "# HELP input_overrun_count Number of times mixer input has overrun.\n"
+			"# TYPE input_overrun_count counter\n");
+
+	for (int i = 0; i < mixer_count; i++) {
+		mixer_t* mixer = mixers + i;
+		for (int j = 0; j < mixer->input_count; j++) {
+			mixinput_t *input = mixer->inputs + j;
+			fprintf(f, "input_overrun_count{mixer=\"%d\",input=\"%d\"}\t%zu\n", i, j, input->input_overrun_count);
+		}
+	}
+	fprintf(f, "\n");
+}
 
 void write_stats_file(timeval *last_stats_write) {
 	if (!stats_filepath) {
@@ -628,7 +660,7 @@ void write_stats_file(timeval *last_stats_write) {
 	gettimeofday(&current_time, NULL);
 
 	static const double STATS_FILE_TIMING = 15.0;
-	if (delta_sec(last_stats_write, &current_time) < STATS_FILE_TIMING) {
+	if (!do_exit && delta_sec(last_stats_write, &current_time) < STATS_FILE_TIMING) {
 		return;
 	}
 
@@ -643,6 +675,8 @@ void write_stats_file(timeval *last_stats_write) {
 	output_channel_activity_counters(file);
 	output_channel_noise_levels(file);
 	output_device_buffer_overflows(file);
+	output_output_overruns(file);
+	output_input_overruns(file);
 
 	fclose(file);
 }
@@ -674,7 +708,6 @@ void* output_thread(void*) {
 		for (int i = 0; i < device_count; i++) {
 			device_t* dev = devices + i;
 			if (dev->input->state == INPUT_RUNNING && dev->waveavail) {
-				dev->waveavail = 0;
 				if(dev->mode == R_SCAN) {
 					tag_queue_get(dev, &tag);
 					if(tag.freq >= 0) {
@@ -691,6 +724,7 @@ void* output_thread(void*) {
 					process_outputs(channel, new_freq);
 					memcpy(channel->waveout, channel->waveout + WAVE_BATCH, AGC_EXTRA * 4);
 				}
+				dev->waveavail = 0;
 			}
 // make sure we don't carry new_freq value to the next receiver which might be working
 // in multichannel mode

@@ -74,6 +74,7 @@ int mixer_connect_input(mixer_t *mixer, float ampfactor, float balance) {
 	if(balance != 0.0f)
 		mixer->channel.mode = MM_STEREO;
 	mixer->inputs[i].ready = false;
+	mixer->inputs[i].input_overrun_count = 0;
 	SET_BIT(mixer->input_mask, i);
 	SET_BIT(mixer->inputs_todo, i);
 	mixer->enabled = true;
@@ -98,9 +99,12 @@ void mixer_put_samples(mixer_t *mixer, int input_idx, float *samples, unsigned i
 	mixinput_t *input = &mixer->inputs[input_idx];
 	pthread_mutex_lock(&input->mutex);
 	memcpy(input->wavein, samples, len * sizeof(float));
-	if(DEBUG && input->ready == true)
+	if(input->ready == true) {
 		debug_print("input %d overrun\n", input_idx);
-	input->ready = true;
+		input->input_overrun_count++;
+	} else {
+		input->ready = true;
+	}
 	pthread_mutex_unlock(&input->mutex);
 }
 
@@ -152,6 +156,7 @@ void *mixer_thread(void *) {
 					continue;
 				} else {
 					debug_print("mixer[%d]: output channel overrun\n", i);
+					mixer->output_overrun_count++;
 				}
 			}
 

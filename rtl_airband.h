@@ -282,6 +282,7 @@ struct device_t {
 	int row;
 	int failed;
 	enum rec_modes mode;
+	size_t output_overrun_count;
 };
 
 struct mixinput_t {
@@ -290,6 +291,7 @@ struct mixinput_t {
 	float ampl, ampr;
 	bool ready;
 	pthread_mutex_t mutex;
+	size_t input_overrun_count;
 };
 
 struct mixer_t {
@@ -301,6 +303,7 @@ struct mixer_t {
 	unsigned int input_mask;
 	channel_t channel;
 	mixinput_t inputs[MAX_MIXINPUTS];
+	size_t output_overrun_count;
 };
 
 struct demod_params_t {

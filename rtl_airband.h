@@ -323,7 +323,8 @@ void shout_setup(icecast_data *icecast, mix_modes mixmode);
 void disable_device_outputs(device_t *dev);
 void disable_channel_outputs(channel_t *channel);
 void *output_check_thread(void* params);
-void *output_thread(void* params);
+void *device_output_thread(void* params);
+void *mixer_output_thread(void* params);
 
 // rtl_airband.cpp
 extern bool use_localtime;
@@ -336,8 +337,10 @@ extern volatile int do_exit, device_opened;
 extern float alpha;
 extern device_t *devices;
 extern mixer_t *mixers;
-extern pthread_cond_t mp3_cond;
-extern pthread_mutex_t mp3_mutex;
+extern pthread_cond_t device_mp3_cond;
+extern pthread_mutex_t device_mp3_mutex;
+extern pthread_cond_t mixer_mp3_cond;
+extern pthread_mutex_t mixer_mp3_mutex;
 
 // util.cpp
 void error();

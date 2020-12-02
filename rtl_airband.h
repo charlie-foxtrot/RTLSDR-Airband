@@ -46,8 +46,6 @@
 #define ALIGN2 __attribute__((aligned(32)))
 #define SLEEP(x) usleep(x * 1000)
 #define THREAD pthread_t
-#define safe_cond_signal(n, m) pthread_mutex_lock(m); pthread_cond_signal(n); pthread_mutex_unlock(m)
-#define safe_cond_wait(n, m) pthread_mutex_lock(m); pthread_cond_wait(n, m); pthread_mutex_unlock(m)
 #define GOTOXY(x, y) printf("%c[%d;%df",0x1B,y,x)
 #ifndef SYSCONFDIR
 #define SYSCONFDIR "/usr/local/etc"
@@ -217,6 +215,27 @@ private:
 	std::complex<float> yv[3];
 };
 
+class Signal {
+public:
+	Signal(void) {
+		cond_ = PTHREAD_COND_INITIALIZER;
+		mutex_ = PTHREAD_MUTEX_INITIALIZER;
+	}
+	void send(void) {
+		pthread_mutex_lock(&mutex_);
+		pthread_cond_signal(&cond_);
+		pthread_mutex_unlock(&mutex_);
+	}
+	void wait(void) {
+		pthread_mutex_lock(&mutex_);
+		pthread_cond_wait(&cond_, &mutex_);
+		pthread_mutex_unlock(&mutex_);
+	}
+private:
+	pthread_cond_t cond_;
+	pthread_mutex_t	mutex_;
+};
+
 struct freq_t {
 	int frequency;				// scan frequency
 	char *label;				// frequency label
@@ -274,6 +293,7 @@ struct device_t {
 // FIXME: size_t
 	int waveend;
 	int waveavail;
+	Signal mp3_signal;
 	THREAD controller_thread;
 	struct freq_tag tag_queue[TAG_QUEUE_LEN];
 	int tq_head, tq_tail;
@@ -337,10 +357,7 @@ extern volatile int do_exit, device_opened;
 extern float alpha;
 extern device_t *devices;
 extern mixer_t *mixers;
-extern pthread_cond_t device_mp3_cond;
-extern pthread_mutex_t device_mp3_mutex;
-extern pthread_cond_t mixer_mp3_cond;
-extern pthread_mutex_t mixer_mp3_mutex;
+extern Signal mixer_mp3_signal;
 
 // util.cpp
 void error();

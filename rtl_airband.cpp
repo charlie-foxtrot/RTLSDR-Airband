@@ -103,10 +103,7 @@ enum fm_demod_algo fm_demod = FM_FAST_ATAN2;
 #if DEBUG
 char *debug_path;
 #endif
-pthread_cond_t	device_mp3_cond = PTHREAD_COND_INITIALIZER;
-pthread_mutex_t	device_mp3_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t	mixer_mp3_cond = PTHREAD_COND_INITIALIZER;
-pthread_mutex_t	mixer_mp3_mutex = PTHREAD_MUTEX_INITIALIZER;
+Signal mixer_mp3_signal;
 
 #ifndef __MINGW32__
 void sighandler(int sig) {
@@ -689,7 +686,7 @@ void *demodulate(void *params) {
 				ts.tv_sec = te.tv_sec;
 				ts.tv_usec = te.tv_usec;
 			}
-			safe_cond_signal(&device_mp3_cond, &device_mp3_mutex);
+			dev->mp3_signal.send();
 			dev->row++;
 			if (dev->row == 12) {
 				dev->row = 0;
@@ -1055,8 +1052,15 @@ int main(int argc, char* argv[]) {
 	}
 	THREAD output_check;
 	pthread_create(&output_check, NULL, &output_check_thread, NULL);
-	THREAD device_output;
-	pthread_create(&device_output, NULL, &device_output_thread, NULL);
+
+
+	THREAD *device_outputs = (THREAD *)XCALLOC(device_count, sizeof(THREAD));
+	for (size_t i = 0; i < device_count; i++) {
+		pthread_create(&device_outputs[i], NULL, &device_output_thread, (void *)i);
+	}
+
+
+
 	THREAD mixer;
 	THREAD mixer_output;
 	if(mixer_count > 0) {
@@ -1105,14 +1109,16 @@ int main(int argc, char* argv[]) {
 		disable_device_outputs(dev);
 	}
 
-	log(LOG_INFO, "Closing output thread\n");
-	safe_cond_signal(&device_mp3_cond, &device_mp3_mutex);
-	pthread_join(device_output, NULL);
+	log(LOG_INFO, "Closing output thread(s)\n");
+	for (int i = 0; i < device_count; i++) {
+		devices[i].mp3_signal.send();
+		pthread_join(device_outputs[i], NULL);
+	}
 
 	if(mixer_count > 0) {
 		log(LOG_INFO, "Closing mixer thread\n");
 		pthread_join(mixer, NULL);
-		safe_cond_signal(&mixer_mp3_cond, &mixer_mp3_mutex);
+		mixer_mp3_signal.send();
 		pthread_join(mixer_output, NULL);
 	}
 

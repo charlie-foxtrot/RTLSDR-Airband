@@ -681,40 +681,41 @@ void write_stats_file(timeval *last_stats_write) {
 	fclose(file);
 }
 
-void* device_output_thread(void*) {
+void* device_output_thread(void* index) {
 	struct freq_tag tag;
 	struct timeval tv;
 	int new_freq = -1;
 	timeval last_stats_write = {0, 0};
+	device_t* dev = devices + (size_t)index;
 
 	while (!do_exit) {
-		safe_cond_wait(&device_mp3_cond, &device_mp3_mutex);
-		for (int i = 0; i < device_count; i++) {
-			device_t* dev = devices + i;
-			if (dev->input->state == INPUT_RUNNING && dev->waveavail) {
-				if(dev->mode == R_SCAN) {
-					tag_queue_get(dev, &tag);
-					if(tag.freq >= 0) {
-						tag.tv.tv_sec += shout_metadata_delay;
-						gettimeofday(&tv, NULL);
-						if(tag.tv.tv_sec < tv.tv_sec || (tag.tv.tv_sec == tv.tv_sec && tag.tv.tv_usec <= tv.tv_usec)) {
-							new_freq = tag.freq;
-							tag_queue_advance(dev);
-						}
+		dev->mp3_signal.wait();
+		if (dev->input->state == INPUT_RUNNING && dev->waveavail) {
+			if(dev->mode == R_SCAN) {
+				tag_queue_get(dev, &tag);
+				if(tag.freq >= 0) {
+					tag.tv.tv_sec += shout_metadata_delay;
+					gettimeofday(&tv, NULL);
+					if(tag.tv.tv_sec < tv.tv_sec || (tag.tv.tv_sec == tv.tv_sec && tag.tv.tv_usec <= tv.tv_usec)) {
+						new_freq = tag.freq;
+						tag_queue_advance(dev);
 					}
 				}
-				for (int j = 0; j < dev->channel_count; j++) {
-					channel_t* channel = devices[i].channels + j;
-					process_outputs(channel, new_freq);
-					memcpy(channel->waveout, channel->waveout + WAVE_BATCH, AGC_EXTRA * 4);
-				}
-				dev->waveavail = 0;
 			}
+			for (int j = 0; j < dev->channel_count; j++) {
+				channel_t* channel = dev->channels + j;
+				process_outputs(channel, new_freq);
+				memcpy(channel->waveout, channel->waveout + WAVE_BATCH, AGC_EXTRA * 4);
+			}
+			dev->waveavail = 0;
+		}
 // make sure we don't carry new_freq value to the next receiver which might be working
 // in multichannel mode
-			new_freq = -1;
+		new_freq = -1;
+
+		if (index == 0) {
+			write_stats_file(&last_stats_write);
 		}
-		write_stats_file(&last_stats_write);
 	}
 	return 0;
 }
@@ -724,7 +725,7 @@ void* mixer_output_thread(void*) {
 
 	if(DEBUG) gettimeofday(&ts, NULL);
 	while (!do_exit) {
-		safe_cond_wait(&mixer_mp3_cond, &mixer_mp3_mutex);
+		mixer_mp3_signal.wait();
 		for (int i = 0; i < mixer_count; i++) {
 			if(mixers[i].enabled == false) continue;
 			channel_t *channel = &mixers[i].channel;

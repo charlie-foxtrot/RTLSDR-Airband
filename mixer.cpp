@@ -196,7 +196,7 @@ void *mixer_thread(void *) {
 	        	    ts.tv_usec = te.tv_usec;
 			    }
 				channel->state = CH_READY;
-				safe_cond_signal(&mixer_mp3_cond, &mixer_mp3_mutex);
+				mixer_mp3_signal.send();
 				mixer->interval = MIX_DIVISOR;
 				mixer->inputs_todo = ONES(mixer->input_count);
 			} else {

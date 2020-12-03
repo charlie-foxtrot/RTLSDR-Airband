@@ -141,11 +141,11 @@ static bool mix_waveforms(float *sum, float *in, float mult, int size) {
 void *mixer_thread(void *param) {
 	assert(param != NULL);
 	Signal *signal = (Signal *)param;
+	struct timeval ts, te;
+	int interval_usec = 1e+6 * WAVE_BATCH / WAVE_RATE / MIX_DIVISOR;
 
 	debug_print("Starting mixer thread, signal %p\n", signal);
 
-	struct timeval ts, te;
-	int interval_usec = 1e+6 * WAVE_BATCH / WAVE_RATE / MIX_DIVISOR;
 	if(mixer_count <= 0) return 0;
 	if(DEBUG) gettimeofday(&ts, NULL);
 	while(!do_exit) {

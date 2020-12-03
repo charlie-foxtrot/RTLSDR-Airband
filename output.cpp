@@ -681,52 +681,21 @@ void write_stats_file(timeval *last_stats_write) {
 	fclose(file);
 }
 
-void* device_output_thread(void* index) {
+void* output_thread(void *param) {
+	assert(param != NULL);
+	output_params_t *output_param = (output_params_t *)param;
 	struct freq_tag tag;
 	struct timeval tv;
 	int new_freq = -1;
+	timeval ts, te;
 	timeval last_stats_write = {0, 0};
-	device_t* dev = devices + (size_t)index;
 
-	while (!do_exit) {
-		dev->mp3_signal.wait();
-		if (dev->input->state == INPUT_RUNNING && dev->waveavail) {
-			if(dev->mode == R_SCAN) {
-				tag_queue_get(dev, &tag);
-				if(tag.freq >= 0) {
-					tag.tv.tv_sec += shout_metadata_delay;
-					gettimeofday(&tv, NULL);
-					if(tag.tv.tv_sec < tv.tv_sec || (tag.tv.tv_sec == tv.tv_sec && tag.tv.tv_usec <= tv.tv_usec)) {
-						new_freq = tag.freq;
-						tag_queue_advance(dev);
-					}
-				}
-			}
-			for (int j = 0; j < dev->channel_count; j++) {
-				channel_t* channel = dev->channels + j;
-				process_outputs(channel, new_freq);
-				memcpy(channel->waveout, channel->waveout + WAVE_BATCH, AGC_EXTRA * 4);
-			}
-			dev->waveavail = 0;
-		}
-// make sure we don't carry new_freq value to the next receiver which might be working
-// in multichannel mode
-		new_freq = -1;
-
-		if (index == 0) {
-			write_stats_file(&last_stats_write);
-		}
-	}
-	return 0;
-}
-
-void* mixer_output_thread(void*) {
-	struct timeval ts, te;
+	debug_print("Starting output thread, devices %d:%d, mixers %d:%d, signal %p\n", output_param->device_start, output_param->device_end, output_param->mixer_start, output_param->mixer_end, output_param->mp3_signal);
 
 	if(DEBUG) gettimeofday(&ts, NULL);
 	while (!do_exit) {
-		mixer_mp3_signal.wait();
-		for (int i = 0; i < mixer_count; i++) {
+		output_param->mp3_signal->wait();
+		for (int i = output_param->mixer_start; i < output_param->mixer_end; i++) {
 			if(mixers[i].enabled == false) continue;
 			channel_t *channel = &mixers[i].channel;
 			if(channel->state == CH_READY) {
@@ -739,6 +708,34 @@ void* mixer_output_thread(void*) {
 			debug_bulk_print("mixeroutput: %lu.%lu %lu\n", te.tv_sec, te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec);
 			ts.tv_sec = te.tv_sec;
 			ts.tv_usec = te.tv_usec;
+		}
+		for (int i = output_param->device_start; i < output_param->device_end; i++) {
+			device_t* dev = devices + i;
+			if (dev->input->state == INPUT_RUNNING && dev->waveavail) {
+				if(dev->mode == R_SCAN) {
+					tag_queue_get(dev, &tag);
+					if(tag.freq >= 0) {
+						tag.tv.tv_sec += shout_metadata_delay;
+						gettimeofday(&tv, NULL);
+						if(tag.tv.tv_sec < tv.tv_sec || (tag.tv.tv_sec == tv.tv_sec && tag.tv.tv_usec <= tv.tv_usec)) {
+							new_freq = tag.freq;
+							tag_queue_advance(dev);
+						}
+					}
+				}
+				for (int j = 0; j < dev->channel_count; j++) {
+					channel_t* channel = devices[i].channels + j;
+					process_outputs(channel, new_freq);
+					memcpy(channel->waveout, channel->waveout + WAVE_BATCH, AGC_EXTRA * 4);
+				}
+				dev->waveavail = 0;
+			}
+// make sure we don't carry new_freq value to the next receiver which might be working
+// in multichannel mode
+			new_freq = -1;
+		}
+		if(output_param->device_start == 0) {
+			write_stats_file(&last_stats_write);
 		}
 	}
 	return 0;

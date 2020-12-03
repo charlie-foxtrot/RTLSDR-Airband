@@ -293,7 +293,6 @@ struct device_t {
 // FIXME: size_t
 	int waveend;
 	int waveavail;
-	Signal mp3_signal;
 	THREAD controller_thread;
 	struct freq_tag tag_queue[TAG_QUEUE_LEN];
 	int tq_head, tq_tail;
@@ -327,8 +326,9 @@ struct mixer_t {
 };
 
 struct demod_params_t {
-	int start_device;
-	int end_device;
+	Signal *mp3_signal;
+	int device_start;
+	int device_end;
 
 #ifndef USE_BCM_VC
 	fftwf_plan fft;
@@ -337,18 +337,26 @@ struct demod_params_t {
 #endif
 };
 
+struct output_params_t {
+	Signal *mp3_signal;
+	int device_start;
+	int device_end;
+	int mixer_start;
+	int mixer_end;
+};
+
 // output.cpp
 lame_t airlame_init(mix_modes mixmode, int highpass, int lowpass);
 void shout_setup(icecast_data *icecast, mix_modes mixmode);
 void disable_device_outputs(device_t *dev);
 void disable_channel_outputs(channel_t *channel);
 void *output_check_thread(void* params);
-void *device_output_thread(void* params);
-void *mixer_output_thread(void* params);
+void *output_thread(void* params);
 
 // rtl_airband.cpp
 extern bool use_localtime;
 extern bool multiple_demod_threads;
+extern bool multiple_output_threads;
 extern char *stats_filepath;
 extern size_t fft_size, fft_size_log;
 extern int device_count, mixer_count;
@@ -357,7 +365,6 @@ extern volatile int do_exit, device_opened;
 extern float alpha;
 extern device_t *devices;
 extern mixer_t *mixers;
-extern Signal mixer_mp3_signal;
 
 // util.cpp
 void error();

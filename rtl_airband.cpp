@@ -87,6 +87,7 @@ int shout_metadata_delay = 3;
 volatile int do_exit = 0;
 bool use_localtime = false;
 bool multiple_demod_threads = false;
+bool multiple_output_threads = false;
 bool log_scan_activity = false;
 char *stats_filepath = NULL;
 size_t fft_size_log = DEFAULT_FFT_SIZE_LOG;
@@ -103,7 +104,6 @@ enum fm_demod_algo fm_demod = FM_FAST_ATAN2;
 #if DEBUG
 char *debug_path;
 #endif
-Signal mixer_mp3_signal;
 
 #ifndef __MINGW32__
 void sighandler(int sig) {
@@ -282,11 +282,13 @@ public:
 	}
 };
 
-void init_demod(demod_params_t *params, int start_device, int end_device) {
+void init_demod(demod_params_t *params, Signal *signal, int device_start, int device_end) {
 	assert(params != NULL);
+	assert(signal != NULL);
 
-	params->start_device = start_device;
-	params->end_device = end_device;
+	params->mp3_signal = signal;
+	params->device_start = device_start;
+	params->device_end = device_end;
 
 #ifndef USE_BCM_VC
 	params->fftin = fftwf_alloc_complex(fft_size);
@@ -296,15 +298,18 @@ void init_demod(demod_params_t *params, int start_device, int end_device) {
 }
 
 int next_device(demod_params_t *params, int current) {
-	if (current == params->end_device) {
-		return params->start_device;
+	current++;
+	if (current < params->device_end) {
+		return current;
 	}
-	return current + 1;
+	return params->device_start;
 }
 
 void *demodulate(void *params) {
 	assert(params != NULL);
 	demod_params_t *demod_params = (demod_params_t *) params;
+
+	debug_print("Starting demod thread, devices %d:%d, signal %p\n", demod_params->device_start, demod_params->device_end, demod_params->mp3_signal);
 
 	// initialize fft engine
 #ifdef USE_BCM_VC
@@ -362,7 +367,7 @@ void *demodulate(void *params) {
 	if(DEBUG)
 		gettimeofday(&ts, NULL);
 	size_t available;
-	int device_num = demod_params->start_device;
+	int device_num = demod_params->device_start;
 	while (true) {
 
 		if(do_exit) {
@@ -686,7 +691,7 @@ void *demodulate(void *params) {
 				ts.tv_sec = te.tv_sec;
 				ts.tv_usec = te.tv_usec;
 			}
-			dev->mp3_signal.send();
+			demod_params->mp3_signal->send();
 			dev->row++;
 			if (dev->row == 12) {
 				dev->row = 0;
@@ -842,6 +847,9 @@ int main(int argc, char* argv[]) {
 			exit(1);
 #endif
 			multiple_demod_threads = true;
+		}
+		if(root.exists("multiple_output_threads") && (bool)root["multiple_output_threads"] == true) {
+			multiple_output_threads = true;
 		}
 		if(root.exists("log_scan_activity") && (bool)root["log_scan_activity"] == true)
 			log_scan_activity = true;
@@ -1053,41 +1061,99 @@ int main(int argc, char* argv[]) {
 	THREAD output_check;
 	pthread_create(&output_check, NULL, &output_check_thread, NULL);
 
+	int demod_thread_count = multiple_demod_threads ? device_count : 1;
+	demod_params_t *demod_params = (demod_params_t *)XCALLOC(demod_thread_count, sizeof(demod_params_t));
+	THREAD *demod_threads = (THREAD *)XCALLOC(demod_thread_count, sizeof(THREAD));
 
-	THREAD *device_outputs = (THREAD *)XCALLOC(device_count, sizeof(THREAD));
-	for (size_t i = 0; i < device_count; i++) {
-		pthread_create(&device_outputs[i], NULL, &device_output_thread, (void *)i);
+	int output_thread_count = 1;
+	if (multiple_output_threads) {
+		output_thread_count = demod_thread_count;
+		if (mixer_count > 0) {
+			output_thread_count++;
+		}
+	}
+	output_params_t *output_params = (output_params_t *)XCALLOC(output_thread_count, sizeof(output_params_t));
+	THREAD *output_threads = (THREAD *)XCALLOC(output_thread_count, sizeof(THREAD));
+
+	// Setup the output threads
+	//  - if there is only one output thread then it is for everything
+	if (output_thread_count == 1) {
+		output_params[0].mp3_signal = new Signal;
+		output_params[0].device_start = 0;
+		output_params[0].device_end = device_count;
+		output_params[0].mixer_start = 0;
+		output_params[0].mixer_end = mixer_count;
+	} else {
+		// - otherwise the first thread(s) are for the demodulators then the last is for all the mixers
+		if (demod_thread_count == 1) {
+			output_params[0].mp3_signal = new Signal;
+			output_params[0].device_start = 0;
+			output_params[0].device_end = device_count;
+			output_params[0].mixer_start = 0;
+			output_params[0].mixer_end = 0;
+
+			output_params[1].mp3_signal = new Signal;
+			output_params[1].device_start = 0;
+			output_params[1].device_end = 0;
+			output_params[1].mixer_start = 0;
+			output_params[1].mixer_end = mixer_count;
+		} else {
+			for (int i = 0; i < output_thread_count; i++)
+			{
+				output_params[i].mp3_signal = new Signal;
+				if (i < device_count) {
+					output_params[i].device_start = i;
+					output_params[i].device_end = i + 1;
+					output_params[i].mixer_start = 0;
+					output_params[i].mixer_end = 0;
+				} else {
+					output_params[i].device_start = 0;
+					output_params[i].device_end = 0;
+					output_params[i].mixer_start = 0;
+					output_params[i].mixer_end = mixer_count;
+				}
+			}
+		}
 	}
 
+	// Setup the demod threads
+	if (demod_thread_count == 1) {
+		init_demod(&demod_params[0], output_params[0].mp3_signal, 0, device_count);
+	} else {
+		for (int i = 0; i < demod_thread_count; i++) {
+			if (output_thread_count == 1) {
+				init_demod(&demod_params[i], output_params[0].mp3_signal, i, i+1);
+			} else {
+				init_demod(&demod_params[i], output_params[i].mp3_signal, i, i+1);
+			}
+		}
+	}
 
+	// Startup the output threads
+	for (int i = 0; i < output_thread_count; i++)
+	{
+		pthread_create(&output_threads[i], NULL, &output_thread, &output_params[i]);
+	}
 
+	// Startup the mixer thread (if there is one) using the signal for the last output thread
 	THREAD mixer;
-	THREAD mixer_output;
 	if(mixer_count > 0) {
-		pthread_create(&mixer, NULL, &mixer_thread, NULL);
-		pthread_create(&mixer_output, NULL, &mixer_output_thread, NULL);
+		pthread_create(&mixer, NULL, &mixer_thread, output_params[output_thread_count-1].mp3_signal);
 	}
+
 #ifdef PULSE
 	pulse_start();
 #endif
 	sincosf_lut_init();
 
-	if (!multiple_demod_threads) {
-		demod_params_t params;
-		init_demod(&params, 0, device_count - 1);
-		demodulate(&params);
-	} else {
-		demod_params_t *params = (demod_params_t *)XCALLOC(device_count, sizeof(demod_params_t));
-		THREAD *threads = (THREAD *)XCALLOC(device_count, sizeof(THREAD));
-		for (int i = 0; i < device_count; i++) {
-			init_demod(&params[i], i, i);
-		}
-		for (int i = 0; i < device_count; i++) {
-			pthread_create(&threads[i], NULL, &demodulate, &params[i]);
-		}
-		for (int i = 0; i < device_count; i++) {
-			pthread_join(threads[i], NULL);
-		}
+	// Startup the demod threads
+	for (int i = 0; i < demod_thread_count; i++) {
+		pthread_create(&demod_threads[i], NULL, &demodulate, &demod_params[i]);
+	}
+
+	// Wait for demod threads to exit
+	for (int i = 0; i < demod_thread_count; i++) {
+		pthread_join(demod_threads[i], NULL);
 	}
 
 	log(LOG_INFO, "Cleaning up\n");
@@ -1109,17 +1175,15 @@ int main(int argc, char* argv[]) {
 		disable_device_outputs(dev);
 	}
 
-	log(LOG_INFO, "Closing output thread(s)\n");
-	for (int i = 0; i < device_count; i++) {
-		devices[i].mp3_signal.send();
-		pthread_join(device_outputs[i], NULL);
-	}
-
 	if(mixer_count > 0) {
 		log(LOG_INFO, "Closing mixer thread\n");
 		pthread_join(mixer, NULL);
-		mixer_mp3_signal.send();
-		pthread_join(mixer_output, NULL);
+	}
+
+	log(LOG_INFO, "Closing output thread(s)\n");
+	for (int i = 0; i < output_thread_count; i++) {
+		output_params[i].mp3_signal->send();
+		pthread_join(output_threads[i], NULL);
 	}
 
 	for (int i = 0; i < device_count; i++) {

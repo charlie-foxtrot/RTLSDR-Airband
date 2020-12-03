@@ -42,6 +42,7 @@
 #include <cstring>
 #include <ctime>
 #include <cerrno>
+#include <cassert>
 #include "rtl_airband.h"
 #include "input-common.h"
 

@@ -138,9 +138,14 @@ static bool mix_waveforms(float *sum, float *in, float mult, int size) {
  *       interval. Any input which is still not ready, is skipped (filled with 0s), because
  *       here we must emit the mixed audio to keep the desired audio bitrate.
  */
-void *mixer_thread(void *) {
+void *mixer_thread(void *param) {
+	assert(param != NULL);
+	Signal *signal = (Signal *)param;
 	struct timeval ts, te;
 	int interval_usec = 1e+6 * WAVE_BATCH / WAVE_RATE / MIX_DIVISOR;
+
+	debug_print("Starting mixer thread, signal %p\n", signal);
+
 	if(mixer_count <= 0) return 0;
 	if(DEBUG) gettimeofday(&ts, NULL);
 	while(!do_exit) {
@@ -196,7 +201,7 @@ void *mixer_thread(void *) {
 	        	    ts.tv_usec = te.tv_usec;
 			    }
 				channel->state = CH_READY;
-				safe_cond_signal(&mp3_cond, &mp3_mutex);
+				signal->send();
 				mixer->interval = MIX_DIVISOR;
 				mixer->inputs_todo = ONES(mixer->input_count);
 			} else {

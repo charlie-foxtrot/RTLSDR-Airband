@@ -46,8 +46,6 @@
 #define ALIGN2 __attribute__((aligned(32)))
 #define SLEEP(x) usleep(x * 1000)
 #define THREAD pthread_t
-#define safe_cond_signal(n, m) pthread_mutex_lock(m); pthread_cond_signal(n); pthread_mutex_unlock(m)
-#define safe_cond_wait(n, m) pthread_mutex_lock(m); pthread_cond_wait(n, m); pthread_mutex_unlock(m)
 #define GOTOXY(x, y) printf("%c[%d;%df",0x1B,y,x)
 #ifndef SYSCONFDIR
 #define SYSCONFDIR "/usr/local/etc"
@@ -217,6 +215,27 @@ private:
 	std::complex<float> yv[3];
 };
 
+class Signal {
+public:
+	Signal(void) {
+		cond_ = PTHREAD_COND_INITIALIZER;
+		mutex_ = PTHREAD_MUTEX_INITIALIZER;
+	}
+	void send(void) {
+		pthread_mutex_lock(&mutex_);
+		pthread_cond_signal(&cond_);
+		pthread_mutex_unlock(&mutex_);
+	}
+	void wait(void) {
+		pthread_mutex_lock(&mutex_);
+		pthread_cond_wait(&cond_, &mutex_);
+		pthread_mutex_unlock(&mutex_);
+	}
+private:
+	pthread_cond_t cond_;
+	pthread_mutex_t	mutex_;
+};
+
 struct freq_t {
 	int frequency;				// scan frequency
 	char *label;				// frequency label
@@ -307,14 +326,23 @@ struct mixer_t {
 };
 
 struct demod_params_t {
-	int start_device;
-	int end_device;
+	Signal *mp3_signal;
+	int device_start;
+	int device_end;
 
 #ifndef USE_BCM_VC
 	fftwf_plan fft;
 	fftwf_complex* fftin;
 	fftwf_complex* fftout;
 #endif
+};
+
+struct output_params_t {
+	Signal *mp3_signal;
+	int device_start;
+	int device_end;
+	int mixer_start;
+	int mixer_end;
 };
 
 // output.cpp
@@ -328,6 +356,7 @@ void *output_thread(void* params);
 // rtl_airband.cpp
 extern bool use_localtime;
 extern bool multiple_demod_threads;
+extern bool multiple_output_threads;
 extern char *stats_filepath;
 extern size_t fft_size, fft_size_log;
 extern int device_count, mixer_count;
@@ -336,8 +365,6 @@ extern volatile int do_exit, device_opened;
 extern float alpha;
 extern device_t *devices;
 extern mixer_t *mixers;
-extern pthread_cond_t mp3_cond;
-extern pthread_mutex_t mp3_mutex;
 
 // util.cpp
 void error();

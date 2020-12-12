@@ -42,6 +42,7 @@
 #include <cstring>
 #include <ctime>
 #include <cerrno>
+#include <cassert>
 #include "rtl_airband.h"
 #include "input-common.h"
 
@@ -681,17 +682,21 @@ void write_stats_file(timeval *last_stats_write) {
 	fclose(file);
 }
 
-void* output_thread(void*) {
+void* output_thread(void *param) {
+	assert(param != NULL);
+	output_params_t *output_param = (output_params_t *)param;
 	struct freq_tag tag;
 	struct timeval tv;
 	int new_freq = -1;
 	timeval ts, te;
 	timeval last_stats_write = {0, 0};
 
+	debug_print("Starting output thread, devices %d:%d, mixers %d:%d, signal %p\n", output_param->device_start, output_param->device_end, output_param->mixer_start, output_param->mixer_end, output_param->mp3_signal);
+
 	if(DEBUG) gettimeofday(&ts, NULL);
 	while (!do_exit) {
-		safe_cond_wait(&mp3_cond, &mp3_mutex);
-		for (int i = 0; i < mixer_count; i++) {
+		output_param->mp3_signal->wait();
+		for (int i = output_param->mixer_start; i < output_param->mixer_end; i++) {
 			if(mixers[i].enabled == false) continue;
 			channel_t *channel = &mixers[i].channel;
 			if(channel->state == CH_READY) {
@@ -705,7 +710,7 @@ void* output_thread(void*) {
 			ts.tv_sec = te.tv_sec;
 			ts.tv_usec = te.tv_usec;
 		}
-		for (int i = 0; i < device_count; i++) {
+		for (int i = output_param->device_start; i < output_param->device_end; i++) {
 			device_t* dev = devices + i;
 			if (dev->input->state == INPUT_RUNNING && dev->waveavail) {
 				if(dev->mode == R_SCAN) {
@@ -730,7 +735,9 @@ void* output_thread(void*) {
 // in multichannel mode
 			new_freq = -1;
 		}
-		write_stats_file(&last_stats_write);
+		if(output_param->device_start == 0) {
+			write_stats_file(&last_stats_write);
+		}
 	}
 	return 0;
 }

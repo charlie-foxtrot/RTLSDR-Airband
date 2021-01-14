@@ -51,6 +51,10 @@ else ifeq ($(PLATFORM), armv8-generic)
   CFLAGS += -march=armv8-a+crc -mtune=cortex-a53 -ffast-math
   LDLIBS += -lfftw3f
   DEPS = $(OBJ)
+else ifeq ($(PLATFORM), native)
+  CFLAGS += -march=native -mtune=native -ffast-math
+  LDLIBS += -lfftw3f
+  DEPS = $(OBJ)
 else ifeq ($(PLATFORM), x86)
   CFLAGS += -march=native
   LDLIBS += -lfftw3f
@@ -109,6 +113,7 @@ help:
 	@printf "\nPlease set PLATFORM variable to one of available platforms:\n \
 	\tPLATFORM=rpiv1 make\t\tRaspberry Pi V1 (VFP FPU, use BCM VideoCore for FFT)\n \
 	\tPLATFORM=rpiv2 make\t\tRaspberry Pi V2 (NEON FPU, use BCM VideoCore for FFT)\n \
+	\tPLATFORM=native make\t\tBuild for native machine, including Raspberry Pi V3 and V4 (use main CPU for FFT)\n \
 	\tPLATFORM=armv7-generic make\tOther ARMv7 platforms, like Cubieboard (NEON FPU, use main CPU for FFT)\n \
 	\tPLATFORM=armv8-generic make\t64-bit ARM platforms, like Odroid C2 (use main CPU for FFT)\n \
 	\tPLATFORM=x86 make\t\tbuild binary for x86 (Linux)\n \

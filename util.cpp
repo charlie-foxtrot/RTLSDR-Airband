@@ -189,4 +189,10 @@ double atofs(char *s) {
 	return atof(s);
 }
 
+double delta_sec(const timeval *start, const timeval *stop) {
+	timeval delta;
+	timersub(stop, start, &delta);
+	return delta.tv_sec + delta.tv_usec/1000000.0;
+}
+
 // vim: ts=4

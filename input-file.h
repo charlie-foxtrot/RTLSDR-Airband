@@ -25,6 +25,7 @@
 typedef struct {
 	char *filepath;
 	FILE *input_file;
+	float speedup_factor;
 } file_dev_data_t;
 
 // vim: ts=4

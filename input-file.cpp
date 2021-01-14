@@ -44,6 +44,23 @@ int file_parse_config(input_t * const input, libconfig::Setting &cfg) {
 		error();
 	}
 
+	if (cfg.exists("speedup_factor")) {
+		if (cfg["speedup_factor"].getType() == libconfig::Setting::TypeInt) {
+			dev_data->speedup_factor = (int)cfg["speedup_factor"];
+		} else if (cfg["speedup_factor"].getType() == libconfig::Setting::TypeFloat) {
+			dev_data->speedup_factor = (float)cfg["speedup_factor"];
+		} else {
+			cerr << "File configuration error: 'speedup_factor' must be a float or int if set\n";
+			error();
+		}
+		if (dev_data->speedup_factor <= 0.0) {
+			cerr << "File configuration error: 'speedup_factor' must be >= 0.0\n";
+			error();
+		}
+	} else {
+		dev_data->speedup_factor = 4;
+	}
+
 	return 0;
 }
 
@@ -65,12 +82,19 @@ int file_init(input_t * const input) {
 void *file_rx_thread(void *ctx) {
 	input_t *input = (input_t *)ctx;
 	assert(input != NULL);
+	assert(input->sample_rate != 0);
 	file_dev_data_t *dev_data = (file_dev_data_t *)input->dev_data;
 	assert(dev_data != NULL);
 	assert(dev_data->input_file != NULL);
+	assert(dev_data->speedup_factor != 0.0);
 
 	size_t buf_len = (input->buf_size/2) - 1;
 	unsigned char *buf = (unsigned char *)XCALLOC(1, buf_len);
+
+	float time_per_byte_ms = 1000 / (input->sample_rate * input->bytes_per_sample * 2 * dev_data->speedup_factor);
+
+	log(LOG_DEBUG, "sample_rate: %d, bytes_per_sample: %d, speedup_factor: %f, time_per_byte_ms: %f\n",
+		input->sample_rate, input->bytes_per_sample, dev_data->speedup_factor, time_per_byte_ms);
 
 	input->state = INPUT_RUNNING;
 
@@ -89,6 +113,9 @@ void *file_rx_thread(void *ctx) {
 			break;
 		}
 
+		timeval start;
+		gettimeofday(&start, NULL);
+
 		size_t space_left;
 		pthread_mutex_lock(&input->buffer_lock);
 		if (input->bufe >= input->bufs) {
@@ -101,6 +128,16 @@ void *file_rx_thread(void *ctx) {
 		if (space_left > buf_len) {
 			size_t len = fread(buf, sizeof(unsigned char), buf_len, dev_data->input_file);
 			circbuffer_append(input, buf, len);
+
+			timeval end;
+			gettimeofday(&end, NULL);
+
+			int time_taken_ms = delta_sec(&start, &end) * 1000;
+			int sleep_time_ms = len * time_per_byte_ms - time_taken_ms;
+
+			if(sleep_time_ms > 0) {
+				SLEEP(sleep_time_ms);
+			}
 		} else {
 			SLEEP(10);
 		}
@@ -126,6 +163,7 @@ int file_stop(input_t * const input) {
 MODULE_EXPORT input_t *file_input_new() {
 	file_dev_data_t *dev_data = (file_dev_data_t *)XCALLOC(1, sizeof(file_dev_data_t));
 	dev_data->input_file = NULL;
+	dev_data->speedup_factor = 0.0;
 
 	input_t *input = (input_t *)XCALLOC(1, sizeof(input_t));
 	input->dev_data = dev_data;

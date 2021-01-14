@@ -289,11 +289,6 @@ static int open_file(file_data *fdata, mix_modes mixmode, int is_audio) {
 	}
 	return 0;
 }
-static double delta_sec(const timeval *start, const timeval *stop) {
-	timeval delta;
-	timersub(stop, start, &delta);
-	return delta.tv_sec + delta.tv_usec/1000000.0;
-}
 
 // Buffer used by each lame encode. Each channel is handled sequentially by
 // the output thread, so this is reused sequentially.

@@ -357,7 +357,11 @@ void *demodulate(void *params) {
 	// initialize fft window
 	// blackman 7
 	// the whole matrix is computed
+#ifdef USE_BCM_VC
 	ALIGN float ALIGN2 window[fft_size * 2];
+#else
+	ALIGN float ALIGN2 window[fft_size];
+#endif
 	const double a0 = 0.27105140069342f;
 	const double a1 = 0.43329793923448f;	const double a2 = 0.21812299954311f;
 	const double a3 = 0.06592544638803f;	const double a4 = 0.01081174209837f;
@@ -370,7 +374,11 @@ void *demodulate(void *params) {
 			+ (a4 * cos((8.0 * M_PI * i) / (fft_size - 1)))
 			- (a5 * cos((10.0 * M_PI * i) / (fft_size - 1)))
 			+ (a6 * cos((12.0 * M_PI * i) / (fft_size - 1)));
+#ifdef USE_BCM_VC
 		window[i * 2] = window[i * 2 + 1] = (float)x;
+#else
+		window[i] = (float)x;
+#endif
 	}
 
 	struct timeval ts, te;
@@ -436,8 +444,8 @@ void *demodulate(void *params) {
 #else
 			short *buf2 = (short *)(dev->input->buffer + dev->input->bufs);
 			for(size_t i = 0; i < fft_size; i++, buf2 += 2) {
-				 fftin[i][0] = scale * (float)buf2[0] * window[i*2];
-				 fftin[i][1] = scale * (float)buf2[1] * window[i*2];
+				 fftin[i][0] = scale * (float)buf2[0] * window[i];
+				 fftin[i][1] = scale * (float)buf2[1] * window[i];
 			}
 #endif
 		} else if(dev->input->sfmt == SFMT_F32) {
@@ -454,13 +462,13 @@ void *demodulate(void *params) {
 #else
 			float *buf2 = (float *)(dev->input->buffer + dev->input->bufs);
 			for(size_t i = 0; i < fft_size; i++, buf2 += 2) {
-				fftin[i][0] = scale * buf2[0] * window[i*2];
-				fftin[i][1] = scale * buf2[1] * window[i*2];
+				fftin[i][0] = scale * buf2[0] * window[i];
+				fftin[i][1] = scale * buf2[1] * window[i];
 			}
 #endif
 		} else {	// S8 or U8
 			levels_ptr = (dev->input->sfmt == SFMT_U8 ? levels_u8 : levels_s8);
-#if defined USE_BCM_VC
+#ifdef USE_BCM_VC
 			sample_fft_arg sfa = {fft_size / 4, fft->in};
 			for (size_t i = 0; i < FFT_BATCH; i++) {
 				samplefft(&sfa, dev->input->buffer + dev->input->bufs + i * bps, window, levels_ptr);
@@ -469,16 +477,14 @@ void *demodulate(void *params) {
 #elif defined (__arm__) || defined (__aarch64__)
 			unsigned char* buf2 = dev->input->buffer + dev->input->bufs;
 			for (size_t i = 0; i < fft_size; i++, buf2 += 2) {
-				float re = levels_ptr[buf2[0]] * window[i*2];
-				float im = levels_ptr[buf2[1]] * window[i*2];
-				fftin[i][0] = re;
-				fftin[i][1] = im;
+				fftin[i][0] = levels_ptr[buf2[0]] * window[i];
+				fftin[i][1] = levels_ptr[buf2[1]] * window[i];
 			}
 #else /* x86 */
 			unsigned char* buf2 = dev->input->buffer + dev->input->bufs;
 			for (size_t i = 0; i < fft_size; i += 2, buf2 += 4) {
 				__m128 a = _mm_set_ps(levels_ptr[buf2[3]], levels_ptr[buf2[2]], levels_ptr[buf2[1]], levels_ptr[buf2[0]]);
-				__m128 b = _mm_load_ps(&window[i * 2]);
+				__m128 b = _mm_load_ps(&window[i]);
 				a = _mm_mul_ps(a, b);
 				_mm_store_ps(&fftin[i][0], a);
 			}

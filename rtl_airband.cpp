@@ -54,6 +54,7 @@
 #include <cstdarg>
 #include <cerrno>
 #include <iostream>
+#include <iomanip>
 #include <cstring>
 #include <cstdio>
 #include <cassert>
@@ -385,6 +386,7 @@ void *demodulate(void *params) {
 	if(DEBUG)
 		gettimeofday(&ts, NULL);
 	size_t available;
+	size_t count = 0;
 	int device_num = demod_params->device_start;
 	while (true) {
 
@@ -546,10 +548,16 @@ void *demodulate(void *params) {
 				}
 #endif
 				for (int j = AGC_EXTRA; j < WAVE_BATCH + AGC_EXTRA; j++) {
+
+					count++;
+	
 					// auto noise floor
 					if (fparms->sqlevel < 0 && j % 16 == 0) {
 						fparms->agcmin = fparms->agcmin * 0.97f + min(fparms->agcavgslow, fparms->agcmin) * 0.03f + 0.0001f;
 					}
+
+					cout << count << ": sample - " << channel->waveref[j] << " agcavgslow - " << fparms->agcavgslow << " agcmin - " << fparms->agcmin << " delay - " << abs(channel->agcsq) - 1 << endl;
+					cout << std::setprecision(10) << fparms->agcavgslow << " * " << 0.99f << " + " << channel->waveref[j] << " * " << 0.01f << endl;
 
 					// average power
 					fparms->agcavgslow = fparms->agcavgslow * 0.99f + channel->waveref[j] * 0.01f;
@@ -560,6 +568,9 @@ void *demodulate(void *params) {
 						if (channel->agcsq == 1 && fparms->agcavgslow > sqlevel) {
 							channel->agcsq = -AGC_EXTRA * 2;
 							channel->axcindicate = SIGNAL;
+
+							cout << count << ": power (" << fparms->agcavgslow << " > " << sqlevel << "), opening" << endl;
+
 							if(channel->modulation == MOD_AM) {
 							// fade in
 								for (int k = j - AGC_EXTRA; k < j; k++) {
@@ -581,6 +592,9 @@ void *demodulate(void *params) {
 						if ((channel->agcsq == -1 && fparms->agcavgslow < sqlevel) || fparms->agclow == AGC_EXTRA - 12) {
 							channel->agcsq = AGC_EXTRA * 2;
 							channel->axcindicate = NO_SIGNAL;
+
+							cout << count << ": no power after timeout (" << fparms->agcavgslow << " < " << sqlevel << "), closing" << endl;
+
 							if(channel->modulation == MOD_AM) {
 								// fade out
 								for (int k = j - AGC_EXTRA + 1; k < j; k++) {
@@ -611,18 +625,23 @@ void *demodulate(void *params) {
 							fparms->filter_avg = fparms->filter_avg * 0.999f + channel->wavein[j] * 0.001f;
 
 							if (fparms->filter_avg < sqlevel) {
+								cout << count << ": post filter (" << fparms->filter_avg << " < " << sqlevel << "), closing" << endl;
 								signal_filtered = true;
 								channel->axcindicate = NO_SIGNAL;
 							} else {
 								channel->axcindicate = SIGNAL;
 							}
 						}
+						cout << std::setprecision(10) << "filtered in: " << channel->wavein[j] << endl;
 					}
 					if(channel->agcsq != -1 || signal_filtered) {
 						channel->waveout[j] = 0;
 						if(channel->has_iq_outputs) {
 							channel->iq_out[2*(j - AGC_EXTRA)] = 0;
 							channel->iq_out[2*(j - AGC_EXTRA)+1] = 0;
+						}
+						if(signal_filtered && channel->agcsq == -AGC_EXTRA * 2) {
+						    channel->agcsq = 1;
 						}
 					} else {
 						const float &re = channel->iq_in[2*(j - AGC_EXTRA)];
@@ -660,6 +679,8 @@ void *demodulate(void *params) {
 // apply the notch filter.  If no filter configured, this will no-op
 						fparms->notch_filter.apply(channel->waveout[j]);
 					}
+					cout << std::setprecision(10) << channel->waveout[j] << endl;
+
 				}
 				memmove(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * sizeof(float));
 				if(channel->needs_raw_iq) {

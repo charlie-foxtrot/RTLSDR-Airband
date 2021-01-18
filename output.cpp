@@ -579,7 +579,7 @@ static void output_channel_noise_levels(FILE *f) {
 			channel_t* channel = devices[i].channels + j;
 			for (int k = 0; k < channel->freq_count; k++) {
 				print_channel_metric(f, "channel_noise_level", channel->freqlist[k].frequency, channel->freqlist[k].label);
-				fprintf(f, "\t%.3f\n", channel->freqlist[k].agcmin);
+				fprintf(f, "\t%.3f\n", channel->freqlist[k].squelch.noise_floor());
 			}
 		}
 	}

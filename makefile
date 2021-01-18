@@ -23,7 +23,7 @@ SUBDIRS = hello_fft
 CLEANDIRS = $(SUBDIRS:%=clean-%)
 
 BIN = rtl_airband
-OBJ = rtl_airband.o input-common.o input-helpers.o input-file.o output.o config.o util.o mixer.o
+OBJ = rtl_airband.o input-common.o input-helpers.o input-file.o output.o config.o util.o mixer.o squelch.o
 FFT = hello_fft/hello_fft.a
 
 .PHONY: all clean install help $(SUBDIRS) $(CLEANDIRS)
@@ -129,7 +129,7 @@ help:
 
 $(FFT):	hello_fft ;
 
-config.o: rtl_airband.h input-common.h
+config.o: rtl_airband.h input-common.h squelch.h
 
 input-common.o: input-common.h
 
@@ -145,13 +145,15 @@ input-file.o: rtl_airband.h input-common.h input-helpers.h input-file.h
 
 mixer.o: rtl_airband.h
 
-rtl_airband.o: rtl_airband.h input-common.h
+rtl_airband.o: rtl_airband.h input-common.h squelch.h
 
 output.o: rtl_airband.h input-common.h
 
 pulse.o: rtl_airband.h
 
 util.o: rtl_airband.h
+
+squelch.o : squelch.h
 
 $(SUBDIRS):
 	$(MAKE) -C $@

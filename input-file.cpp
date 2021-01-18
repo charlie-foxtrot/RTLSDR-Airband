@@ -71,7 +71,7 @@ int file_init(input_t * const input) {
 
 	dev_data->input_file = fopen(dev_data->filepath, "rb");
 	if(!dev_data->input_file) {
-		cerr << "File input failed to open '" << dev_data->filepath << "'\n";
+		cerr << "File input failed to open '" << dev_data->filepath << "' - " << strerror(errno) << endl;
 		error();
 	}
 

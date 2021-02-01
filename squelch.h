@@ -1,7 +1,7 @@
 #ifndef _SQUELCH_H
 #define _SQUELCH_H
 
-#include <iostream> // needed for std::ostream
+#include <cstddef> // needed for size_t
 
 class Squelch {
 public:
@@ -51,9 +51,6 @@ private:
 	void update_current_state(void);
 	bool has_power(void) const;
 	bool is_manual(void) const;
-
-	friend std::ostream & operator << (std::ostream &out, const Squelch &squelch);
-	friend std::ostream & operator << (std::ostream &out, const Squelch::State &state);
 };
 
 #endif

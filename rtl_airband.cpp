@@ -54,9 +54,6 @@
 #include <cstdarg>
 #include <cerrno>
 #include <iostream>
-// TODO: remove - start
-#include <iomanip>
-// TODO: remove - end
 #include <cstring>
 #include <cstdio>
 #include <cassert>
@@ -580,28 +577,32 @@ void *demodulate(void *params) {
 						if (fparms->lowpass_filter.enabled()) {
 							fparms->squelch.process_filtered_sample(channel->wavein[j]);
 						}
-// TODO: remove - start
-						cout << std::setprecision(10) << "filtered in: " << channel->wavein[j] << endl;
-// TODO: remove - end
+					}
+
+					if(channel->modulation == MOD_AM) {
+						// if squelch is just opening then fade in, or if just closing fade out
+						if (fparms->squelch.should_fade_in()) {
+							for (int k = j - AGC_EXTRA; k < j; k++) {
+								if (channel->wavein[k] >= fparms->squelch.squelch_level()) {
+									fparms->agcavgfast = fparms->agcavgfast * 0.9f + channel->wavein[k] * 0.1f;
+								}
+							}
+						} else if (fparms->squelch.should_fade_out()) {
+							for (int k = j - AGC_EXTRA + 1; k < j; k++) {
+								channel->waveout[k] = channel->waveout[k - 1] * 0.94f;
+							}
+						}
+
+						if( (fparms->squelch.get_state() == Squelch::OPEN || fparms->squelch.get_state() == Squelch::OPENING) && channel->wavein[j] > fparms->squelch.squelch_level() ) {
+							// TODO: Possible Improvement - re-visit this, should it move to is_open()?
+							fparms->agcavgfast = fparms->agcavgfast * 0.995f + channel->wavein[j] * 0.005f;
+						}
 					}
 
 					// If squelch is still open then do modulation-specific processing
 					if (fparms->squelch.is_open()) {
 						if(channel->modulation == MOD_AM) {
-							// if squelch is just opening then fade in, or if just closing fade out
-							if (fparms->squelch.get_state() == Squelch::OPENING) {
-								for (int k = j - AGC_EXTRA; k < j; k++) {
-									if (channel->wavein[k] >= fparms->squelch.squelch_level()) {
-										fparms->agcavgfast = fparms->agcavgfast * 0.9f + channel->wavein[k] * 0.1f;
-									}
-								}
-							} else if (fparms->squelch.get_state() == Squelch::CLOSING) {
-								for (int k = j - AGC_EXTRA + 1; k < j; k++) {
-									channel->waveout[k] = channel->waveout[k - 1] * 0.94f;
-								}
-							}
 
-							fparms->agcavgfast = fparms->agcavgfast * 0.995f + channel->wavein[j] * 0.005f;
 							channel->waveout[j] = (channel->wavein[j - AGC_EXTRA] - fparms->agcavgfast) / (fparms->agcavgfast * 1.5f);
 							if (abs(channel->waveout[j]) > 0.8f) {
 								channel->waveout[j] *= 0.85f;
@@ -638,16 +639,13 @@ void *demodulate(void *params) {
 					// Squelch is closed
 					} else {
 						channel->waveout[j] = 0;
-						// TODO: set channel->axcindicate to NO_SIGNAL at start of loop and dont clear here to allow output() to pick up the end of a transmission
+						// TODO: Possible Improvement - set channel->axcindicate to NO_SIGNAL at start of loop and dont clear here to allow output() to pick up the end of a transmission
 						channel->axcindicate = NO_SIGNAL;
 						if(channel->has_iq_outputs) {
 							channel->iq_out[2*(j - AGC_EXTRA)] = 0;
 							channel->iq_out[2*(j - AGC_EXTRA)+1] = 0;
 						}
 					}
-// TODO: remove - start
-					cout << std::setprecision(10) << channel->waveout[j] << endl;
-// TODO: remove - end
 				}
 				memmove(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * sizeof(float));
 				if(channel->needs_raw_iq) {

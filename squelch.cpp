@@ -1,9 +1,5 @@
 #include "squelch.h"
 
-// TODO: remove - start
-#include <iomanip> // needed for std::setprecision()
-// TODO: remove - end
-
 #include "rtl_airband.h" // needed for debug_print()
 
 using namespace std;
@@ -44,6 +40,14 @@ bool Squelch::should_filter_sample(void) const {
 		return true;
 	}
 	return false;
+}
+
+bool Squelch::should_fade_in(void) const {
+	return (next_state_ == OPENING && current_state_ != OPENING);
+}
+
+bool Squelch::should_fade_out(void) const {
+	return (next_state_ == CLOSING && current_state_ != CLOSING);
 }
 
 const Squelch::State & Squelch::get_state(void) const {
@@ -91,42 +95,27 @@ void Squelch::process_reference_sample(const float &sample) {
 		agcmin_ = agcmin_ * 0.97f + std::min(agcavgslow_, agcmin_) * 0.03f + 0.0001f;
 	}
 
-	// TODO: remove - start
-	cout << sample_count_ << ": sample - " << sample << " agcavgslow - " << agcavgslow_ << " agcmin - " << agcmin_ << " delay - " << delay_ << endl;
-	cout << std::setprecision(10) << agcavgslow_ << " * " << 0.99f << " + " << sample << " * " << 0.01f << endl;
-	// TODO: remove - end
-
 	// average power
 	agcavgslow_ = agcavgslow_ * 0.99f + sample * 0.01f;
 
 	// Check power against thresholds
 	if (current_state_ == OPEN && has_power() == false) {
-// TODO: remove - start
-		cout << sample_count_ << ": no power after timeout (" << power_level() << " < " << squelch_level() << "), closing\n";
-// TODO: remove - end
 		debug_print("Closing at %zu: no power after timeout (%f < %f)\n", sample_count_, power_level(), squelch_level());
 		set_state(CLOSING);
 	}
 
 	if (current_state_ == CLOSED && has_power() == true) {
-// TODO: remove - start
-		cout << sample_count_ << ": power (" << power_level() << " > " << squelch_level() << "), opening\n";
-// TODO: remove - end
 		debug_print("Opening at %zu: power (%f >= %f)\n", sample_count_, power_level(), squelch_level());
 		set_state(OPENING);
 	}
 
 	// Override squelch and close if there are repeated samples under the squelch level
-	// TODO: what about current state being OPENING?
 	if((current_state_ == OPEN || current_state_ == OPENING) && next_state_ != CLOSING) {
 		if (sample >= squelch_level()) {
 			low_power_count_ = 0;
 		} else {
 			low_power_count_++;
 			if (low_power_count_ >= low_power_abort_) {
-// TODO: remove - start
-				cout << sample_count_ << ": no power after timeout (" << power_level() << " < " << squelch_level() << "), closing\n";
-// TODO: remove - end
 				debug_print("Closing at %zu: low power count %d\n", sample_count_, low_power_count_);
 				set_state(CLOSING);
 			}
@@ -142,10 +131,7 @@ void Squelch::process_filtered_sample(const float &sample) {
 	// average power
 	post_filter_avg_ = post_filter_avg_ * 0.999f + sample * 0.001f;
 
-	if (delay_ == 0 && post_filter_avg_ < squelch_level()) {
-// TODO: remove - start
-		cout << sample_count_ << ": post filter (" << post_filter_avg_ << " < " << squelch_level() << "), closing\n";
-// TODO: remove - end
+	if ((current_state_ == OPEN || current_state_ == OPENING || next_state_ == OPEN || next_state_ == OPENING) && post_filter_avg_ < squelch_level()) {
 		debug_print("Closing at %zu: power post filter (%f < %f)\n", sample_count_, post_filter_avg_, squelch_level());
 		set_state(CLOSING);
 	}
@@ -221,6 +207,11 @@ void Squelch::update_current_state(void) {
 			current_state_ = next_state_;
 		} else {
 			delay_--;
+			// TODO: Causes Diff - remove start
+			if (delay_ == 2) {
+				delay_ = 0;
+			}
+			// TODO: Causes Diff - remove end
 			if (delay_ == 0) {
 				next_state_ = CLOSED;
 			}

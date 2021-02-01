@@ -21,6 +21,9 @@ public:
 	bool is_open(void) const;
 	bool should_filter_sample(void) const;
 
+	bool should_fade_in(void) const;
+	bool should_fade_out(void) const;
+
 	const State & get_state(void) const;
 	const float & noise_floor(void) const;
 	const float & power_level(void) const;

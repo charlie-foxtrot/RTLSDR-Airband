@@ -609,7 +609,7 @@ void *demodulate(void *params) {
 								fparms->agcavgfast *= 1.15f;
 							}
 						}
-	#ifdef NFM
+#ifdef NFM
 						else if(channel->modulation == MOD_NFM) {
 							// FM demod
 							if(fm_demod == FM_FAST_ATAN2) {
@@ -625,7 +625,7 @@ void *demodulate(void *params) {
 							channel->waveout[j] -= fparms->agcavgfast;
 							channel->waveout[j] = channel->waveout[j] * (1.0f - channel->alpha) + channel->waveout[j-1] * channel->alpha;
 						}
-	#endif // NFM
+#endif // NFM
 
 						// apply the notch filter, will be a no-op if not configured
 						fparms->notch_filter.apply(channel->waveout[j]);

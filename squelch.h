@@ -35,8 +35,8 @@ private:
 	int low_power_abort_;		// number of repeated samples below squelch to cause a close
 	int manual_;				// manually configured squelch level, < 0 for disabled
 
-	float agcmin_;				// noise level
-	float agcavgslow_;			// average power for reference sample
+	float noise_floor_;			// noise level
+	float pre_filter_avg_;			// average power for reference sample
 	float post_filter_avg_;		// average power for post-filter sample
 
 	State next_state_;

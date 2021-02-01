@@ -4,11 +4,15 @@
 
 using namespace std;
 
+static const float DECAY_FACTOR = 0.998125f;
+static const float UPDATE_FACTOR = 1.0f - DECAY_FACTOR;
+static const float NOISE_FLOOR_GROWTH = 0.00000625f;
+
 Squelch::Squelch(int manual) :
 	manual_(manual)
 {
-	agcmin_ = 100.0f;
-	agcavgslow_ = 0.5f;
+	noise_floor_ = 100.0f;
+	pre_filter_avg_ = 0.5f;
 	post_filter_avg_ = 0.5f;
 
 	// TODO: Possible Improvement - revisit magic numbers
@@ -27,16 +31,11 @@ Squelch::Squelch(int manual) :
 }
 
 bool Squelch::is_open(void) const {
-	// TODO: Causes Diff - remove checks on next_state_
-	return (current_state_ == OPEN && next_state_ != CLOSING);
+	return (current_state_ == OPEN);
 }
 
 bool Squelch::should_filter_sample(void) const {
-	// TODO: Causes Diff - remove checks on next_state_
-	if (next_state_ == CLOSING) {
-		return false;
-	}
-	if (current_state_ == OPEN || current_state_ == OPENING || next_state_ == OPENING) {
+	if (current_state_ == OPEN || current_state_ == OPENING) {
 		return true;
 	}
 	return false;
@@ -55,11 +54,11 @@ const Squelch::State & Squelch::get_state(void) const {
 }
 
 const float & Squelch::noise_floor(void) const {
-	return agcmin_;
+	return noise_floor_;
 }
 
 const float & Squelch::power_level(void) const {
-	return agcavgslow_;
+	return pre_filter_avg_;
 }
 
 const size_t & Squelch::open_count(void) const {
@@ -88,15 +87,10 @@ void Squelch::process_reference_sample(const float &sample) {
 
 	sample_count_++;
 
-	// auto noise floor
-	// TODO: Possible Improvement - update noise floor with each sample
-	// TODO: Causes Diff - remove +3
-	if ((sample_count_ + 3) % 16 == 0) {
-		agcmin_ = agcmin_ * 0.97f + std::min(agcavgslow_, agcmin_) * 0.03f + 0.0001f;
-	}
-
-	// average power
-	agcavgslow_ = agcavgslow_ * 0.99f + sample * 0.01f;
+	// auto noise floor and average power
+	// TODO: what is the purpose of the NOISE_FLOOR_GROWTH?  This could account for squelch flap on marginal signal
+	noise_floor_ = noise_floor_ * DECAY_FACTOR + std::min(pre_filter_avg_, noise_floor_) * UPDATE_FACTOR + NOISE_FLOOR_GROWTH;
+	pre_filter_avg_ = pre_filter_avg_ * DECAY_FACTOR + sample * UPDATE_FACTOR;
 
 	// Check power against thresholds
 	if (current_state_ == OPEN && has_power() == false) {
@@ -129,7 +123,7 @@ void Squelch::process_filtered_sample(const float &sample) {
 	}
 
 	// average power
-	post_filter_avg_ = post_filter_avg_ * 0.999f + sample * 0.001f;
+	post_filter_avg_ = post_filter_avg_ * DECAY_FACTOR + sample * UPDATE_FACTOR;
 
 	if ((current_state_ == OPEN || current_state_ == OPENING || next_state_ == OPEN || next_state_ == OPENING) && post_filter_avg_ < squelch_level()) {
 		debug_print("Closing at %zu: power post filter (%f < %f)\n", sample_count_, post_filter_avg_, squelch_level());
@@ -188,16 +182,11 @@ void Squelch::update_current_state(void) {
 			open_count_++;
 			delay_ = flap_delay_;
 			low_power_count_ = 0;
-			// TODO: Causes Diff - re-initialize post_filter_avg_ = agcavgslow_
+			post_filter_avg_ = pre_filter_avg_;
 			current_state_ = next_state_;
 		} else {
 			delay_--;
-			// TODO: Causes Diff - remove start
-			if (delay_ == 2) {
-				delay_ = 0;
-			}
-			// TODO: Causes Diff - remove end
-			if (delay_ <= 2) {
+			if (delay_ <= 0) {
 				next_state_ = OPEN;
 			}
 		}
@@ -207,12 +196,7 @@ void Squelch::update_current_state(void) {
 			current_state_ = next_state_;
 		} else {
 			delay_--;
-			// TODO: Causes Diff - remove start
-			if (delay_ == 2) {
-				delay_ = 0;
-			}
-			// TODO: Causes Diff - remove end
-			if (delay_ == 0) {
+			if (delay_ <= 0) {
 				next_state_ = CLOSED;
 			}
 		}

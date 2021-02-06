@@ -583,25 +583,30 @@ void *demodulate(void *params) {
 						}
 					}
 
-					// for AM, if squelch is just opening then fade in, or if just closing fade out
 					if(channel->modulation == MOD_AM) {
-						if (fparms->squelch.should_fade_in()) {
+						// if squelch is just opening then fade in, or if just closing fade out
+						if (fparms->squelch.first_open_sample()) {
 							for (int k = j - AGC_EXTRA; k < j; k++) {
 								if (channel->wavein[k] >= fparms->squelch.squelch_level()) {
 									fparms->agcavgfast = fparms->agcavgfast * 0.9f + channel->wavein[k] * 0.1f;
 								}
 							}
-						} else if (fparms->squelch.should_fade_out()) {
+						} else if (fparms->squelch.last_open_sample()) {
 							for (int k = j - AGC_EXTRA + 1; k < j; k++) {
 								channel->waveout[k] = channel->waveout[k - 1] * 0.94f;
 							}
+						}
+
+						if( (fparms->squelch.get_state() == Squelch::OPEN || fparms->squelch.get_state() == Squelch::OPENING) && channel->wavein[j] > fparms->squelch.squelch_level() ) {
+							// TODO: Possible Improvement - re-visit this, should it move to is_open()?
+							fparms->agcavgfast = fparms->agcavgfast * 0.995f + channel->wavein[j] * 0.005f;
 						}
 					}
 
 					// If squelch is still open then do modulation-specific processing
 					if (fparms->squelch.is_open()) {
 						if(channel->modulation == MOD_AM) {
-							fparms->agcavgfast = fparms->agcavgfast * 0.995f + channel->wavein[j] * 0.005f;
+
 							channel->waveout[j] = (channel->wavein[j - AGC_EXTRA] - fparms->agcavgfast) / (fparms->agcavgfast * 1.5f);
 							if (abs(channel->waveout[j]) > 0.8f) {
 								channel->waveout[j] *= 0.85f;

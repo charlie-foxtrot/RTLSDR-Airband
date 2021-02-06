@@ -32,27 +32,27 @@ UNKNOWN_PLATFORM = 0
 ifeq ($(PLATFORM), rpiv1)
   CFLAGS += -DUSE_BCM_VC
   CFLAGS += -I/opt/vc/include  -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux
-  CFLAGS += -mcpu=arm1176jzf-s -mtune=arm1176jzf-s -march=armv6zk -mfpu=vfp -ffast-math 
+  CFLAGS += -mcpu=arm1176jzf-s -mtune=arm1176jzf-s -march=armv6zk -mfpu=vfp -fno-fast-math 
   LDLIBS += -lbcm_host -ldl
   LDFLAGS += -L/opt/vc/lib
   DEPS = $(OBJ) $(FFT) rtl_airband_vfp.o
 else ifeq ($(PLATFORM), rpiv2)
   CFLAGS += -DUSE_BCM_VC
   CFLAGS += -I/opt/vc/include  -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux
-  CFLAGS += -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -ffast-math 
+  CFLAGS += -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -fno-fast-math 
   LDLIBS += -lbcm_host -ldl
   LDFLAGS += -L/opt/vc/lib
   DEPS = $(OBJ) $(FFT) rtl_airband_neon.o
 else ifeq ($(PLATFORM), armv7-generic)
-  CFLAGS += -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -ffast-math 
+  CFLAGS += -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -fno-fast-math 
   LDLIBS += -lfftw3f
   DEPS = $(OBJ)
 else ifeq ($(PLATFORM), armv8-generic)
-  CFLAGS += -march=armv8-a+crc -mtune=cortex-a53 -ffast-math
+  CFLAGS += -march=armv8-a+crc -mtune=cortex-a53 -fno-fast-math
   LDLIBS += -lfftw3f
   DEPS = $(OBJ)
 else ifeq ($(PLATFORM), native)
-  CFLAGS += -march=native -mtune=native -ffast-math
+  CFLAGS += -march=native -mtune=native -fno-fast-math
   LDLIBS += -lfftw3f
   DEPS = $(OBJ)
 else ifeq ($(PLATFORM), x86)

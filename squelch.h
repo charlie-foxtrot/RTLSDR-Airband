@@ -1,7 +1,9 @@
 #ifndef _SQUELCH_H
 #define _SQUELCH_H
 
-#include <cstddef> // needed for size_t
+#include <stdio.h>  // needed for debug file output
+#include <cstddef>  // needed for size_t
+#include <stdint.h> // needed for int16_t
 
 /*
  Theory of operation:
@@ -37,13 +39,14 @@ class Squelch {
 public:
 
 	enum State {
+		CLOSED,		// Audio is suppressed
 		OPENING,	// Transitioning closed -> open
-		OPEN,		// Audio not suppressed
 		CLOSING,	// Transitioning open -> closed
-		CLOSED		// Audio is suppressed
+		OPEN		// Audio not suppressed
 	};
 
 	Squelch(int manual = -1);
+	~Squelch(void);
 
 	void process_reference_sample(const float &sample);
 	void process_filtered_sample(const float &sample);
@@ -59,6 +62,10 @@ public:
 	const float & power_level(void) const;
 	const size_t & open_count(void) const;
 	float squelch_level(void) const;
+
+	static void enable_debug(bool value);
+	static bool debug_enabled(void);
+	void set_debug_file(const char *filepath);
 
 private:
 	int open_delay_;			// how long to wait after power crosses squelch to open
@@ -84,6 +91,12 @@ private:
 	void update_current_state(void);
 	bool has_power(void) const;
 	bool is_manual(void) const;
+
+	static bool debug_enabled_;
+	FILE *debug_file_;
+	void debug_value(const float &value);
+	void debug_value(const int &value);
+	void debug_state(void);
 };
 
 #endif

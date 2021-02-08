@@ -1,5 +1,7 @@
 #include "squelch.h"
 
+#include <string.h> // needed for strerror()
+
 #include "rtl_airband.h" // needed for debug_print()
 
 using namespace std;
@@ -26,7 +28,15 @@ Squelch::Squelch(int manual) :
 	sample_count_ = 0;
 	low_power_count_ = 0;
 
+	debug_file_ = NULL;
+
 	debug_print("Created Squelch, open_delay_: %d, close_delay_: %d, low_power_abort: %d, manual: %d\n", open_delay_, close_delay_, low_power_abort_, manual_);
+}
+
+Squelch::~Squelch(void) {
+	if (debug_file_) {
+		fclose(debug_file_);
+	}
 }
 
 bool Squelch::is_open(void) const {
@@ -120,6 +130,8 @@ void Squelch::process_reference_sample(const float &sample) {
 			}
 		}
 	}
+
+	debug_value(sample);
 }
 
 void Squelch::process_filtered_sample(const float &sample) {
@@ -220,4 +232,113 @@ void Squelch::update_current_state(void) {
 	} else {
 		current_state_ = next_state_;
 	}
+
+	// dont write state the very first time process_reference_sample() has been called
+	if (sample_count_ != 0 || open_count_ != 0) {
+		debug_state();
+	}
+}
+
+/*
+ Debug file methods
+ ==================
+
+ Values written to file are:
+	 - (int16_t) process_reference_sample input
+	 - (int16_t) noise_floor_
+	 - (int16_t) pre_filter_avg_
+	 - (int16_t) post_filter_avg_
+	 - (int) current_state_
+	 - (int) delay_
+	 - (int) low_power_count_
+
+  The output file can be read / plotted in python as follows:
+
+	import matplotlib.pyplot as plt
+	import numpy as np
+
+	def plot_squelch_debug(filepath):
+
+		dt = np.dtype([('reference_input', np.single),
+					   ('noise_floor', np.single),
+					   ('pre_filter_avg', np.single),
+					   ('post_filter_avg', np.single),
+					   ('current_state', np.intc),
+					   ('delay', np.intc),
+					   ('low_power_count', np.intc)
+					  ])
+
+		dat = np.fromfile(filepath, dtype=dt)
+
+		plt.figure()
+		plt.plot(dat['reference_input'], 'b')
+		plt.plot(dat['pre_filter_avg'], 'g')
+		plt.plot(dat['noise_floor'], 'r')
+		plt.show(block=False)
+
+		plt.figure()
+		plt.plot(dat['post_filter_avg'], 'k')
+		plt.show(block=False)
+
+		plt.figure()
+		axis = plt.subplot2grid((3, 1), (0, 0))
+		axis.plot(dat['current_state'], 'c')
+		axis = plt.subplot2grid((3, 1), (1, 0))
+		axis.plot(dat['delay'], 'm')
+		axis = plt.subplot2grid((3, 1), (2, 0))
+		axis.plot(dat['low_power_count'], 'y')
+		plt.show(block=False)
+
+		return
+
+  */
+
+bool Squelch::debug_enabled_ = false;
+
+void Squelch::enable_debug(bool value) {
+	debug_enabled_ = value;
+}
+
+bool Squelch::debug_enabled(void) {
+	return debug_enabled_;
+}
+
+void Squelch::set_debug_file(const char *filepath) {
+	if (debug_enabled_) {
+		debug_file_ = fopen(filepath, "wb");
+
+	}
+}
+
+void Squelch::debug_value(const float &value) {
+	if (!debug_enabled_ || !debug_file_) {
+		return;
+	}
+
+	if (fwrite(&value, sizeof(value), 1, debug_file_) != sizeof(value)) {
+		debug_print("Error writing to squelch debug file: %s\n", strerror(errno));
+	}
+}
+
+void Squelch::debug_value(const int &value) {
+	if (!debug_file_ || !debug_enabled_) {
+		return;
+	}
+
+	if (fwrite(&value, sizeof(value), 1, debug_file_) != sizeof(value)) {
+		debug_print("Error writing to squelch debug file: %s\n", strerror(errno));
+	}
+}
+
+void Squelch::debug_state(void) {
+	if (!debug_file_ || !debug_enabled_) {
+		return;
+	}
+
+	debug_value(noise_floor_);
+	debug_value(pre_filter_avg_);
+	debug_value(post_filter_avg_);
+	debug_value((int)current_state_);
+	debug_value(delay_);
+	debug_value(low_power_count_);
 }

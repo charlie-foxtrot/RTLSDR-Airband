@@ -861,6 +861,8 @@ int main(int argc, char* argv[]) {
 			log_scan_activity = true;
 		if(root.exists("stats_filepath"))
 			stats_filepath = strdup(root["stats_filepath"]);
+		if(root.exists("squelch_debug_output") && (bool)root["squelch_debug_output"] == true)
+			Squelch::enable_debug(true);
 #ifdef NFM
 		if(root.exists("tau"))
 			alpha = ((int)root["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)root["tau"])));

@@ -211,11 +211,7 @@ static struct freq_t *mk_freqlist( int n )
 		fl[i].frequency = 0;
 		fl[i].label = NULL;
 		fl[i].agcavgfast = 0.5f;
-		fl[i].agcavgslow = 0.5f;
-		fl[i].filter_avg = 0.5f;
-		fl[i].agcmin = 100.0f;
-		fl[i].agclow = 0;
-		fl[i].sqlevel = -1;
+		fl[i].squelch = Squelch();
 		fl[i].active_counter = 0;
 	}
 	return fl;
@@ -258,7 +254,6 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			channel->wavein[k] = 20;
 			channel->waveout[k] = 0.5;
 		}
-		channel->agcsq = 1;
 		channel->axcindicate = NO_SIGNAL;
 		channel->modulation = MOD_AM;
 		channel->mode = MM_MONO;
@@ -331,7 +326,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			if(libconfig::Setting::TypeList == chans[j]["squelch"].getType()) {
 				// New-style array of per-frequency squelch settings
 				for(int f = 0; f<channel->freq_count; f++) {
-					channel->freqlist[f].sqlevel = (int)chans[j]["squelch"][f];
+					channel->freqlist[f].squelch = Squelch((int)chans[j]["squelch"][f]);
 				}
 				// NB: no value check; -1 allows auto-squelch for
 				//     some frequencies and not others.
@@ -343,7 +338,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 					error();
 				}
 				for(int f = 0; f<channel->freq_count; f++) {
-					channel->freqlist[f].sqlevel = sqlevel;
+					channel->freqlist[f].squelch = Squelch(sqlevel);
 				}
 			} else {
 				cerr<<"Invalid value for squelch (should be int or list - use parentheses)\n";

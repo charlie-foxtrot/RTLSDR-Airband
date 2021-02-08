@@ -38,6 +38,7 @@
 #include <pulse/stream.h>
 #endif
 #include "input-common.h"	// input_t
+#include "squelch.h"
 
 #ifndef RTL_AIRBAND_VERSION
 #define RTL_AIRBAND_VERSION "3.1.0"
@@ -240,11 +241,7 @@ struct freq_t {
 	int frequency;				// scan frequency
 	char *label;				// frequency label
 	float agcavgfast;			// average power, for AGC
-	float agcavgslow;			// average power, for squelch level detection
-	float filter_avg;			// average power, for post-filter squelch level detection
-	float agcmin;				// noise level
-	int sqlevel;				// manually configured squelch level
-	int agclow;					// low level sample count
+	Squelch squelch;
 	size_t active_counter;		// count of loops where channel has signal
 	NotchFilter notch_filter;	// notch filter - good to remove CTCSS tones
 	LowpassFilter lowpass_filter;	// lowpass filter, applied to I/Q after derotation, set at bandwidth/2 to remove out of band noise
@@ -264,7 +261,6 @@ struct channel_t {
 	uint32_t dm_dphi, dm_phi;	// derotation frequency and current phase value
 	enum modulations modulation;
 	enum mix_modes mode;		// mono or stereo
-	int agcsq;					// squelch status, negative: signal, positive: suppressed
 	status axcindicate;
 	unsigned char afc;			//0 - AFC disabled; 1 - minimal AFC; 2 - more aggressive AFC and so on to 255
 	struct freq_t *freqlist;

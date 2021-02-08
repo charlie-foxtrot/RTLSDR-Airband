@@ -68,6 +68,7 @@
 #include <lame/lame.h>
 #include "input-common.h"
 #include "rtl_airband.h"
+#include "squelch.h"
 
 #ifdef WITH_PROFILING
 #include "gperftools/profiler.h"
@@ -533,107 +534,79 @@ void *demodulate(void *params) {
 				AFC afc(dev, i);
 				channel_t* channel = dev->channels + i;
 				freq_t *fparms = channel->freqlist + channel->freq_idx;
+
+				// set to NO_SIGNAL, will be updated to SIGNAL based on squelch below
+				channel->axcindicate = NO_SIGNAL;
+
+				// TODO: why not just do this in the loop below?
 #if defined (__arm__) || defined (__aarch64__)
-				float agcmin2 = fparms->agcmin * 4.5f;
+				float agcmin2 = fparms->squelch.noise_floor() * 4.5f;
 				for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j++) {
 					channel->waveref[j] = min(channel->wavein[j], agcmin2);
 				}
 #else
-				__m128 agccap = _mm_set1_ps(fparms->agcmin * 4.5f);
+				__m128 agccap = _mm_set1_ps(fparms->squelch.noise_floor() * 4.5f);
 				for (int j = 0; j < WAVE_BATCH + AGC_EXTRA; j += 4) {
 					__m128 t = _mm_loadu_ps(channel->wavein + j);
 					_mm_storeu_ps(channel->waveref + j, _mm_min_ps(t, agccap));
 				}
 #endif
+
 				for (int j = AGC_EXTRA; j < WAVE_BATCH + AGC_EXTRA; j++) {
-					// auto noise floor
-					if (fparms->sqlevel < 0 && j % 16 == 0) {
-						fparms->agcmin = fparms->agcmin * 0.97f + min(fparms->agcavgslow, fparms->agcmin) * 0.03f + 0.0001f;
-					}
 
-					// average power
-					fparms->agcavgslow = fparms->agcavgslow * 0.99f + channel->waveref[j] * 0.01f;
+					float &real = channel->iq_in[2*(j - AGC_EXTRA)];
+					float &imag = channel->iq_in[2*(j - AGC_EXTRA)+1];
 
-					float sqlevel = fparms->sqlevel >= 0 ? (float)fparms->sqlevel : 3.0f * fparms->agcmin;
-					if (channel->agcsq > 0) {
-						channel->agcsq = max(channel->agcsq - 1, 1);
-						if (channel->agcsq == 1 && fparms->agcavgslow > sqlevel) {
-							channel->agcsq = -AGC_EXTRA * 2;
-							channel->axcindicate = SIGNAL;
-							if(channel->modulation == MOD_AM) {
-							// fade in
-								for (int k = j - AGC_EXTRA; k < j; k++) {
-									if (channel->wavein[k] > sqlevel) {
-										fparms->agcavgfast = fparms->agcavgfast * 0.9f + channel->wavein[k] * 0.1f;
-									}
-								}
-							}
-						}
-					} else {
-						if (channel->wavein[j] > sqlevel) {
-							if(channel->modulation == MOD_AM)
-								fparms->agcavgfast = fparms->agcavgfast * 0.995f + channel->wavein[j] * 0.005f;
-							fparms->agclow = 0;
-						} else {
-							fparms->agclow++;
-						}
-						channel->agcsq = min(channel->agcsq + 1, -1);
-						if ((channel->agcsq == -1 && fparms->agcavgslow < sqlevel) || fparms->agclow == AGC_EXTRA - 12) {
-							channel->agcsq = AGC_EXTRA * 2;
-							channel->axcindicate = NO_SIGNAL;
-							if(channel->modulation == MOD_AM) {
-								// fade out
-								for (int k = j - AGC_EXTRA + 1; k < j; k++) {
-									channel->waveout[k] = channel->waveout[k - 1] * 0.94f;
-								}
-							}
-						}
-					}
+					fparms->squelch.process_reference_sample(channel->waveref[j]);
 
-					bool signal_filtered = false;
-					if(channel->agcsq < 0 && channel->needs_raw_iq) {
+					// If squelch is open / opening and using I/Q, then cleanup the signal and possibly update squelch.
+					if (fparms->squelch.should_filter_sample() && channel->needs_raw_iq) {
+
 						// remove phase rotation introduced by FFT sliding window
-						float swf, cwf, re, im;
+						float swf, cwf, re_tmp, im_tmp;
 						sincosf_lut(channel->dm_phi, &swf, &cwf);
-						multiply(channel->iq_in[2*(j - AGC_EXTRA)], channel->iq_in[2*(j - AGC_EXTRA)+1], cwf, -swf, &re, &im);
+						multiply(real, imag, cwf, -swf, &re_tmp, &im_tmp);
 						channel->dm_phi += channel->dm_dphi;
 						channel->dm_phi &= 0xffffff;
 
 						// apply lowpass filter, will be a no-op if not configured
-						fparms->lowpass_filter.apply(re, im);
+						fparms->lowpass_filter.apply(re_tmp, im_tmp);
 
 						// update I/Q and wave
-						channel->iq_in[2*(j - AGC_EXTRA)] = re;
-						channel->iq_in[2*(j - AGC_EXTRA)+1] = im;
-						channel->wavein[j] = sqrt(re * re + im * im);
+						real = re_tmp;
+						imag = im_tmp;
+						channel->wavein[j] = sqrt(real * real + imag * imag);
 
-						if(fparms->lowpass_filter.enabled()) {
-							fparms->filter_avg = fparms->filter_avg * 0.999f + channel->wavein[j] * 0.001f;
-
-							if (fparms->filter_avg < sqlevel) {
-								signal_filtered = true;
-								channel->axcindicate = NO_SIGNAL;
-							} else {
-								channel->axcindicate = SIGNAL;
-							}
+						// update squelch post-cleanup
+						if (fparms->lowpass_filter.enabled()) {
+							fparms->squelch.process_filtered_sample(channel->wavein[j]);
 						}
 					}
-					if(channel->agcsq != -1 || signal_filtered) {
-						channel->waveout[j] = 0;
-						if(channel->has_iq_outputs) {
-							channel->iq_out[2*(j - AGC_EXTRA)] = 0;
-							channel->iq_out[2*(j - AGC_EXTRA)+1] = 0;
-						}
-					} else {
-						const float &re = channel->iq_in[2*(j - AGC_EXTRA)];
-						const float &im = channel->iq_in[2*(j - AGC_EXTRA)+1];
 
-						if(channel->has_iq_outputs) {
-							channel->iq_out[2*(j - AGC_EXTRA)] = re;
-							channel->iq_out[2*(j - AGC_EXTRA)+1] = im;
+					if(channel->modulation == MOD_AM) {
+						// if squelch is just opening then fade in, or if just closing fade out
+						if (fparms->squelch.first_open_sample()) {
+							for (int k = j - AGC_EXTRA; k < j; k++) {
+								if (channel->wavein[k] >= fparms->squelch.squelch_level()) {
+									fparms->agcavgfast = fparms->agcavgfast * 0.9f + channel->wavein[k] * 0.1f;
+								}
+							}
+						} else if (fparms->squelch.last_open_sample()) {
+							for (int k = j - AGC_EXTRA + 1; k < j; k++) {
+								channel->waveout[k] = channel->waveout[k - 1] * 0.94f;
+							}
 						}
 
+						if( (fparms->squelch.get_state() == Squelch::OPEN || fparms->squelch.get_state() == Squelch::OPENING) && channel->wavein[j] > fparms->squelch.squelch_level() ) {
+							// TODO: Possible Improvement - re-visit this, should it move to is_open()?
+							fparms->agcavgfast = fparms->agcavgfast * 0.995f + channel->wavein[j] * 0.005f;
+						}
+					}
+
+					// If squelch is still open then do modulation-specific processing
+					if (fparms->squelch.is_open()) {
 						if(channel->modulation == MOD_AM) {
+
 							channel->waveout[j] = (channel->wavein[j - AGC_EXTRA] - fparms->agcavgfast) / (fparms->agcavgfast * 1.5f);
 							if (abs(channel->waveout[j]) > 0.8f) {
 								channel->waveout[j] *= 0.85f;
@@ -642,23 +615,38 @@ void *demodulate(void *params) {
 						}
 #ifdef NFM
 						else if(channel->modulation == MOD_NFM) {
-// FM demod
+							// FM demod
 							if(fm_demod == FM_FAST_ATAN2) {
-								channel->waveout[j] = polar_disc_fast(re, im, channel->pr, channel->pj);
+								channel->waveout[j] = polar_disc_fast(real, imag, channel->pr, channel->pj);
 							} else if(fm_demod == FM_QUADRI_DEMOD) {
-								channel->waveout[j] = fm_quadri_demod(re, im, channel->pr, channel->pj);
+								channel->waveout[j] = fm_quadri_demod(real, imag, channel->pr, channel->pj);
 							}
-							channel->pr = re;
-							channel->pj = im;
-// de-emphasis IIR + DC blocking
+							channel->pr = real;
+							channel->pj = imag;
+
+							// de-emphasis IIR + DC blocking
 							fparms->agcavgfast = fparms->agcavgfast * 0.995f + channel->waveout[j] * 0.005f;
 							channel->waveout[j] -= fparms->agcavgfast;
 							channel->waveout[j] = channel->waveout[j] * (1.0f - channel->alpha) + channel->waveout[j-1] * channel->alpha;
 						}
 #endif // NFM
 
-// apply the notch filter.  If no filter configured, this will no-op
+						// apply the notch filter, will be a no-op if not configured
 						fparms->notch_filter.apply(channel->waveout[j]);
+
+						channel->axcindicate = SIGNAL;
+						if(channel->has_iq_outputs) {
+							channel->iq_out[2*(j - AGC_EXTRA)] = real;
+							channel->iq_out[2*(j - AGC_EXTRA)+1] = imag;
+						}
+
+					// Squelch is closed
+					} else {
+						channel->waveout[j] = 0;
+						if(channel->has_iq_outputs) {
+							channel->iq_out[2*(j - AGC_EXTRA)] = 0;
+							channel->iq_out[2*(j - AGC_EXTRA)+1] = 0;
+						}
 					}
 				}
 				memmove(channel->wavein, channel->wavein + WAVE_BATCH, (dev->waveend - WAVE_BATCH) * sizeof(float));
@@ -675,16 +663,18 @@ void *demodulate(void *params) {
 				if (tui) {
 					if(dev->mode == R_SCAN) {
 						GOTOXY(0, device_num * 17 + dev->row + 3);
+						// TODO: change to dB
 						printf("%4.0f/%3.0f%c %7.3f ",
-							fparms->agcavgslow,
-							(fparms->sqlevel >= 0 ? fparms->sqlevel : fparms->agcmin),
+							fparms->squelch.power_level(),
+							fparms->squelch.squelch_level(),
 							channel->axcindicate,
 							(dev->channels[0].freqlist[channel->freq_idx].frequency / 1000000.0));
 					} else {
 						GOTOXY(i*10, device_num * 17 + dev->row + 3);
+						// TODO: change to dB
 						printf("%4.0f/%3.0f%c ",
-							fparms->agcavgslow,
-							(fparms->sqlevel >= 0 ? fparms->sqlevel : fparms->agcmin),
+							fparms->squelch.power_level(),
+							fparms->squelch.squelch_level(),
 							channel->axcindicate);
 					}
 					fflush(stdout);

@@ -579,7 +579,24 @@ static void output_channel_noise_levels(FILE *f) {
 			channel_t* channel = devices[i].channels + j;
 			for (int k = 0; k < channel->freq_count; k++) {
 				print_channel_metric(f, "channel_noise_level", channel->freqlist[k].frequency, channel->freqlist[k].label);
-				fprintf(f, "\t%.3f\n", channel->freqlist[k].agcmin);
+				fprintf(f, "\t%.3f\n", channel->freqlist[k].squelch.noise_floor());
+			}
+		}
+	}
+	fprintf(f, "\n");
+}
+
+static void output_channel_squelch_counter(FILE *f) {
+	fprintf(f, "# HELP channel_squelch_counter Number of times squelch opened\n"
+			"# TYPE channel_squelch_counter counter\n");
+
+	for (int i = 0; i < device_count; i++) {
+		device_t* dev = devices + i;
+		for (int j = 0; j < dev->channel_count; j++) {
+			channel_t* channel = devices[i].channels + j;
+			for (int k = 0; k < channel->freq_count; k++) {
+				print_channel_metric(f, "channel_squelch_counter", channel->freqlist[k].frequency, channel->freqlist[k].label);
+				fprintf(f, "\t%zu\n", channel->freqlist[k].squelch.open_count());
 			}
 		}
 	}
@@ -670,6 +687,7 @@ void write_stats_file(timeval *last_stats_write) {
 
 	output_channel_activity_counters(file);
 	output_channel_noise_levels(file);
+	output_channel_squelch_counter(file);
 	output_device_buffer_overflows(file);
 	output_output_overruns(file);
 	output_input_overruns(file);

@@ -1,9 +1,11 @@
 #ifndef _SQUELCH_H
 #define _SQUELCH_H
 
+#include <cstddef> // needed for size_t
+
+#ifdef DEBUG_SQUELCH
 #include <stdio.h>  // needed for debug file output
-#include <cstddef>  // needed for size_t
-#include <stdint.h> // needed for int16_t
+#endif
 
 /*
  Theory of operation:
@@ -46,7 +48,6 @@ public:
 	};
 
 	Squelch(int manual = -1);
-	~Squelch(void);
 
 	void process_reference_sample(const float &sample);
 	void process_filtered_sample(const float &sample);
@@ -63,9 +64,10 @@ public:
 	const size_t & open_count(void) const;
 	float squelch_level(void) const;
 
-	static void enable_debug(bool value);
-	static bool debug_enabled(void);
+#ifdef DEBUG_SQUELCH
+	~Squelch(void);
 	void set_debug_file(const char *filepath);
+#endif
 
 private:
 	int open_delay_;			// how long to wait after power crosses squelch to open
@@ -92,11 +94,12 @@ private:
 	bool has_power(void) const;
 	bool is_manual(void) const;
 
-	static bool debug_enabled_;
+#ifdef DEBUG_SQUELCH
 	FILE *debug_file_;
 	void debug_value(const float &value);
 	void debug_value(const int &value);
 	void debug_state(void);
+#endif
 };
 
 #endif

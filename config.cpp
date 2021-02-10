@@ -478,14 +478,14 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			channel->dm_phi = 0.f;
 		}
 
+#ifdef DEBUG_SQUELCH
 		// Setup squelch debug file, if enabled
-		if (Squelch::debug_enabled()) {
-			char tmp_filepath[1024];
-			for(int f = 0; f < channel->freq_count; f++) {
-				snprintf(tmp_filepath, sizeof(tmp_filepath), "./squelch_debug-%d-%d.dat", j, f);
-				channel->freqlist[f].squelch.set_debug_file(tmp_filepath);
-			}
+		char tmp_filepath[1024];
+		for(int f = 0; f < channel->freq_count; f++) {
+			snprintf(tmp_filepath, sizeof(tmp_filepath), "./squelch_debug-%d-%d.dat", j, f);
+			channel->freqlist[f].squelch.set_debug_file(tmp_filepath);
 		}
+#endif
 
 		jj++;
 	}

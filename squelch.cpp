@@ -1,6 +1,8 @@
 #include "squelch.h"
 
+#ifdef DEBUG_SQUELCH
 #include <string.h> // needed for strerror()
+#endif
 
 #include "rtl_airband.h" // needed for debug_print()
 
@@ -28,15 +30,11 @@ Squelch::Squelch(int manual) :
 	sample_count_ = 0;
 	low_power_count_ = 0;
 
+#ifdef DEBUG_SQUELCH
 	debug_file_ = NULL;
+#endif
 
 	debug_print("Created Squelch, open_delay_: %d, close_delay_: %d, low_power_abort: %d, manual: %d\n", open_delay_, close_delay_, low_power_abort_, manual_);
-}
-
-Squelch::~Squelch(void) {
-	if (debug_file_) {
-		fclose(debug_file_);
-	}
 }
 
 bool Squelch::is_open(void) const {
@@ -131,7 +129,9 @@ void Squelch::process_reference_sample(const float &sample) {
 		}
 	}
 
+#ifdef DEBUG_SQUELCH
 	debug_value(sample);
+#endif
 }
 
 void Squelch::process_filtered_sample(const float &sample) {
@@ -233,12 +233,16 @@ void Squelch::update_current_state(void) {
 		current_state_ = next_state_;
 	}
 
+#ifdef DEBUG_SQUELCH
 	// dont write state the very first time process_reference_sample() has been called
 	if (sample_count_ != 0 || open_count_ != 0) {
 		debug_state();
 	}
+#endif
 }
 
+
+#ifdef DEBUG_SQUELCH
 /*
  Debug file methods
  ==================
@@ -293,25 +297,18 @@ void Squelch::update_current_state(void) {
 
   */
 
-bool Squelch::debug_enabled_ = false;
-
-void Squelch::enable_debug(bool value) {
-	debug_enabled_ = value;
-}
-
-bool Squelch::debug_enabled(void) {
-	return debug_enabled_;
-}
-
-void Squelch::set_debug_file(const char *filepath) {
-	if (debug_enabled_) {
-		debug_file_ = fopen(filepath, "wb");
-
+Squelch::~Squelch(void) {
+	if (debug_file_) {
+		fclose(debug_file_);
 	}
 }
 
+void Squelch::set_debug_file(const char *filepath) {
+	debug_file_ = fopen(filepath, "wb");
+}
+
 void Squelch::debug_value(const float &value) {
-	if (!debug_enabled_ || !debug_file_) {
+	if (!debug_file_) {
 		return;
 	}
 
@@ -321,7 +318,7 @@ void Squelch::debug_value(const float &value) {
 }
 
 void Squelch::debug_value(const int &value) {
-	if (!debug_file_ || !debug_enabled_) {
+	if (!debug_file_) {
 		return;
 	}
 
@@ -331,7 +328,7 @@ void Squelch::debug_value(const int &value) {
 }
 
 void Squelch::debug_state(void) {
-	if (!debug_file_ || !debug_enabled_) {
+	if (!debug_file_) {
 		return;
 	}
 
@@ -342,3 +339,5 @@ void Squelch::debug_state(void) {
 	debug_value(delay_);
 	debug_value(low_power_count_);
 }
+
+#endif // DEBUG_SQUELCH

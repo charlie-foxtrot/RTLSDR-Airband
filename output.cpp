@@ -587,7 +587,7 @@ static void output_channel_noise_levels(FILE *f) {
 }
 
 static void output_channel_signal_levels(FILE *f) {
-	fprintf(f, "# HELP channel_signal_level Squelch power_level.\n"
+	fprintf(f, "# HELP channel_signal_level Squelch signal_level.\n"
 			"# TYPE channel_signal_level gauge\n");
 
 	for (int i = 0; i < device_count; i++) {
@@ -596,7 +596,7 @@ static void output_channel_signal_levels(FILE *f) {
 			channel_t* channel = devices[i].channels + j;
 			for (int k = 0; k < channel->freq_count; k++) {
 				print_channel_metric(f, "channel_signal_level", channel->freqlist[k].frequency, channel->freqlist[k].label);
-				fprintf(f, "\t%.3f\n", channel->freqlist[k].squelch.power_level());
+				fprintf(f, "\t%.3f\n", channel->freqlist[k].squelch.signal_level());
 			}
 		}
 	}

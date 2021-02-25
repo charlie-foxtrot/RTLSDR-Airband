@@ -10,18 +10,21 @@
 
 using namespace std;
 
-Squelch::Squelch(int manual) :
-	manual_(manual)
+Squelch::Squelch(void)
 {
+	set_squelch_db(9.54f);
+	set_squelch_flappy_db(8.46f);
+
 	noise_floor_ = 100.0f;
 	pre_filter_avg_ = 0.5f;
 	post_filter_avg_ = 0.5f;
+	squelch_level_ = 0.0f;
 
 	using_post_filter_ = false;
 
 	open_delay_ = 197;
 	close_delay_ = 197;
-	low_power_abort_ = 88;
+	low_signal_abort_ = 88;
 	pre_vs_post_factor_ = 0.9f;
 
 	next_state_ = CLOSED;
@@ -31,7 +34,7 @@ Squelch::Squelch(int manual) :
 	open_count_ = 0;
 	sample_count_ = 0;
 	flappy_count_ = 0;
-	low_power_count_ = 0;
+	low_signal_count_ = 0;
 
 	recent_sample_size_ = 1000;
 	flap_opens_threshold_ = 3;
@@ -51,7 +54,26 @@ Squelch::Squelch(int manual) :
 
 	assert(open_delay_ > buffer_size_);
 
-	debug_print("Created Squelch, open_delay_: %d, close_delay_: %d, low_power_abort: %d, manual: %d\n", open_delay_, close_delay_, low_power_abort_, manual_);
+	debug_print("Created Squelch, open_delay_: %d, close_delay_: %d, low_signal_abort: %d, manual: %f\n", open_delay_, close_delay_, low_signal_abort_, manual_signal_level_);
+}
+
+void Squelch::set_squelch_value(const int manual) {
+	if (manual >= 0) {
+		using_manual_level_ = true;
+		manual_signal_level_ = manual;
+	} else {
+		using_manual_level_ = false;
+	}
+}
+
+void Squelch::set_squelch_db(const float &db) {
+	using_manual_level_ = false;
+	normal_signal_ratio_ = pow(10.0, db/20.0);
+}
+
+void Squelch::set_squelch_flappy_db(const float &db) {
+	using_manual_level_ = false;
+	flappy_signal_ratio_ = pow(10.0, db/20.0);
 }
 
 bool Squelch::is_open(void) const {
@@ -59,7 +81,7 @@ bool Squelch::is_open(void) const {
 }
 
 bool Squelch::should_filter_sample(void) const {
-	return (current_state_ != CLOSED && current_state_ != LOW_POWER_ABORT);
+	return (current_state_ != CLOSED && current_state_ != LOW_SIGNAL_ABORT);
 }
 
 bool Squelch::first_open_sample(void) const {
@@ -68,18 +90,22 @@ bool Squelch::first_open_sample(void) const {
 
 bool Squelch::last_open_sample(void) const {
 	return (current_state_ == CLOSING && next_state_ == CLOSED) ||
-		   (current_state_ != LOW_POWER_ABORT && next_state_ == LOW_POWER_ABORT);
+		   (current_state_ != LOW_SIGNAL_ABORT && next_state_ == LOW_SIGNAL_ABORT);
 }
 
 const float & Squelch::noise_floor(void) const {
 	return noise_floor_;
 }
 
-const float & Squelch::power_level(void) const {
+const float & Squelch::signal_level(void) const {
 	if (using_post_filter_) {
 		return post_filter_avg_;
 	}
 	return pre_filter_avg_;
+}
+
+float Squelch::current_snr(void) {
+	return 20.0 * log10(double(signal_level()) / noise_floor_);
 }
 
 const size_t & Squelch::open_count(void) const {
@@ -90,37 +116,39 @@ const size_t & Squelch::flappy_count(void) const {
 	return flappy_count_;
 }
 
-float Squelch::squelch_level(void) const {
-	if (is_manual()) {
-		return manual_;
+const float & Squelch::squelch_level(void) {
+	if (using_manual_level_) {
+		return manual_signal_level_;
 	}
-	if (currently_flapping()) {
-		return 2.65f * noise_floor();
+
+	if (squelch_level_ == 0.0f) {
+		if (currently_flapping() && flappy_signal_ratio_ < normal_signal_ratio_) {
+			squelch_level_ = flappy_signal_ratio_ * noise_floor_;
+		} else {
+			squelch_level_ = normal_signal_ratio_ * noise_floor_;
+		}
 	}
-	return 3.0f * noise_floor();
+	return squelch_level_;
 }
 
-bool Squelch::is_manual(void) const {
-	return manual_ >= 0;
-}
-
-void Squelch::update_average_power(float &avg, const float &sample) {
+void Squelch::update_signal_avg(float &avg, const float &sample) {
 	static const float decay_factor = 0.99f;
 	static const float new_factor = 1.0 - decay_factor;
 
-	avg = avg * decay_factor + sample * new_factor;
-
-	// Cap average power at 4.5 times the noise floor - this lets the average drop
-	// below squelch sooner once the signal goes away
-	static const float max_power_factor = 4.5;
-	avg = min(avg, noise_floor() * max_power_factor);
+	// Cap average level, this lets the average drop after the signal goes away more quickly
+	// (if current value and update are both at/above the max then can avoid the float multiplications)
+	if (avg >= signal_avg_max_ && sample >= signal_avg_max_) {
+		avg = signal_avg_max_;
+	} else {
+		avg = min(signal_avg_max_, avg * decay_factor + sample * new_factor);
+	}
 }
 
 bool Squelch::currently_flapping(void) const {
 	return recent_open_count_ >= flap_opens_threshold_;
 }
 
-bool Squelch::has_power(void) const {
+bool Squelch::has_signal(void) {
 	if (using_post_filter_) {
 		return pre_filter_avg_ >= squelch_level() && post_filter_avg_ >= buffer_[buffer_tail_];
 	}
@@ -149,35 +177,41 @@ void Squelch::process_raw_sample(const float &sample) {
 		static const float decay_factor = 0.97f;
 		static const float new_factor = 1.0 - decay_factor;
 		noise_floor_ = noise_floor_ * decay_factor + std::min(pre_filter_avg_, noise_floor_) * new_factor + 0.0001f;
+
+		// Force squelch_level_ recalculation at next call to squelch_level()
+		squelch_level_ = 0.0f;
+
+		// set max value for pre_filter_avg_ and post_filter_avg_ to be 1.5 times the normal squelch
+		signal_avg_max_ = 1.5f * normal_signal_ratio_ * noise_floor_;
 	}
 
-	update_average_power(pre_filter_avg_, sample);
+	update_signal_avg(pre_filter_avg_, sample);
 
-	// Apply the comparison factor before adding the pre_filter_avg_ power to the buffer to
-	// later be used as the threshold for the post_filter_avg_
+	// Apply the comparison factor before adding  pre_filter_avg_ to the buffer to later be used
+	// as the threshold for the post_filter_avg_
 	buffer_[buffer_head_] = pre_filter_avg_ * pre_vs_post_factor_;
 
-	// Check power against thresholds
-	if (current_state_ == OPEN && !has_power()) {
-		debug_print("Closing at %zu: no power after timeout (%f, %f, %f)\n", sample_count_, pre_filter_avg_, post_filter_avg_, squelch_level());
+	// Check signal against thresholds
+	if (current_state_ == OPEN && !has_signal()) {
+		debug_print("Closing at %zu: no signal after timeout (%f, %f, %f)\n", sample_count_, pre_filter_avg_, post_filter_avg_, squelch_level());
 		set_state(CLOSING);
 	}
 
-	if (current_state_ == CLOSED && has_power()) {
-		debug_print("Opening at %zu: power (%f, %f, %f)\n", sample_count_, pre_filter_avg_, post_filter_avg_, squelch_level());
+	if (current_state_ == CLOSED && has_signal()) {
+		debug_print("Opening at %zu: signal (%f, %f, %f)\n", sample_count_, pre_filter_avg_, post_filter_avg_, squelch_level());
 		set_state(OPENING);
 	}
 
 	// Override squelch and close if there are repeated samples under the squelch level
-	// NOTE: this can cause squelch to close, but it may immediately be re-opened if the power level still hasn't fallen after the delays
-	if (current_state_ != CLOSED && current_state_ != LOW_POWER_ABORT) {
+	// NOTE: this can cause squelch to close, but it may immediately be re-opened if the signal level still hasn't fallen after the delays
+	if (current_state_ != CLOSED && current_state_ != LOW_SIGNAL_ABORT) {
 		if (sample >= squelch_level()) {
-			low_power_count_ = 0;
+			low_signal_count_ = 0;
 		} else {
-			low_power_count_++;
-			if (low_power_count_ >= low_power_abort_) {
-				debug_print("Low power abort at %zu: low power count %d\n", sample_count_, low_power_count_);
-				set_state(LOW_POWER_ABORT);
+			low_signal_count_++;
+			if (low_signal_count_ >= low_signal_abort_) {
+				debug_print("Low signal abort at %zu: low signal count %d\n", sample_count_, low_signal_count_);
+				set_state(LOW_SIGNAL_ABORT);
 			}
 		}
 	}
@@ -192,7 +226,7 @@ void Squelch::process_filtered_sample(const float &sample) {
 		return;
 	}
 
-	// While OPENING, need to wait until the pre-filter power gets through the buffer
+	// While OPENING, need to wait until the pre-filter value gets through the buffer
 	if (current_state_ == OPENING && delay_ < buffer_size_) {
 		return;
 	}
@@ -203,11 +237,11 @@ void Squelch::process_filtered_sample(const float &sample) {
 	}
 
 	using_post_filter_ = true;
-	update_average_power(post_filter_avg_, sample);
+	update_signal_avg(post_filter_avg_, sample);
 
 	// Always comparing the post-filter average to the buffered pre-filtered value
 	if (post_filter_avg_ < buffer_[buffer_tail_]) {
-		debug_print("Closing at %zu: power post filter (%f < %f)\n", sample_count_, post_filter_avg_, squelch_level());
+		debug_print("Closing at %zu: signal level post filter (%f < %f)\n", sample_count_, post_filter_avg_, squelch_level());
 		set_state(CLOSED);
 	}
 }
@@ -227,14 +261,14 @@ void Squelch::set_state(State update) {
 	//  - CLOSING -> CLOSED
 	//  - CLOSING -> OPENING
 	//  - CLOSING -> CLOSING
-	//  - CLOSING -> LOW_POWER_ABORT
+	//  - CLOSING -> LOW_SIGNAL_ABORT
 	//  - CLOSING -> OPEN
 	//    ---------------------------
-	//  - LOW_POWER_ABORT -> CLOSED
-	//  - LOW_POWER_ABORT -> LOW_POWER_ABORT
+	//  - LOW_SIGNAL_ABORT -> CLOSED
+	//  - LOW_SIGNAL_ABORT -> LOW_SIGNAL_ABORT
 	//    ---------------------------
 	//  - OPEN -> CLOSING
-	//  - OPEN -> LOW_POWER_ABORT
+	//  - OPEN -> LOW_SIGNAL_ABORT
 	//  - OPEN -> OPEN
 
 
@@ -245,8 +279,8 @@ void Squelch::set_state(State update) {
 		update = CLOSED;
 	}
 
-	//  CLOSED -> LOW_POWER_ABORT (if already CLOSED cant go backwards)
-	else if (current_state_ == CLOSED && update == LOW_POWER_ABORT) {
+	//  CLOSED -> LOW_SIGNAL_ABORT (if already CLOSED cant go backwards)
+	else if (current_state_ == CLOSED && update == LOW_SIGNAL_ABORT) {
 		update = CLOSED;
 	}
 
@@ -255,15 +289,15 @@ void Squelch::set_state(State update) {
 		update = OPENING;
 	}
 
-	//  OPENING -> LOW_POWER_ABORT (just go to CLOSED instead)
-	else if (current_state_ == OPENING && update == LOW_POWER_ABORT) {
+	//  OPENING -> LOW_SIGNAL_ABORT (just go to CLOSED instead)
+	else if (current_state_ == OPENING && update == LOW_SIGNAL_ABORT) {
 		update = CLOSED;
 	}
 
-	//  LOW_POWER_ABORT -> OPENING (LOW_POWER_ABORT can only go to CLOSED)
-	//  LOW_POWER_ABORT -> OPEN (LOW_POWER_ABORT can only go to CLOSED)
-	//  LOW_POWER_ABORT -> CLOSING (LOW_POWER_ABORT can only go to CLOSED)
-	else if (current_state_ == LOW_POWER_ABORT && update != LOW_POWER_ABORT && update != CLOSED) {
+	//  LOW_SIGNAL_ABORT -> OPENING (LOW_SIGNAL_ABORT can only go to CLOSED)
+	//  LOW_SIGNAL_ABORT -> OPEN (LOW_SIGNAL_ABORT can only go to CLOSED)
+	//  LOW_SIGNAL_ABORT -> CLOSING (LOW_SIGNAL_ABORT can only go to CLOSED)
+	else if (current_state_ == LOW_SIGNAL_ABORT && update != LOW_SIGNAL_ABORT && update != CLOSED) {
 		update = CLOSED;
 	}
 
@@ -285,7 +319,7 @@ void Squelch::update_current_state(void) {
 		if (current_state_ != OPENING) {
 			debug_print("%zu: transitioning to OPENING\n", sample_count_);
 			delay_ = 0;
-			low_power_count_ = 0;
+			low_signal_count_ = 0;
 			using_post_filter_ = false;
 			current_state_ = next_state_;
 		} else {
@@ -293,7 +327,7 @@ void Squelch::update_current_state(void) {
 			delay_++;
 			if (delay_ >= open_delay_) {
 				// After getting through OPENING delay, count this as an "open" for flap
-				// detection even if power has gone.  NOTE - if process_filtered_sample() would
+				// detection even if signal has gone.  NOTE - if process_filtered_sample() would
 				// have already sent state to CLOSED before the delay if post_filter_avg_ was
 				// too low, so that wont count towards flapping
 				if (closed_sample_count_ < recent_sample_size_) {
@@ -301,13 +335,16 @@ void Squelch::update_current_state(void) {
 					if (currently_flapping()) {
 						flappy_count_++;
 					}
+
+					// Force squelch_level_ recalculation at next call to squelch_level()
+					squelch_level_ = 0.0f;
 				}
 
-				// Check power after delay to either go to OPEN or CLOSED
-				if(has_power()) {
+				// Check signal level after delay to either go to OPEN or CLOSED
+				if(has_signal()) {
 					next_state_ = OPEN;
 				} else {
-					debug_print("%zu: no power after OPENING delay, going to CLOSED\n", sample_count_);
+					debug_print("%zu: no signal after OPENING delay, going to CLOSED\n", sample_count_);
 					next_state_ = CLOSED;
 				}
 			}
@@ -321,25 +358,25 @@ void Squelch::update_current_state(void) {
 			// in CLOSING delay
 			delay_++;
 			if (delay_ >= close_delay_) {
-				if (!has_power()) {
+				if (!has_signal()) {
 					next_state_ = CLOSED;
 				} else {
-					debug_print("%zu: power after CLOSING delay, reverting to OPEN\n", sample_count_);
+					debug_print("%zu: signal after CLOSING delay, reverting to OPEN\n", sample_count_);
 					current_state_ = OPEN; // set current_state_ to avoid incrementing open_count_
 					next_state_ = OPEN;
 				}
 			}
 		}
-	} else if (next_state_ == LOW_POWER_ABORT) {
-		if (current_state_ != LOW_POWER_ABORT) {
-			debug_print("%zu: transitioning to LOW_POWER_ABORT\n", sample_count_);
+	} else if (next_state_ == LOW_SIGNAL_ABORT) {
+		if (current_state_ != LOW_SIGNAL_ABORT) {
+			debug_print("%zu: transitioning to LOW_SIGNAL_ABORT\n", sample_count_);
 			// If coming from CLOSING then keep the delay counter that has already started
 			if(current_state_ != CLOSING) {
 				delay_ = 0;
 			}
 			current_state_ = next_state_;
 		} else {
-			// in LOW_POWER_ABORT delay
+			// in LOW_SIGNAL_ABORT delay
 			delay_++;
 			if (delay_ >= close_delay_) {
 				next_state_ = CLOSED;
@@ -360,6 +397,7 @@ void Squelch::update_current_state(void) {
 			closed_sample_count_++;
 		} else if (closed_sample_count_ == recent_sample_size_) {
 			recent_open_count_ = 0;
+			squelch_level_ = 0.0f; // Force squelch_level_ recalculation
 		}
 	} else {
 		current_state_ = next_state_;
@@ -386,7 +424,7 @@ void Squelch::update_current_state(void) {
 	 - (int16_t) post_filter_avg_
 	 - (int) current_state_
 	 - (int) delay_
-	 - (int) low_power_count_
+	 - (int) low_signalcount_
 
   The output file can be read / plotted in python as follows:
 
@@ -401,7 +439,7 @@ void Squelch::update_current_state(void) {
 					   ('post_filter_avg', np.single),
 					   ('current_state', np.intc),
 					   ('delay', np.intc),
-					   ('low_power_count', np.intc)
+					   ('low_signalcount', np.intc)
 					  ])
 
 		dat = np.fromfile(filepath, dtype=dt)
@@ -422,7 +460,7 @@ void Squelch::update_current_state(void) {
 		axis = plt.subplot2grid((3, 1), (1, 0))
 		axis.plot(dat['delay'], 'm')
 		axis = plt.subplot2grid((3, 1), (2, 0))
-		axis.plot(dat['low_power_count'], 'y')
+		axis.plot(dat['low_signalcount'], 'y')
 		plt.show(block=False)
 
 		return
@@ -474,7 +512,7 @@ void Squelch::debug_state(void) {
 	debug_value(post_filter_avg_);
 	debug_value((int)current_state_);
 	debug_value(delay_);
-	debug_value(low_power_count_);
+	debug_value(low_signal_count_);
 }
 
 #endif // DEBUG_SQUELCH

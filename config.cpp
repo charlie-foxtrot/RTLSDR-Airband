@@ -326,7 +326,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			if(libconfig::Setting::TypeList == chans[j]["squelch"].getType()) {
 				// New-style array of per-frequency squelch settings
 				for(int f = 0; f<channel->freq_count; f++) {
-					channel->freqlist[f].squelch = Squelch((int)chans[j]["squelch"][f]);
+					channel->freqlist[f].squelch.set_squelch_value((int)chans[j]["squelch"][f]);
 				}
 				// NB: no value check; -1 allows auto-squelch for
 				//     some frequencies and not others.
@@ -338,10 +338,42 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 					error();
 				}
 				for(int f = 0; f<channel->freq_count; f++) {
-					channel->freqlist[f].squelch = Squelch(sqlevel);
+					channel->freqlist[f].squelch.set_squelch_value(sqlevel);
 				}
 			} else {
 				cerr<<"Invalid value for squelch (should be int or list - use parentheses)\n";
+				error();
+			}
+		}
+		if(chans[j].exists("squelch_db")) {
+			if(libconfig::Setting::TypeList == chans[j]["squelch_db"].getType()) {
+				// New-style array of per-frequency squelch settings
+				for(int f = 0; f<channel->freq_count; f++) {
+					channel->freqlist[f].squelch.set_squelch_db((float)chans[j]["squelch_db"][f]);
+				}
+			} else if(libconfig::Setting::TypeFloat == chans[j]["squelch_db"].getType()) {
+				// Legacy (single squelch for all frequencies)
+				for(int f = 0; f<channel->freq_count; f++) {
+					channel->freqlist[f].squelch.set_squelch_db((float)chans[j]["squelch_db"]);
+				}
+			} else {
+				cerr << "Invalid value for squelch_db (should be float or list - use parentheses)\n";
+				error();
+			}
+		}
+		if(chans[j].exists("squelch_flappy_db")) {
+			if(libconfig::Setting::TypeList == chans[j]["squelch_flappy_db"].getType()) {
+				// New-style array of per-frequency squelch settings
+				for(int f = 0; f<channel->freq_count; f++) {
+					channel->freqlist[f].squelch.set_squelch_flappy_db((float)chans[j]["squelch_flappy_db"][f]);
+				}
+			} else if(libconfig::Setting::TypeFloat == chans[j]["squelch_flappy_db"].getType()) {
+				// Legacy (single squelch for all frequencies)
+				for(int f = 0; f<channel->freq_count; f++) {
+					channel->freqlist[f].squelch.set_squelch_flappy_db((float)chans[j]["squelch_flappy_db"]);
+				}
+			} else {
+				cerr << "Invalid value for squelch_flappy_db (should be float or list - use parentheses)\n";
 				error();
 			}
 		}

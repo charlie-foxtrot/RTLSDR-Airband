@@ -11,30 +11,30 @@
  Theory of operation:
 
  Squelch has 5 states, OPEN (has audio), CLOSED (no audio), OPENING (transitioning from CLOSED to OPEN),
- CLOSING (transitioning from OPEN to CLOSED), and LOW_POWER_ABORT (same as CLOSING but because of a constant
- power drop).
+ CLOSING (transitioning from OPEN to CLOSED), and LOW_SIGNAL_ABORT (same as CLOSING but because of a constant
+ signal drop).
 
  Squelch is considered "open" when the state is OPEN or CLOSING and squelch is considered "closed" when the
- state is OPENING, LOW_POWER_ABORT, or CLOSED.
+ state is OPENING, LOW_SIGNAL_ABORT, or CLOSED.
 
  Noise floor is computed using a low pass filter and updated with the current sample or prior value, whatever
  is lower.  Noise floor is updated every 16 stamples, except when squelch is open.
 
- Low pass filters are also used to track the current power levels.  One power level is for the sample before
- filtering, the second for post signal filtering (if any).  The pre-filter power level is updated for every
- sample.  The post-filter power level is optional.  When used, the post-filter power level is compared to a
+ Low pass filters are also used to track the current signal levels.  One level is for the sample before
+ filtering, the second for post signal filtering (if any).  The pre-filter signal level is updated for every
+ sample.  The post-filter level is optional.  When used, the post-filter signal level is compared to a
  delayed pre-filter value.  The post-filter is set to a fraction of the pre-filtered value each time state
  transitions to OPENING, and is not updated while state is CLOSED.
 
  Squelch level can be set manually or is computed as a function of the noise floor.
 
- When the power level exceeds the squelch level, the state transitions to OPENING and a delay counter starts,
- then once the counter is over the state moves to OPEN if there is power, otherwise back to CLOSED. The same
- (but opposite) happens when the power level drops below the squelch level.
+ When the signal level exceeds the squelch level, the state transitions to OPENING and a delay counter starts,
+ then once the counter is over the state moves to OPEN if there is signal, otherwise back to CLOSED. The same
+ (but opposite) happens when the signal level drops below the squelch level.
 
  While the squelch is OPEN, a count of continuous samples that are below the squelch level is maintained.  If
- this count exceeds a threshold then the state moves to LOW_POWER_ABORT.  This allows the squelch to close
- after a sharp drop off in power before the power level has caught up.
+ this count exceeds a threshold then the state moves to LOW_SIGNAL_ABORT.  This allows the squelch to close
+ after a sharp drop off in signal before the signal level has caught up.
 
  A count of "recent opens" is maintained as a way to detect squelch flapping (ie rapidly opening and closing).
  When flapping is detected the squelch level is decreased in an attempt to keep squelch open longer.
@@ -42,7 +42,11 @@
 
 class Squelch {
 public:
-	Squelch(int manual = -1);
+	Squelch();
+
+	void set_squelch_value(const int manual);
+	void set_squelch_db(const float &db);
+	void set_squelch_flappy_db(const float &db);
 
 	void process_raw_sample(const float &sample);
 	void process_filtered_sample(const float &sample);
@@ -54,10 +58,12 @@ public:
 	bool last_open_sample(void) const;
 
 	const float & noise_floor(void) const;
-	const float & power_level(void) const;
+	const float & signal_level(void) const;
+	float current_snr(void);
+	
 	const size_t & open_count(void) const;
 	const size_t & flappy_count(void) const;
-	float squelch_level(void) const;
+	const float & squelch_level(void);
 
 #ifdef DEBUG_SQUELCH
 	~Squelch(void);
@@ -69,21 +75,26 @@ private:
 		CLOSED,				// Audio is suppressed
 		OPENING,			// Transitioning closed -> open
 		CLOSING,			// Transitioning open -> closed
-		LOW_POWER_ABORT,	// Like CLOSING but is_open() is false
+		LOW_SIGNAL_ABORT,	// Like CLOSING but is_open() is false
 		OPEN				// Audio not suppressed
 	};
 
-	int manual_;				// manually configured squelch level, < 0 for disabled
+	bool using_manual_level_;	// if using a manually set signal level threshold
+	float manual_signal_level_;	// manually configured squelch level, < 0 for disabled
+	float normal_signal_ratio_;	// signal-to-noise ratio for normal squelch - ratio, not in dB
+	float flappy_signal_ratio_;	// signal-to-noise ratio for flappy squelch - ratio, not in dB
 
 	float noise_floor_;			// noise level
-	float pre_filter_avg_;		// average power for reference sample
-	float post_filter_avg_;		// average power for post-filter sample
+	float pre_filter_avg_;		// average signal level for reference sample
+	float post_filter_avg_;		// average signal level for post-filter sample
+	float signal_avg_max_;		// the max for pre_filter_avg_ and post_filter_avg_ - updated with noise_floor_
+	float squelch_level_;		// cached calculation of the squelch_level() value
 
 	bool using_post_filter_;	// if the caller is providing filtered samples
 
-	int open_delay_;			// how long to wait after power crosses squelch to open
-	int close_delay_;			// how long to wait after power crosses squelch to close
-	int low_power_abort_;		// number of repeated samples below squelch to cause a close
+	int open_delay_;			// how long to wait after signal level crosses squelch to open
+	int close_delay_;			// how long to wait after signal level crosses squelch to close
+	int low_signal_abort_;		// number of repeated samples below squelch to cause a close
 	float pre_vs_post_factor_;	// multiplier when doing pre vs post filter compaison
 
 	State next_state_;
@@ -93,7 +104,7 @@ private:
 	size_t open_count_;		// number of times squelch is opened
 	size_t sample_count_;	// number of samples processed (for logging)
 	size_t flappy_count_;	// number of times squelch was detected as flapping OPEN/CLOSED
-	int low_power_count_;	// number of repeated samples below squelch
+	int low_signal_count_;	// number of repeated samples below squelch
 
 	// Flap detection parameters
 	size_t recent_sample_size_;		// number of samples defined as "recent"
@@ -109,9 +120,8 @@ private:
 
 	void set_state(State update);
 	void update_current_state(void);
-	bool has_power(void) const;
-	bool is_manual(void) const;
-	void update_average_power(float &avg, const float &sample);
+	bool has_signal(void);
+	void update_signal_avg(float &avg, const float &sample);
 	bool currently_flapping(void) const;
 
 #ifdef DEBUG_SQUELCH

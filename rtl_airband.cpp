@@ -651,17 +651,14 @@ void *demodulate(void *params) {
 					if(dev->mode == R_SCAN) {
 						GOTOXY(0, device_num * 17 + dev->row + 3);
 						// TODO: change to dB
-						printf("%4.0f/%3.0f%c %7.3f ",
-							fparms->squelch.power_level(),
-							fparms->squelch.squelch_level(),
+						printf("%8.3f%c %7.3f ",
+							fparms->squelch.current_snr(),
 							channel->axcindicate,
 							(dev->channels[0].freqlist[channel->freq_idx].frequency / 1000000.0));
 					} else {
 						GOTOXY(i*10, device_num * 17 + dev->row + 3);
-						// TODO: change to dB
-						printf("%4.0f/%3.0f%c ",
-							fparms->squelch.power_level(),
-							fparms->squelch.squelch_level(),
+						printf("%8.3f%c ",
+							fparms->squelch.current_snr(),
 							channel->axcindicate);
 					}
 					fflush(stdout);

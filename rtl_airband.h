@@ -248,7 +248,6 @@ struct freq_t {
 };
 struct channel_t {
 	float wavein[WAVE_LEN];		// FFT output waveform
-	float waveref[WAVE_LEN];	// for power level calculation
 	float waveout[WAVE_LEN];	// waveform after squelch + AGC (left/center channel mixer output)
 	float waveout_r[WAVE_LEN];	// right channel mixer output
 	float iq_in[2*WAVE_LEN];	// raw input samples for I/Q outputs and NFM demod

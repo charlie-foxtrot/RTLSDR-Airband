@@ -385,6 +385,8 @@ extern FILE *debugf;
 	do { if (DEBUG) fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); } while (0)
 #define XCALLOC(nmemb, size) xcalloc((nmemb), (size), __FILE__, __LINE__, __func__)
 #define XREALLOC(ptr, size) xrealloc((ptr), (size), __FILE__, __LINE__, __func__)
+float dBFS_to_level(const float &dBFS);
+float level_to_dBFS(const float &level);
 
 // mixer.cpp
 mixer_t *getmixerbyname(const char *name);

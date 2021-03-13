@@ -349,10 +349,10 @@ void *demodulate(void *params) {
 	float *levels_ptr = NULL;
 
 	for (int i=0; i<256; i++) {
-		levels_u8[i] = i-127.5f;
+		levels_u8[i] = (i-127.5f)/127.5f;
 	}
 	for (int16_t i=-127; i<128; i++) {
-		levels_s8[(uint8_t)i] = i;
+		levels_s8[(uint8_t)i] = i/128.0f;
 	}
 
 	// initialize fft window
@@ -650,18 +650,16 @@ void *demodulate(void *params) {
 				if (tui) {
 					if(dev->mode == R_SCAN) {
 						GOTOXY(0, device_num * 17 + dev->row + 3);
-						// TODO: change to dB
 						printf("%4.0f/%3.0f%c %7.3f ",
-							fparms->squelch.signal_level(),
-							fparms->squelch.squelch_level(),
+							level_to_dBFS(fparms->squelch.signal_level()),
+							level_to_dBFS(fparms->squelch.noise_level()),
 							channel->axcindicate,
 							(dev->channels[0].freqlist[channel->freq_idx].frequency / 1000000.0));
 					} else {
 						GOTOXY(i*10, device_num * 17 + dev->row + 3);
-						// TODO: change to dB
 						printf("%4.0f/%3.0f%c ",
-							fparms->squelch.signal_level(),
-							fparms->squelch.squelch_level(),
+							level_to_dBFS(fparms->squelch.signal_level()),
+							level_to_dBFS(fparms->squelch.noise_level()),
 							channel->axcindicate);
 					}
 					fflush(stdout);

@@ -12,20 +12,21 @@ using namespace std;
 
 Squelch::Squelch(void)
 {
-	set_squelch_db(9.54f);
-	set_squelch_flappy_db(8.46f);
+	set_squelch_snr_threshold(9.54f);
+
+	pre_filter_ = {0.5f, 0.5f};
+	post_filter_ = {0.5f, 0.5f};
+	moving_avg_cap_ = 450.0f;
 
 	noise_floor_ = 100.0f;
-	pre_filter_avg_ = 0.5f;
-	post_filter_avg_ = 0.5f;
 	squelch_level_ = 0.0f;
 
 	using_post_filter_ = false;
+	pre_vs_post_factor_ = 0.9f;
 
 	open_delay_ = 197;
 	close_delay_ = 197;
 	low_signal_abort_ = 88;
-	pre_vs_post_factor_ = 0.9f;
 
 	next_state_ = CLOSED;
 	current_state_ = CLOSED;
@@ -57,23 +58,19 @@ Squelch::Squelch(void)
 	debug_print("Created Squelch, open_delay_: %d, close_delay_: %d, low_signal_abort: %d, manual: %f\n", open_delay_, close_delay_, low_signal_abort_, manual_signal_level_);
 }
 
-void Squelch::set_squelch_value(const int manual) {
-	if (manual >= 0) {
+void Squelch::set_squelch_level_threshold(const float &level) {
+	if (level > 0) {
 		using_manual_level_ = true;
-		manual_signal_level_ = manual;
+		manual_signal_level_ = level;
 	} else {
 		using_manual_level_ = false;
 	}
 }
 
-void Squelch::set_squelch_db(const float &db) {
+void Squelch::set_squelch_snr_threshold(const float &db) {
 	using_manual_level_ = false;
 	normal_signal_ratio_ = pow(10.0, db/20.0);
-}
-
-void Squelch::set_squelch_flappy_db(const float &db) {
-	using_manual_level_ = false;
-	flappy_signal_ratio_ = pow(10.0, db/20.0);
+	flappy_signal_ratio_ = normal_signal_ratio_ * 0.9f;
 }
 
 bool Squelch::is_open(void) const {
@@ -93,19 +90,15 @@ bool Squelch::last_open_sample(void) const {
 		   (current_state_ != LOW_SIGNAL_ABORT && next_state_ == LOW_SIGNAL_ABORT);
 }
 
-const float & Squelch::noise_floor(void) const {
+const float & Squelch::noise_level(void) const {
 	return noise_floor_;
 }
 
 const float & Squelch::signal_level(void) const {
 	if (using_post_filter_) {
-		return post_filter_avg_;
+		return post_filter_.full_;
 	}
-	return pre_filter_avg_;
-}
-
-float Squelch::current_snr(void) {
-	return 20.0 * log10(double(signal_level()) / noise_floor_);
+	return pre_filter_.full_;
 }
 
 const size_t & Squelch::open_count(void) const {
@@ -131,30 +124,6 @@ const float & Squelch::squelch_level(void) {
 	return squelch_level_;
 }
 
-void Squelch::update_signal_avg(float &avg, const float &sample) {
-	static const float decay_factor = 0.99f;
-	static const float new_factor = 1.0 - decay_factor;
-
-	// Cap average level, this lets the average drop after the signal goes away more quickly
-	// (if current value and update are both at/above the max then can avoid the float multiplications)
-	if (avg >= signal_avg_max_ && sample >= signal_avg_max_) {
-		avg = signal_avg_max_;
-	} else {
-		avg = min(signal_avg_max_, avg * decay_factor + sample * new_factor);
-	}
-}
-
-bool Squelch::currently_flapping(void) const {
-	return recent_open_count_ >= flap_opens_threshold_;
-}
-
-bool Squelch::has_signal(void) {
-	if (using_post_filter_) {
-		return pre_filter_avg_ >= squelch_level() && post_filter_avg_ >= buffer_[buffer_tail_];
-	}
-	return pre_filter_avg_ >= squelch_level();
-}
-
 void Squelch::process_raw_sample(const float &sample) {
 
 	// Update current state based on previous state from last iteration
@@ -176,29 +145,29 @@ void Squelch::process_raw_sample(const float &sample) {
 	if (sample_count_ % 16 == 0 && !is_open()) {
 		static const float decay_factor = 0.97f;
 		static const float new_factor = 1.0 - decay_factor;
-		noise_floor_ = noise_floor_ * decay_factor + std::min(pre_filter_avg_, noise_floor_) * new_factor + 0.0001f;
+		noise_floor_ = noise_floor_ * decay_factor + std::min(pre_filter_.capped_, noise_floor_) * new_factor + 0.0001f;
 
 		// Force squelch_level_ recalculation at next call to squelch_level()
 		squelch_level_ = 0.0f;
 
-		// set max value for pre_filter_avg_ and post_filter_avg_ to be 1.5 times the normal squelch
-		signal_avg_max_ = 1.5f * normal_signal_ratio_ * noise_floor_;
+		// set max value for moving averages to be 1.5 times the normal squelch
+		moving_avg_cap_ = 1.5f * normal_signal_ratio_ * noise_floor_;
 	}
 
-	update_signal_avg(pre_filter_avg_, sample);
+	update_avg(pre_filter_, sample);
 
-	// Apply the comparison factor before adding  pre_filter_avg_ to the buffer to later be used
-	// as the threshold for the post_filter_avg_
-	buffer_[buffer_head_] = pre_filter_avg_ * pre_vs_post_factor_;
+	// Apply the comparison factor before adding to the buffer, will later be used as the threshold
+	// for the post_filter_
+	buffer_[buffer_head_] = pre_filter_.capped_ * pre_vs_post_factor_;
 
 	// Check signal against thresholds
 	if (current_state_ == OPEN && !has_signal()) {
-		debug_print("Closing at %zu: no signal after timeout (%f, %f, %f)\n", sample_count_, pre_filter_avg_, post_filter_avg_, squelch_level());
+		debug_print("Closing at %zu: no signal after timeout (%f, %f, %f)\n", sample_count_, pre_filter_.capped_, post_filter_.capped_, squelch_level());
 		set_state(CLOSING);
 	}
 
 	if (current_state_ == CLOSED && has_signal()) {
-		debug_print("Opening at %zu: signal (%f, %f, %f)\n", sample_count_, pre_filter_avg_, post_filter_avg_, squelch_level());
+		debug_print("Opening at %zu: signal (%f, %f, %f)\n", sample_count_, pre_filter_.capped_, post_filter_.capped_, squelch_level());
 		set_state(OPENING);
 	}
 
@@ -226,22 +195,24 @@ void Squelch::process_filtered_sample(const float &sample) {
 		return;
 	}
 
-	// While OPENING, need to wait until the pre-filter value gets through the buffer
-	if (current_state_ == OPENING && delay_ < buffer_size_) {
-		return;
-	}
 
-	// Buffer has been filled, initialize post_filter_avg_ with the pre-filter value
-	if (current_state_ == OPENING && delay_ == buffer_size_) {
-		post_filter_avg_ = buffer_[buffer_tail_];
+	if (current_state_ == OPENING) {
+		// While OPENING, need to wait until the pre-filter value gets through the buffer
+		if (delay_ < buffer_size_) {
+			return;
+		}
+		// Buffer has been filled, initialize post-filter with the pre-filter value
+		if (delay_ == buffer_size_) {
+			post_filter_ = {buffer_[buffer_tail_], buffer_[buffer_tail_]};
+		}
 	}
 
 	using_post_filter_ = true;
-	update_signal_avg(post_filter_avg_, sample);
+	update_avg(post_filter_, sample);
 
 	// Always comparing the post-filter average to the buffered pre-filtered value
-	if (post_filter_avg_ < buffer_[buffer_tail_]) {
-		debug_print("Closing at %zu: signal level post filter (%f < %f)\n", sample_count_, post_filter_avg_, squelch_level());
+	if (post_filter_.capped_ < buffer_[buffer_tail_]) {
+		debug_print("Closing at %zu: signal level post filter (%f < %f)\n", sample_count_, post_filter_.capped_, squelch_level());
 		set_state(CLOSED);
 	}
 }
@@ -328,7 +299,7 @@ void Squelch::update_current_state(void) {
 			if (delay_ >= open_delay_) {
 				// After getting through OPENING delay, count this as an "open" for flap
 				// detection even if signal has gone.  NOTE - if process_filtered_sample() would
-				// have already sent state to CLOSED before the delay if post_filter_avg_ was
+				// have already sent state to CLOSED before the delay if post_filter_.capped_ was
 				// too low, so that wont count towards flapping
 				if (closed_sample_count_ < recent_sample_size_) {
 					recent_open_count_++;
@@ -411,6 +382,31 @@ void Squelch::update_current_state(void) {
 #endif
 }
 
+bool Squelch::has_signal(void) {
+	if (using_post_filter_) {
+		return pre_filter_.capped_ >= squelch_level() && post_filter_.capped_ >= buffer_[buffer_tail_];
+	}
+	return pre_filter_.capped_ >= squelch_level();
+}
+
+void Squelch::update_avg(MovingAverage &avg, const float &sample) {
+	static const float decay_factor = 0.99f;
+	static const float new_factor = 1.0 - decay_factor;
+
+	avg.full_ = avg.full_ * decay_factor + sample * new_factor;
+
+	// Cap average level, this lets the average drop after the signal goes away more quickly
+	// (if current value and update are both at/above the max then can avoid the float multiplications)
+	if (avg.capped_ >= moving_avg_cap_ && sample >= moving_avg_cap_) {
+		avg.capped_ = moving_avg_cap_;
+	} else {
+		avg.capped_ = min(moving_avg_cap_, avg.capped_ * decay_factor + sample * new_factor);
+	}
+}
+
+bool Squelch::currently_flapping(void) const {
+	return recent_open_count_ >= flap_opens_threshold_;
+}
 
 #ifdef DEBUG_SQUELCH
 /*
@@ -420,8 +416,8 @@ void Squelch::update_current_state(void) {
  Values written to file are:
 	 - (int16_t) process_raw_sample input
 	 - (int16_t) noise_floor_
-	 - (int16_t) pre_filter_avg_
-	 - (int16_t) post_filter_avg_
+	 - (int16_t) pre_filter_.capped_
+	 - (int16_t) post_filter_.capped_
 	 - (int) current_state_
 	 - (int) delay_
 	 - (int) low_signalcount_
@@ -435,8 +431,8 @@ void Squelch::update_current_state(void) {
 
 		dt = np.dtype([('raw_input', np.single),
 					   ('noise_floor', np.single),
-					   ('pre_filter_avg', np.single),
-					   ('post_filter_avg', np.single),
+					   ('pre_filter_capped', np.single),
+					   ('post_filter_capped', np.single),
 					   ('current_state', np.intc),
 					   ('delay', np.intc),
 					   ('low_signalcount', np.intc)
@@ -446,12 +442,12 @@ void Squelch::update_current_state(void) {
 
 		plt.figure()
 		plt.plot(dat['raw_input'], 'b')
-		plt.plot(dat['pre_filter_avg'], 'g')
+		plt.plot(dat['pre_filter_capped'], 'g')
 		plt.plot(dat['noise_floor'], 'r')
 		plt.show(block=False)
 
 		plt.figure()
-		plt.plot(dat['post_filter_avg'], 'k')
+		plt.plot(dat['post_filter_capped'], 'k')
 		plt.show(block=False)
 
 		plt.figure()
@@ -508,8 +504,8 @@ void Squelch::debug_state(void) {
 	filtered_input_ = 0.0;
 
 	debug_value(noise_floor_);
-	debug_value(pre_filter_avg_);
-	debug_value(post_filter_avg_);
+	debug_value(pre_filter_.capped_);
+	debug_value(post_filter_.capped_);
 	debug_value((int)current_state_);
 	debug_value(delay_);
 	debug_value(low_signal_count_);

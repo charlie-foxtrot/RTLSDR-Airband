@@ -323,57 +323,71 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			dev->input->centerfreq = channel->freqlist[0].frequency + 20 * (double)(dev->input->sample_rate / fft_size);
 		}
 		if(chans[j].exists("squelch")) {
-			if(libconfig::Setting::TypeList == chans[j]["squelch"].getType()) {
+			cerr << "Warning: 'squelch' no longer supported and will be ignored, use 'squelch_level_threshold' or 'squelch_snr_threshold' instead\n";
+		}
+		if(chans[j].exists("squelch_threshold") && chans[j].exists("squelch_snr_threshold")) {
+			cerr << "Warning: Both 'squelch_threshold' and 'squelch_snr_threshold' are set and may conflict\n";
+		}
+		if(chans[j].exists("squelch_threshold")) {
+			// Value is dBFS, zero disables manual threshold (ie use auto squelch), negative is valid, positive is invalid
+			if(libconfig::Setting::TypeList == chans[j]["squelch_threshold"].getType()) {
 				// New-style array of per-frequency squelch settings
 				for(int f = 0; f<channel->freq_count; f++) {
-					channel->freqlist[f].squelch.set_squelch_value((int)chans[j]["squelch"][f]);
+					float threshold_dBFS = (float)chans[j]["squelch_threshold"][f];
+					if (threshold_dBFS > 0) {
+						cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch_threshold must be less than or equal to 0\n";
+						error();
+					} else if (threshold_dBFS == 0) {
+						channel->freqlist[f].squelch.set_squelch_level_threshold(0);
+					} else {
+						channel->freqlist[f].squelch.set_squelch_level_threshold(dBFS_to_level(threshold_dBFS));
+					}
 				}
-				// NB: no value check; -1 allows auto-squelch for
-				//     some frequencies and not others.
-			} else if(libconfig::Setting::TypeInt == chans[j]["squelch"].getType()) {
+			} else if(libconfig::Setting::TypeInt == chans[j]["squelch_threshold"].getType()) {
 				// Legacy (single squelch for all frequencies)
-				int sqlevel = (int)chans[j]["squelch"];
-				if(sqlevel < 0) {
-					cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch must be greater than 0\n";
+				float threshold_dBFS = (float)chans[j]["squelch_threshold"];
+				float level;
+				if (threshold_dBFS > 0) {
+					cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch_threshold must be less than or equal to 0\n";
+					error();
+				} else if (threshold_dBFS == 0) {
+					level = 0;
+				} else {
+					level = dBFS_to_level(threshold_dBFS);
+				}
+				for(int f = 0; f<channel->freq_count; f++) {
+					channel->freqlist[f].squelch.set_squelch_level_threshold(level);
+				}
+			} else {
+				cerr << "Invalid value for squelch_threshold (should be int or list - use parentheses)\n";
+				error();
+			}
+		}
+		if(chans[j].exists("squelch_snr_threshold")) {
+			// Value is SNR in dB, zero disables squelch (ie always open), positive is valid, negative is invalid
+			if(libconfig::Setting::TypeList == chans[j]["squelch_snr_threshold"].getType()) {
+				// New-style array of per-frequency squelch settings
+				for(int f = 0; f<channel->freq_count; f++) {
+					float snr = (float)chans[j]["squelch_snr_threshold"][f];
+					if (snr < 0) {
+						cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch_snr_threshold must be greater than or equal to 0\n";
+						error();
+					} else {
+						channel->freqlist[f].squelch.set_squelch_snr_threshold(snr);
+					}
+				}
+			} else if(libconfig::Setting::TypeFloat == chans[j]["squelch_snr_threshold"].getType()) {
+				// Legacy (single squelch for all frequencies)
+				float snr = (float)chans[j]["squelch_snr_threshold"];
+				if (snr < 0) {
+					cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch_snr_threshold must be greater than or equal to 0\n";
 					error();
 				}
 				for(int f = 0; f<channel->freq_count; f++) {
-					channel->freqlist[f].squelch.set_squelch_value(sqlevel);
+					channel->freqlist[f].squelch.set_squelch_snr_threshold(snr);
 				}
 			} else {
-				cerr<<"Invalid value for squelch (should be int or list - use parentheses)\n";
-				error();
-			}
-		}
-		if(chans[j].exists("squelch_db")) {
-			if(libconfig::Setting::TypeList == chans[j]["squelch_db"].getType()) {
-				// New-style array of per-frequency squelch settings
-				for(int f = 0; f<channel->freq_count; f++) {
-					channel->freqlist[f].squelch.set_squelch_db((float)chans[j]["squelch_db"][f]);
-				}
-			} else if(libconfig::Setting::TypeFloat == chans[j]["squelch_db"].getType()) {
-				// Legacy (single squelch for all frequencies)
-				for(int f = 0; f<channel->freq_count; f++) {
-					channel->freqlist[f].squelch.set_squelch_db((float)chans[j]["squelch_db"]);
-				}
-			} else {
-				cerr << "Invalid value for squelch_db (should be float or list - use parentheses)\n";
-				error();
-			}
-		}
-		if(chans[j].exists("squelch_flappy_db")) {
-			if(libconfig::Setting::TypeList == chans[j]["squelch_flappy_db"].getType()) {
-				// New-style array of per-frequency squelch settings
-				for(int f = 0; f<channel->freq_count; f++) {
-					channel->freqlist[f].squelch.set_squelch_flappy_db((float)chans[j]["squelch_flappy_db"][f]);
-				}
-			} else if(libconfig::Setting::TypeFloat == chans[j]["squelch_flappy_db"].getType()) {
-				// Legacy (single squelch for all frequencies)
-				for(int f = 0; f<channel->freq_count; f++) {
-					channel->freqlist[f].squelch.set_squelch_flappy_db((float)chans[j]["squelch_flappy_db"]);
-				}
-			} else {
-				cerr << "Invalid value for squelch_flappy_db (should be float or list - use parentheses)\n";
+				cerr << "Invalid value for squelch_snr_threshold (should be float or list - use parentheses)\n";
 				error();
 			}
 		}

@@ -323,7 +323,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			dev->input->centerfreq = channel->freqlist[0].frequency + 20 * (double)(dev->input->sample_rate / fft_size);
 		}
 		if(chans[j].exists("squelch")) {
-			cerr << "Warning: 'squelch' no longer supported and will be ignored, use 'squelch_level_threshold' or 'squelch_snr_threshold' instead\n";
+			cerr << "Warning: 'squelch' no longer supported and will be ignored, use 'squelch_threshold' or 'squelch_snr_threshold' instead\n";
 		}
 		if(chans[j].exists("squelch_threshold") && chans[j].exists("squelch_snr_threshold")) {
 			cerr << "Warning: Both 'squelch_threshold' and 'squelch_snr_threshold' are set and may conflict\n";

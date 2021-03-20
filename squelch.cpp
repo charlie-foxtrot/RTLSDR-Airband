@@ -12,7 +12,7 @@ using namespace std;
 
 Squelch::Squelch(void)
 {
-	noise_floor_ = 15.0f;
+	noise_floor_ = 5.0f;
 	set_squelch_snr_threshold(9.54f); // depends on noise_floor_, sets using_manual_level_, normal_signal_ratio_, flappy_signal_ratio_, and moving_avg_cap_
 
 	pre_filter_ = {0.001f, 0.001f};
@@ -32,7 +32,7 @@ Squelch::Squelch(void)
 
 	delay_ = 0;
 	open_count_ = 0;
-	sample_count_ = 0;
+	sample_count_ = -1;
 	flappy_count_ = 0;
 	low_signal_count_ = 0;
 
@@ -396,7 +396,7 @@ void Squelch::calculate_noise_floor(void) {
 	static const float decay_factor = 0.97f;
 	static const float new_factor = 1.0 - decay_factor;
 
-	noise_floor_ = noise_floor_ * decay_factor + std::min(pre_filter_.capped_, noise_floor_) * new_factor + 0.0001f;
+	noise_floor_ = noise_floor_ * decay_factor + std::min(pre_filter_.capped_, noise_floor_) * new_factor + 0.00000001f;
 
 	// Need to update moving_avg_cap_ - depends on noise_floor_
 	calculate_moving_avg_cap();

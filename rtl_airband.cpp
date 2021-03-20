@@ -432,7 +432,7 @@ void *demodulate(void *params) {
 		}
 
 		if(dev->input->sfmt == SFMT_S16) {
-			float const scale = 127.5f / dev->input->fullscale;
+			float const scale = 1.0f / dev->input->fullscale;
 #ifdef USE_BCM_VC
 			struct GPU_FFT_COMPLEX *ptr = fft->in;
 			for(size_t b = 0; b < FFT_BATCH; b++, ptr += fft->step) {
@@ -450,7 +450,7 @@ void *demodulate(void *params) {
 			}
 #endif
 		} else if(dev->input->sfmt == SFMT_F32) {
-			float const scale = 127.5f / dev->input->fullscale;
+			float const scale = 1.0f / dev->input->fullscale;
 #ifdef USE_BCM_VC
 			struct GPU_FFT_COMPLEX *ptr = fft->in;
 			for(size_t b = 0; b < FFT_BATCH; b++, ptr += fft->step) {

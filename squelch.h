@@ -82,16 +82,16 @@ private:
 		float capped_;
 	};
 
+	float noise_floor_;			// noise level
 	bool using_manual_level_;	// if using a manually set signal level threshold
 	float manual_signal_level_;	// manually configured squelch level, < 0 for disabled
 	float normal_signal_ratio_;	// signal-to-noise ratio for normal squelch - ratio, not in dB
 	float flappy_signal_ratio_;	// signal-to-noise ratio for flappy squelch - ratio, not in dB
 
+	float moving_avg_cap_;		// the max value for capped moving average
 	MovingAverage pre_filter_;	// average signal level for reference sample
 	MovingAverage post_filter_;	// average signal level for post-filter sample
-	float moving_avg_cap_;		// the max value for capped moving average
 
-	float noise_floor_;			// noise level
 	float squelch_level_;		// cached calculation of the squelch_level() value
 
 	bool using_post_filter_;	// if the caller is providing filtered samples
@@ -125,7 +125,9 @@ private:
 	void set_state(State update);
 	void update_current_state(void);
 	bool has_signal(void);
-	void update_avg(MovingAverage &avg, const float &sample);
+	void calculate_noise_floor(void);
+	void calculate_moving_avg_cap(void);
+	void update_moving_avg(MovingAverage &avg, const float &sample);
 	bool currently_flapping(void) const;
 
 #ifdef DEBUG_SQUELCH

@@ -12,13 +12,12 @@ using namespace std;
 
 Squelch::Squelch(void)
 {
-	set_squelch_snr_threshold(9.54f);
+	noise_floor_ = 15.0f;
+	set_squelch_snr_threshold(9.54f); // depends on noise_floor_, sets using_manual_level_, normal_signal_ratio_, flappy_signal_ratio_, and moving_avg_cap_
 
-	pre_filter_ = {0.5f, 0.5f};
-	post_filter_ = {0.5f, 0.5f};
-	moving_avg_cap_ = 450.0f;
+	pre_filter_ = {0.001f, 0.001f};
+	post_filter_ = {0.001f, 0.001f};
 
-	noise_floor_ = 100.0f;
 	squelch_level_ = 0.0f;
 
 	using_post_filter_ = false;
@@ -65,12 +64,24 @@ void Squelch::set_squelch_level_threshold(const float &level) {
 	} else {
 		using_manual_level_ = false;
 	}
+
+	// Need to update moving_avg_cap_ - depends on using_manual_level_ and manual_signal_level_
+	calculate_moving_avg_cap();
+
+	debug_print("Set level threshold, using_manual_level_: %s, manual_signal_level_: %f, moving_avg_cap_: %f\n",
+				using_manual_level_ ? "true" : "false", manual_signal_level_, moving_avg_cap_);
 }
 
 void Squelch::set_squelch_snr_threshold(const float &db) {
 	using_manual_level_ = false;
 	normal_signal_ratio_ = pow(10.0, db/20.0);
 	flappy_signal_ratio_ = normal_signal_ratio_ * 0.9f;
+
+	// Need to update moving_avg_cap_ - depends on using_manual_level_ and normal_signal_ratio_
+	calculate_moving_avg_cap();
+
+	debug_print("SNR threshold updated, using_manual_level_: %s, normal_signal_ratio_: %f, flappy_signal_ratio_: %f, moving_avg_cap_: %f\n",
+				using_manual_level_ ? "true" : "false", normal_signal_ratio_, flappy_signal_ratio_, moving_avg_cap_);
 }
 
 bool Squelch::is_open(void) const {
@@ -143,18 +154,10 @@ void Squelch::process_raw_sample(const float &sample) {
 	// TODO: is there an issue not updating noise floor when squelch is open?  Mabye a sharp
 	//       increase in noise causing squelch to open and never close?
 	if (sample_count_ % 16 == 0 && !is_open()) {
-		static const float decay_factor = 0.97f;
-		static const float new_factor = 1.0 - decay_factor;
-		noise_floor_ = noise_floor_ * decay_factor + std::min(pre_filter_.capped_, noise_floor_) * new_factor + 0.0001f;
-
-		// Force squelch_level_ recalculation at next call to squelch_level()
-		squelch_level_ = 0.0f;
-
-		// set max value for moving averages to be 1.5 times the normal squelch
-		moving_avg_cap_ = 1.5f * normal_signal_ratio_ * noise_floor_;
+		calculate_noise_floor();
 	}
 
-	update_avg(pre_filter_, sample);
+	update_moving_avg(pre_filter_, sample);
 
 	// Apply the comparison factor before adding to the buffer, will later be used as the threshold
 	// for the post_filter_
@@ -208,7 +211,7 @@ void Squelch::process_filtered_sample(const float &sample) {
 	}
 
 	using_post_filter_ = true;
-	update_avg(post_filter_, sample);
+	update_moving_avg(post_filter_, sample);
 
 	// Always comparing the post-filter average to the buffered pre-filtered value
 	if (post_filter_.capped_ < buffer_[buffer_tail_]) {
@@ -389,7 +392,29 @@ bool Squelch::has_signal(void) {
 	return pre_filter_.capped_ >= squelch_level();
 }
 
-void Squelch::update_avg(MovingAverage &avg, const float &sample) {
+void Squelch::calculate_noise_floor(void) {
+	static const float decay_factor = 0.97f;
+	static const float new_factor = 1.0 - decay_factor;
+
+	noise_floor_ = noise_floor_ * decay_factor + std::min(pre_filter_.capped_, noise_floor_) * new_factor + 0.0001f;
+
+	// Need to update moving_avg_cap_ - depends on noise_floor_
+	calculate_moving_avg_cap();
+
+	// Force squelch_level_ recalculation at next call to squelch_level() - depends on noise_floor_
+	squelch_level_ = 0.0f;
+}
+
+void Squelch::calculate_moving_avg_cap(void) {
+	// set max value for MovingAverage's capped_ to 1.5 x the normal / manual squelch level.
+	if (using_manual_level_) {
+		moving_avg_cap_ = 1.5f * manual_signal_level_;
+	} else {
+		moving_avg_cap_ = 1.5f * normal_signal_ratio_ * noise_floor_;
+	}
+}
+
+void Squelch::update_moving_avg(MovingAverage &avg, const float &sample) {
 	static const float decay_factor = 0.99f;
 	static const float new_factor = 1.0 - decay_factor;
 

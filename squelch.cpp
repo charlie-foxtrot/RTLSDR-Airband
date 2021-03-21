@@ -106,9 +106,6 @@ const float & Squelch::noise_level(void) const {
 }
 
 const float & Squelch::signal_level(void) const {
-	if (using_post_filter_) {
-		return post_filter_.full_;
-	}
 	return pre_filter_.full_;
 }
 

@@ -195,4 +195,23 @@ double delta_sec(const timeval *start, const timeval *stop) {
 	return delta.tv_sec + delta.tv_usec/1000000.0;
 }
 
+// level to/from dBFS conversion assumes level is nomalized to 1 and is based on:
+//    https://kluedo.ub.uni-kl.de/frontdoor/deliver/index/docId/4293/file/exact_fft_measurements.pdf
+//
+// expanded form:
+//    20.0f * log10f(level / fft_size) + 7.54f + 10.0f * log10f(fft_size/2) - 2.38f
+
+const float &dBFS_offet(void) {
+	static const float offset = 7.54f + 10.0f * log10f(fft_size/2) - 2.38f;
+	return offset;
+}
+
+float dBFS_to_level(const float &dBFS) {
+	return pow(10.0, (dBFS - dBFS_offet()) / 20.0f) * fft_size;
+}
+
+float level_to_dBFS(const float &level) {
+	return std::min(0.0f, 20.0f * log10f(level / fft_size) + dBFS_offet());
+}
+
 // vim: ts=4

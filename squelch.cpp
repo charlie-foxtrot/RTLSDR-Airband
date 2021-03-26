@@ -154,7 +154,7 @@ void Squelch::process_raw_sample(const float &sample) {
 	//    slowly increasing during a long signal.
 	// TODO: is there an issue not updating noise floor when squelch is open?  Mabye a sharp
 	//       increase in noise causing squelch to open and never close?
-	if (sample_count_ % 16 == 0 && !is_open()) {
+	if (sample_count_ % 16 == 0 && !is_open() && !signal_outside_filter()) {
 		calculate_noise_floor();
 	}
 

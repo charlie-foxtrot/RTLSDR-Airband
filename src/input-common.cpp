@@ -41,7 +41,10 @@ input_t *input_new(char const * const type) {
 	void *dlhandle = dlopen(NULL, RTLD_NOW);
 	assert(dlhandle != NULL);
 	char *fname = NULL;
-	assert(asprintf(&fname, "%s_input_new", type) > 0);
+	int chars_written = asprintf(&fname, "%s_input_new", type);
+	if(chars_written <= 0) {
+		return NULL;
+	}
 	input_new_func_t fptr = (input_new_func_t)dlsym(dlhandle, fname);
 	free(fname);
 	if(fptr == NULL) {

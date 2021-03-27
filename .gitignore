@@ -1,4 +1,2 @@
-*.o
-*.a
-rtl_airband
-rtl_airband_debug.log
+build
+compile_commands.json

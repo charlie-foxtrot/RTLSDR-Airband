@@ -65,20 +65,20 @@ void log(int priority, const char *format, ...) {
 }
 
 void init_debug (char *file) {
-	if(DEBUG) {
-		if(!file) return;
-		if((debugf = fopen(file, "a")) == NULL) {
-			std::cerr<<"Could not open debug file "<<file<<": "<<strerror(errno)<<"\n";
-			error();
-		}
+#ifdef DEBUG
+	if(!file) return;
+	if((debugf = fopen(file, "a")) == NULL) {
+		std::cerr<<"Could not open debug file "<<file<<": "<<strerror(errno)<<"\n";
+		error();
 	}
+#endif
 }
 
 void close_debug() {
-	if(DEBUG) {
-		if(!debugf) return;
-		fclose(debugf);
-	}
+#ifdef DEBUG
+	if(!debugf) return;
+	fclose(debugf);
+#endif
 }
 
 void tag_queue_put(device_t *dev, int freq, struct timeval tv) {

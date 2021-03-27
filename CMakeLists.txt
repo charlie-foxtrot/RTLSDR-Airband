@@ -1,0 +1,17 @@
+cmake_minimum_required (VERSION 3.1)
+project (RTLSDR-Airband CXX)
+
+set (RTL_AIRBAND_VERSION_MAJOR 4)
+set (RTL_AIRBAND_VERSION_MINOR 0)
+set (RTL_AIRBAND_VERSION_PATCH 0pre)
+set (RTL_AIRBAND_VERSION "${RTL_AIRBAND_VERSION_MAJOR}.${RTL_AIRBAND_VERSION_MINOR}.${RTL_AIRBAND_VERSION_PATCH}")
+
+if(NOT CMAKE_BUILD_TYPE)
+   set(CMAKE_BUILD_TYPE Release)
+   message(STATUS "Build type not specified: defaulting to Release")
+endif(NOT CMAKE_BUILD_TYPE)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Og -DDEBUG")
+
+add_subdirectory (src)

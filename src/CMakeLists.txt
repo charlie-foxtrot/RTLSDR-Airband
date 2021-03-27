@@ -28,10 +28,10 @@ list(APPEND rtl_airband_extra_libs ${CONFIG_LIBRARIES})
 list(APPEND rtl_airband_include_dirs ${CONFIG_INCLUDE_DIRS})
 list(APPEND link_dirs ${CONFIG_LIBRARY_DIRS})
 
-pkg_check_modules(LAME REQUIRED lame)
-list(APPEND rtl_airband_extra_libs ${LAME_LIBRARIES})
-list(APPEND rtl_airband_include_dirs ${LAME_INCLUDE_DIRS})
-list(APPEND link_dirs ${LAME_LIBRARY_DIRS})
+# Can't use pkg_check_modules here, as some distros do not install lame.pc file
+find_package(Lame REQUIRED)
+list(APPEND rtl_airband_extra_libs ${Lame_LIBRARIES})
+list(APPEND rtl_airband_include_dirs ${Lame_INCLUDE_DIR})
 
 pkg_check_modules(SHOUT REQUIRED shout)
 list(APPEND rtl_airband_extra_libs ${SHOUT_LIBRARIES})

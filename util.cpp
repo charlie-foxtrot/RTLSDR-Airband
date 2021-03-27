@@ -201,17 +201,17 @@ double delta_sec(const timeval *start, const timeval *stop) {
 // expanded form:
 //    20.0f * log10f(level / fft_size) + 7.54f + 10.0f * log10f(fft_size/2) - 2.38f
 
-const float &dBFS_offet(void) {
+const float &dBFS_offset(void) {
 	static const float offset = 7.54f + 10.0f * log10f(fft_size/2) - 2.38f;
 	return offset;
 }
 
 float dBFS_to_level(const float &dBFS) {
-	return pow(10.0, (dBFS - dBFS_offet()) / 20.0f) * fft_size;
+	return pow(10.0, (dBFS - dBFS_offset()) / 20.0f) * fft_size;
 }
 
 float level_to_dBFS(const float &level) {
-	return std::min(0.0f, 20.0f * log10f(level / fft_size) + dBFS_offet());
+	return std::min(0.0f, 20.0f * log10f(level / fft_size) + dBFS_offset());
 }
 
 // vim: ts=4

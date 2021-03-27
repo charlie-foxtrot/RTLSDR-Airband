@@ -648,19 +648,20 @@ void *demodulate(void *params) {
 #endif
 
 				if (tui) {
+					char symbol = fparms->squelch.signal_outside_filter() ? '~' : (char)channel->axcindicate;
 					if(dev->mode == R_SCAN) {
 						GOTOXY(0, device_num * 17 + dev->row + 3);
 						printf("%4.0f/%3.0f%c %7.3f ",
 							level_to_dBFS(fparms->squelch.signal_level()),
 							level_to_dBFS(fparms->squelch.noise_level()),
-							channel->axcindicate,
+							symbol,
 							(dev->channels[0].freqlist[channel->freq_idx].frequency / 1000000.0));
 					} else {
 						GOTOXY(i*10, device_num * 17 + dev->row + 3);
 						printf("%4.0f/%3.0f%c ",
 							level_to_dBFS(fparms->squelch.signal_level()),
 							level_to_dBFS(fparms->squelch.noise_level()),
-							channel->axcindicate);
+							symbol);
 					}
 					fflush(stdout);
 				}

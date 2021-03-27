@@ -88,8 +88,8 @@ bool Squelch::is_open(void) const {
 	return (current_state_ == OPEN || current_state_ == CLOSING);
 }
 
-bool Squelch::should_filter_sample(void) const {
-	return (current_state_ != CLOSED && current_state_ != LOW_SIGNAL_ABORT);
+bool Squelch::should_filter_sample(void) {
+	return ((has_pre_filter_signal() || current_state_ != CLOSED) && current_state_ != LOW_SIGNAL_ABORT);
 }
 
 bool Squelch::first_open_sample(void) const {
@@ -101,20 +101,16 @@ bool Squelch::last_open_sample(void) const {
 		   (current_state_ != LOW_SIGNAL_ABORT && next_state_ == LOW_SIGNAL_ABORT);
 }
 
+bool Squelch::signal_outside_filter(void) {
+	return (using_post_filter_ && has_pre_filter_signal() && !has_post_filter_signal());
+}
+
 const float & Squelch::noise_level(void) const {
 	return noise_floor_;
 }
 
 const float & Squelch::signal_level(void) const {
 	return pre_filter_.full_;
-}
-
-const size_t & Squelch::open_count(void) const {
-	return open_count_;
-}
-
-const size_t & Squelch::flappy_count(void) const {
-	return flappy_count_;
 }
 
 const float & Squelch::squelch_level(void) {
@@ -130,6 +126,14 @@ const float & Squelch::squelch_level(void) {
 		}
 	}
 	return squelch_level_;
+}
+
+const size_t & Squelch::open_count(void) const {
+	return open_count_;
+}
+
+const size_t & Squelch::flappy_count(void) const {
+	return flappy_count_;
 }
 
 void Squelch::process_raw_sample(const float &sample) {
@@ -150,7 +154,7 @@ void Squelch::process_raw_sample(const float &sample) {
 	//    slowly increasing during a long signal.
 	// TODO: is there an issue not updating noise floor when squelch is open?  Mabye a sharp
 	//       increase in noise causing squelch to open and never close?
-	if (sample_count_ % 16 == 0 && !is_open()) {
+	if (sample_count_ % 16 == 0 && !is_open() && !signal_outside_filter()) {
 		calculate_noise_floor();
 	}
 
@@ -382,11 +386,19 @@ void Squelch::update_current_state(void) {
 #endif
 }
 
+bool Squelch::has_pre_filter_signal(void) {
+	return pre_filter_.capped_ >= squelch_level();
+}
+
+bool Squelch::has_post_filter_signal(void) {
+	return using_post_filter_ && post_filter_.capped_ >= buffer_[buffer_tail_];
+}
+
 bool Squelch::has_signal(void) {
 	if (using_post_filter_) {
-		return pre_filter_.capped_ >= squelch_level() && post_filter_.capped_ >= buffer_[buffer_tail_];
+		return has_pre_filter_signal() && has_post_filter_signal();
 	}
-	return pre_filter_.capped_ >= squelch_level();
+	return has_pre_filter_signal();
 }
 
 void Squelch::calculate_noise_floor(void) {

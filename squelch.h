@@ -51,17 +51,19 @@ public:
 	void process_filtered_sample(const float &sample);
 
 	bool is_open(void) const;
-	bool should_filter_sample(void) const;
+	bool should_filter_sample(void);
 
 	bool first_open_sample(void) const;
 	bool last_open_sample(void) const;
+	bool signal_outside_filter(void);
 
 	const float & noise_level(void) const;
 	const float & signal_level(void) const;
+	const float & squelch_level(void);
 
 	const size_t & open_count(void) const;
 	const size_t & flappy_count(void) const;
-	const float & squelch_level(void);
+
 
 #ifdef DEBUG_SQUELCH
 	~Squelch(void);
@@ -124,6 +126,8 @@ private:
 
 	void set_state(State update);
 	void update_current_state(void);
+	bool has_pre_filter_signal(void);
+	bool has_post_filter_signal(void);
 	bool has_signal(void);
 	void calculate_noise_floor(void);
 	void calculate_moving_avg_cap(void);

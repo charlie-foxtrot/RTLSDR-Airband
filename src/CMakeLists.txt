@@ -119,9 +119,13 @@ set(USE_BCM_VC FALSE)
 if(PLATFORM STREQUAL "rpiv1")
 	set(USE_BCM_VC TRUE)
 	add_definitions(-march=armv6zk -mcpu=arm1176jzf-s -mtune=arm1176jzf-s -mfpu=vfp)
+	enable_language(ASM)
+	list(APPEND rtl_airband_extra_sources rtl_airband_vfp.s)
 elseif(PLATFORM STREQUAL "rpiv2")
 	set(USE_BCM_VC TRUE)
 	add_definitions(-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard)
+	enable_language(ASM)
+	list(APPEND rtl_airband_extra_sources rtl_airband_neon.s)
 elseif(PLATFORM STREQUAL "armv7-generic")
 	add_definitions(-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard)
 elseif(PLATFORM STREQUAL "armv8-generic")
@@ -134,14 +138,12 @@ else()
 endif()
 
 if(USE_BCM_VC)
-	# FIXME: find these paths automatically
-	list(APPEND rtl_airband_include_dirs,
-		"/opt/vc/include/interface/vcos/pthreads"
-		"/opt/vc/include/interface/vmcs_host/linux"
-		)
+	# FIXME: find VC include path automatically
 	list(APPEND link_dirs "/opt/vc/lib")
 	# FIXME: find_library
-	list(APPEND rtl_airband_extra_libs "bcm_host")
+	list(APPEND rtl_airband_extra_libs bcm_host hello_fft)
+	add_subdirectory(hello_fft)
+	#list(APPEND rtl_airband_extra_libs hello_fft)
 else()
 	pkg_check_modules(FFTW3F REQUIRED fftw3f)
 	if(FFTW3F_FOUND)

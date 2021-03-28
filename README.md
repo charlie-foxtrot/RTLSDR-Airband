@@ -1,6 +1,52 @@
 RTLSDR-Airband
 =====================
 
+This is a development branch of RTLSDR-Airband.
+
+**NOTE: The program is now built with cmake. Building instructions from the Wiki do not apply to this branch. Please use the following procedure:**
+
+- Install all required dependencies as per the Wiki.
+- Install cmake and pkg-config:
+
+```
+apt-get install cmake pkg-config
+```
+
+- Clone the repository and switch to the `unstable` branch:
+
+```
+git clone https://github.com/szpajder/RTLSDR-Airband.git
+cd RTLSDR-Airband
+git checkout unstable
+```
+
+- Build the program as follows:
+
+```
+mkdir build
+cd build
+cmake ../
+make
+make install
+```
+
+- The following options may be specified when running `cmake`:
+
+  - `-DPLATFORM=<platform_name>` - optimize the build for the given hardware. `<platform_name>` might be one of: `rpiv1`, `rpiv2`, `armv7-generic`, `armv8-generic`, `native`.
+  - `-DNFM=1` - enables narrow FM support (0 disables).
+  - `-DRTLSDR=0 -DMIRISDR=0 -DSOAPYSDR=0 -DPULSEAUDIO=0` - disables respective SDR driver and/or feature. They are all enabled by default and will be built if necessary dependencies are detected.
+  - `-DPROFILING=1` - enable profiling support with Google Perftools.
+
+Example:
+
+```
+cmake -DPLATFORM=rpiv2 -DSOAPYSDR=0 -DPROFILING=1 ../
+```
+
+The Wiki will be updated once the new build system is declared stable and a new release is made.
+
+=====================
+
 **Current stable release: [3.2.1](https://github.com/szpajder/RTLSDR-Airband/releases/latest)** (released November 13, 2020)
 
 RTLSDR-Airband receives analog radio voice channels and produces
@@ -27,7 +73,7 @@ of RTLSDR-Airband. Special thanks go to:
 
 License
 --------------------
-Copyright (C) 2015-2020 Tomasz Lemiech <szpajder@gmail.com>
+Copyright (C) 2015-2021 Tomasz Lemiech <szpajder@gmail.com>
 
 Based on original work by Wong Man Hang <microtony@gmail.com>
 

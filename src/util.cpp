@@ -71,6 +71,8 @@ void init_debug (char *file) {
 		std::cerr<<"Could not open debug file "<<file<<": "<<strerror(errno)<<"\n";
 		error();
 	}
+#else
+	UNUSED(file);
 #endif
 }
 

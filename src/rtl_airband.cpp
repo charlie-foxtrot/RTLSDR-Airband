@@ -900,10 +900,12 @@ int main(int argc, char* argv[]) {
 		}
 		device_count = devs_enabled;
 		debug_print("mixer_count=%d\n", mixer_count);
+#ifdef DEBUG
 		for(int z = 0; z < mixer_count; z++) {
 			mixer_t *m = &mixers[z];
 			debug_print("mixer[%d]: name=%s, input_count=%d, output_count=%d\n", z, m->name, m->input_count, m->channel.output_count);
 		}
+#endif
 	} catch(const FileIOException &e) {
 			cerr<<"Cannot read configuration file "<<cfgfile<<"\n";
 			error();

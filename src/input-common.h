@@ -22,10 +22,14 @@
 #include <pthread.h>
 #include <libconfig.h++>
 
-#ifndef __MINGW32__
-#define MODULE_EXPORT extern "C"
+#ifdef __MINGW32__
+  #define MODULE_EXPORT extern "C" __declspec(dllexport)
 #else
-#define MODULE_EXPORT extern "C" __declspec(dllexport)
+  #if __GNUC__ >= 4
+    #define MODULE_EXPORT extern "C" __attribute__((visibility("default")))
+  #else
+    #define MODULE_EXPORT extern "C"
+  #endif
 #endif
 
 typedef enum {

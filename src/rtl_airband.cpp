@@ -488,7 +488,7 @@ void *demodulate(void *params) {
 			unsigned char* buf2 = dev->input->buffer + dev->input->bufs;
 			for (size_t i = 0; i < fft_size; i += 2, buf2 += 4) {
 				__m128 a = _mm_set_ps(levels_ptr[buf2[3]], levels_ptr[buf2[2]], levels_ptr[buf2[1]], levels_ptr[buf2[0]]);
-				__m128 b = _mm_load_ps(&window[i]);
+				__m128 b = _mm_set_ps(window[i+1], window[i+1], window[i], window[i]);
 				a = _mm_mul_ps(a, b);
 				_mm_store_ps(&fftin[i][0], a);
 			}

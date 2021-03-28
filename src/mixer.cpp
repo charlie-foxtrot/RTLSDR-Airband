@@ -26,6 +26,7 @@
 #include <sys/time.h>
 #include <syslog.h>
 #include "rtl_airband.h"
+#include "config.h"
 
 static char *err;
 
@@ -141,13 +142,15 @@ static bool mix_waveforms(float *sum, float *in, float mult, int size) {
 void *mixer_thread(void *param) {
 	assert(param != NULL);
 	Signal *signal = (Signal *)param;
-	struct timeval ts, te;
 	int interval_usec = 1e+6 * WAVE_BATCH / WAVE_RATE / MIX_DIVISOR;
 
 	debug_print("Starting mixer thread, signal %p\n", signal);
 
 	if(mixer_count <= 0) return 0;
-	if(DEBUG) gettimeofday(&ts, NULL);
+#ifdef DEBUG
+	struct timeval ts, te;
+	gettimeofday(&ts, NULL);
+#endif
 	while(!do_exit) {
 		usleep(interval_usec);
 		if(do_exit) return 0;
@@ -192,14 +195,14 @@ void *mixer_thread(void *param) {
 			}
 
 			if((mixer->inputs_todo & mixer->input_mask) == 0 || mixer->interval == 0) {	// all good inputs handled or last interval passed
-		        if(DEBUG) {
-		            gettimeofday(&te, NULL);
-		            debug_bulk_print("mixerinput: %lu.%lu %lu int=%d inp_unhandled=0x%02x inp_mask=0x%02x\n",
-						te.tv_sec, te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec,
-						mixer->interval, mixer->inputs_todo, mixer->input_mask);
-		            ts.tv_sec = te.tv_sec;
-	        	    ts.tv_usec = te.tv_usec;
-			    }
+#ifdef DEBUG
+				gettimeofday(&te, NULL);
+		        debug_bulk_print("mixerinput: %lu.%lu %lu int=%d inp_unhandled=0x%02x inp_mask=0x%02x\n",
+					te.tv_sec, te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec,
+					mixer->interval, mixer->inputs_todo, mixer->input_mask);
+				ts.tv_sec = te.tv_sec;
+				ts.tv_usec = te.tv_usec;
+#endif
 				channel->state = CH_READY;
 				signal->send();
 				mixer->interval = MIX_DIVISOR;

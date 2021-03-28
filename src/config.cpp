@@ -165,7 +165,7 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			}
 			debug_print("dev[%d].chan[%d].out[%d] connected to mixer %s as input %d (ampfactor=%.1f balance=%.1f)\n",
 				i, j, o, name, mdata->input, ampfactor, balance);
-#ifdef PULSE
+#ifdef WITH_PULSEAUDIO
 		} else if(!strncmp(outs[o]["type"], "pulse", 5)) {
 			channel->outputs[oo].data = XCALLOC(1, sizeof(struct pulse_data));
 			channel->outputs[oo].type = O_PULSE;

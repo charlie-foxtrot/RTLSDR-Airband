@@ -18,6 +18,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
+
 #if defined USE_BCM_VC && !defined __arm__
 #error Broadcom VideoCore support can only be enabled on ARM builds
 #endif
@@ -102,7 +104,7 @@ enum fm_demod_algo {
 enum fm_demod_algo fm_demod = FM_FAST_ATAN2;
 #endif
 
-#if DEBUG
+#ifdef DEBUG
 char *debug_path;
 #endif
 
@@ -382,9 +384,10 @@ void *demodulate(void *params) {
 #endif
 	}
 
+#ifdef DEBUG
 	struct timeval ts, te;
-	if(DEBUG)
-		gettimeofday(&ts, NULL);
+	gettimeofday(&ts, NULL);
+#endif
 	size_t available;
 	int device_num = demod_params->device_start;
 	while (true) {
@@ -677,12 +680,12 @@ void *demodulate(void *params) {
 				dev->waveavail = 1;
 			}
 			dev->waveend -= WAVE_BATCH;
-			if(DEBUG) {
-				gettimeofday(&te, NULL);
-				debug_bulk_print("waveavail %lu.%lu %lu\n", te.tv_sec, te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec);
-				ts.tv_sec = te.tv_sec;
-				ts.tv_usec = te.tv_usec;
-			}
+#ifdef DEBUG
+			gettimeofday(&te, NULL);
+			debug_bulk_print("waveavail %lu.%lu %lu\n", te.tv_sec, te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec);
+			ts.tv_sec = te.tv_sec;
+			ts.tv_usec = te.tv_usec;
+#endif
 			demod_params->mp3_signal->send();
 			dev->row++;
 			if (dev->row == 12) {
@@ -703,7 +706,7 @@ void usage() {
 #ifdef NFM
 	cout<<"\t-Q\t\t\tUse quadri correlator for FM demodulation (default is atan2)\n";
 #endif
-#if DEBUG
+#ifdef DEBUG
 	cout<<"\t-d <file>\t\tLog debugging information to <file> (default is "<<DEBUG_PATH<<")\n";
 #endif
 	cout<<"\t-e\t\t\tPrint messages to standard error (disables syslog logging)\n";
@@ -736,7 +739,7 @@ int main(int argc, char* argv[]) {
 #ifdef NFM
 	strcat(optstring, "Q");
 #endif
-#if DEBUG
+#ifdef DEBUG
 	strcat(optstring, "d:");
 #endif
 
@@ -747,7 +750,7 @@ int main(int argc, char* argv[]) {
 				fm_demod = FM_QUADRI_DEMOD;
 				break;
 #endif
-#if DEBUG
+#ifdef DEBUG
 			case 'd':
 				debug_path = strdup(optarg);
 				break;
@@ -775,7 +778,7 @@ int main(int argc, char* argv[]) {
 				break;
 		}
 	}
-#if DEBUG
+#ifdef DEBUG
 	if(!debug_path) debug_path = strdup(DEBUG_PATH);
 	init_debug(debug_path);
 #endif
@@ -972,7 +975,7 @@ int main(int argc, char* argv[]) {
 			output_t *output = channel->outputs + k;
 			if(output->type == O_ICECAST) {
 				shout_setup((icecast_data *)(output->data), channel->mode);
-#ifdef PULSE
+#ifdef WITH_PULSEAUDIO
 			} else if(output->type == O_PULSE) {
 				pulse_init();
 				pulse_setup((pulse_data *)(output->data), channel->mode);
@@ -994,7 +997,7 @@ int main(int argc, char* argv[]) {
 				output_t *output = channel->outputs + k;
 				if(output->type == O_ICECAST) {
 					shout_setup((icecast_data *)(output->data), channel->mode);
-#ifdef PULSE
+#ifdef WITH_PULSEAUDIO
 				} else if(output->type == O_PULSE) {
 					pulse_init();
 					pulse_setup((pulse_data *)(output->data), channel->mode);
@@ -1106,7 +1109,7 @@ int main(int argc, char* argv[]) {
 		pthread_create(&mixer, NULL, &mixer_thread, output_params[output_thread_count-1].mp3_signal);
 	}
 
-#ifdef PULSE
+#ifdef WITH_PULSEAUDIO
 	pulse_start();
 #endif
 	sincosf_lut_init();

@@ -28,21 +28,20 @@
 #include <shout/shout.h>
 #include <lame/lame.h>
 #include <libconfig.h++>
+
+#include "config.h"
 #ifdef USE_BCM_VC
 #include "hello_fft/gpu_fft.h"
 #else
 #include <fftw3.h>
 #endif
-#ifdef PULSE
+#ifdef WITH_PULSEAUDIO
 #include <pulse/context.h>
 #include <pulse/stream.h>
 #endif
 #include "input-common.h"	// input_t
 #include "squelch.h"
 
-#ifndef RTL_AIRBAND_VERSION
-#define RTL_AIRBAND_VERSION "3.1.0"
-#endif
 #define ALIGN
 #define ALIGN2 __attribute__((aligned(32)))
 #define SLEEP(x) usleep(x * 1000)
@@ -53,8 +52,18 @@
 #endif
 #define CFGFILE SYSCONFDIR "/rtl_airband.conf"
 #define PIDFILE "/run/rtl_airband.pid"
-#if DEBUG
+
+#define nop() do {} while (0)
+
+#ifdef DEBUG
 #define DEBUG_PATH "rtl_airband_debug.log"
+#define debug_print(fmt, ...) \
+	do { fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); fflush(debugf); } while (0)
+#define debug_bulk_print(fmt, ...) \
+	do { fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); } while (0)
+#else
+#define debug_print(fmt, ...) nop()
+#define debug_bulk_print(fmt, ...) nop()
 #endif
 
 #define MIN_BUF_SIZE 2560000
@@ -107,7 +116,7 @@ enum output_type {
 	O_FILE,
 	O_RAWFILE,
 	O_MIXER
-#ifdef PULSE
+#ifdef WITH_PULSEAUDIO
 	, O_PULSE
 #endif
 };
@@ -139,7 +148,7 @@ struct file_data {
 	enum output_type type;
 };
 
-#ifdef PULSE
+#ifdef WITH_PULSEAUDIO
 struct pulse_data {
 	const char *server;
 	const char *name;
@@ -340,6 +349,9 @@ struct output_params_t {
 	int mixer_end;
 };
 
+// version.cpp
+extern char const *RTL_AIRBAND_VERSION;
+
 // output.cpp
 lame_t airlame_init(mix_modes mixmode, int highpass, int lowpass);
 void shout_setup(icecast_data *icecast, mix_modes mixmode);
@@ -379,10 +391,6 @@ void *xrealloc(void *ptr, size_t size, const char *file, const int line, const c
 void init_debug (char *file);
 void close_debug();
 extern FILE *debugf;
-#define debug_print(fmt, ...) \
-	do { if (DEBUG) fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); fflush(debugf); } while (0)
-#define debug_bulk_print(fmt, ...) \
-	do { if (DEBUG) fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); } while (0)
 #define XCALLOC(nmemb, size) xcalloc((nmemb), (size), __FILE__, __LINE__, __func__)
 #define XREALLOC(ptr, size) xrealloc((ptr), (size), __FILE__, __LINE__, __func__)
 float dBFS_to_level(const float &dBFS);
@@ -400,7 +408,7 @@ const char *mixer_get_error();
 int parse_devices(libconfig::Setting &devs);
 int parse_mixers(libconfig::Setting &mx);
 
-#ifdef PULSE
+#ifdef WITH_PULSEAUDIO
 #define PULSE_STREAM_LATENCY_LIMIT 10000000UL
 // pulse.cpp
 void pulse_init();

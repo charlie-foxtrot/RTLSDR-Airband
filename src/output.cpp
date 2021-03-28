@@ -34,7 +34,7 @@
 #define SHOUTERR_RETRY (-255)
 #endif
 #include <lame/lame.h>
-#ifdef PULSE
+#ifdef WITH_PULSEAUDIO
 #include <pulse/pulseaudio.h>
 #endif
 #include <syslog.h>
@@ -45,6 +45,7 @@
 #include <cassert>
 #include "rtl_airband.h"
 #include "input-common.h"
+#include "config.h"
 
 void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 	int ret;
@@ -515,7 +516,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 		} else if(channel->outputs[k].type == O_MIXER) {
 			mixer_data *mdata = (mixer_data *)(channel->outputs[k].data);
 			mixer_put_samples(mdata->mixer, mdata->input, channel->waveout, WAVE_BATCH);
-#ifdef PULSE
+#ifdef WITH_PULSEAUDIO
 		} else if(channel->outputs[k].type == O_PULSE) {
 			pulse_data *pdata = (pulse_data *)(channel->outputs[k].data);
 			if(pdata->continuous == false && channel->axcindicate == NO_SIGNAL)
@@ -545,7 +546,7 @@ void disable_channel_outputs(channel_t *channel) {
 		} else if(output->type == O_MIXER) {
 			mixer_data *mdata = (mixer_data *)(output->data);
 			mixer_disable_input(mdata->mixer, mdata->input);
-#ifdef PULSE
+#ifdef WITH_PULSEAUDIO
 		} else if(output->type == O_PULSE) {
 			pulse_data *pdata = (pulse_data *)(output->data);
 			pulse_shutdown(pdata);
@@ -737,12 +738,14 @@ void* output_thread(void *param) {
 	struct freq_tag tag;
 	struct timeval tv;
 	int new_freq = -1;
-	timeval ts, te;
 	timeval last_stats_write = {0, 0};
 
 	debug_print("Starting output thread, devices %d:%d, mixers %d:%d, signal %p\n", output_param->device_start, output_param->device_end, output_param->mixer_start, output_param->mixer_end, output_param->mp3_signal);
 
-	if(DEBUG) gettimeofday(&ts, NULL);
+#ifdef DEBUG
+	timeval ts, te;
+	gettimeofday(&ts, NULL);
+#endif
 	while (!do_exit) {
 		output_param->mp3_signal->wait();
 		for (int i = output_param->mixer_start; i < output_param->mixer_end; i++) {
@@ -753,12 +756,12 @@ void* output_thread(void *param) {
 				channel->state = CH_DIRTY;
 			}
 		}
-		if(DEBUG) {
-			gettimeofday(&te, NULL);
-			debug_bulk_print("mixeroutput: %lu.%lu %lu\n", te.tv_sec, te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec);
-			ts.tv_sec = te.tv_sec;
-			ts.tv_usec = te.tv_usec;
-		}
+#ifdef DEBUG
+		gettimeofday(&te, NULL);
+		debug_bulk_print("mixeroutput: %lu.%lu %lu\n", te.tv_sec, te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec);
+		ts.tv_sec = te.tv_sec;
+		ts.tv_usec = te.tv_usec;
+#endif
 		for (int i = output_param->device_start; i < output_param->device_end; i++) {
 			device_t* dev = devices + i;
 			if (dev->input->state == INPUT_RUNNING && dev->waveavail) {
@@ -816,7 +819,7 @@ void* output_check_thread(void*) {
 								shout_setup(icecast, dev->channels[j].mode);
 							}
 						}
-#ifdef PULSE
+#ifdef WITH_PULSEAUDIO
 					} else if(dev->channels[j].outputs[k].type == O_PULSE) {
 						pulse_data *pdata = (pulse_data *)(dev->channels[j].outputs[k].data);
 						if(dev->input->state == INPUT_FAILED) {
@@ -845,7 +848,7 @@ void* output_check_thread(void*) {
 							icecast->hostname, icecast->port, icecast->mountpoint);
 						shout_setup(icecast, mixers[i].channel.mode);
 					}
-#ifdef PULSE
+#ifdef WITH_PULSEAUDIO
 				} else if(mixers[i].channel.outputs[k].type == O_PULSE) {
 					pulse_data *pdata = (pulse_data *)(mixers[i].channel.outputs[k].data);
 					if (pdata->context == NULL){

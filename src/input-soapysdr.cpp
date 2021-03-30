@@ -335,11 +335,10 @@ void *soapysdr_rx_thread(void *ctx) {
 		long long timeNs;		// timestamp for receive buffer
 		int samples_read = SoapySDRDevice_readStream(sdr, rxStream, bufs,
 			num_elems, &flags, &timeNs, SOAPYSDR_READSTREAM_TIMEOUT_US);
-		if(samples_read < 0) {	// when it's negative, it's the error code
-			log(LOG_ERR, "SoapySDR device '%s': readStream failed: %s, disabling\n",
+		if(samples_read < 0) {		// when it's negative, it's the error code
+			log(LOG_ERR, "SoapySDR device '%s': readStream failed: %s\n",
 				dev_data->device_string, SoapySDR_errToStr(samples_read));
-			input->state = INPUT_FAILED;
-			goto cleanup;
+			continue;
 		}
 		circbuffer_append(input, buf, (size_t)(samples_read * 2 * input->bytes_per_sample));
 	}

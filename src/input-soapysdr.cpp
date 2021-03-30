@@ -331,8 +331,8 @@ void *soapysdr_rx_thread(void *ctx) {
 
 	while(!do_exit) {
 		void *bufs[] = { buf };		// array of buffers
-		int flags;			// flags set by receive operation
-		long long timeNs;		// timestamp for receive buffer
+		int flags;					// flags set by receive operation
+		long long timeNs;			// timestamp for receive buffer
 		int samples_read = SoapySDRDevice_readStream(sdr, rxStream, bufs,
 			num_elems, &flags, &timeNs, SOAPYSDR_READSTREAM_TIMEOUT_US);
 		if(samples_read < 0) {		// when it's negative, it's the error code

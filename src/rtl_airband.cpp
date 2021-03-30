@@ -20,15 +20,15 @@
 
 #include "config.h"
 
-#if defined USE_BCM_VC && !defined __arm__
+#if defined WITH_BCM_VC && !defined __arm__
 #error Broadcom VideoCore support can only be enabled on ARM builds
 #endif
 
-// From this point we may safely assume that USE_BCM_VC implies __arm__
+// From this point we may safely assume that WITH_BCM_VC implies __arm__
 
 #if defined (__arm__) || defined (__aarch64__)
 
-#ifdef USE_BCM_VC
+#ifdef WITH_BCM_VC
 #include "hello_fft/mailbox.h"
 #include "hello_fft/gpu_fft.h"
 #endif
@@ -209,7 +209,7 @@ class AFC
 {
 	const status _prev_axcindicate;
 
-#ifdef USE_BCM_VC
+#ifdef WITH_BCM_VC
 	float square(const GPU_FFT_COMPLEX *fft_results, size_t index)
 	{
 		return fft_results[index].re * fft_results[index].re + fft_results[index].im * fft_results[index].im;
@@ -293,7 +293,7 @@ void init_demod(demod_params_t *params, Signal *signal, int device_start, int de
 	params->device_start = device_start;
 	params->device_end = device_end;
 
-#ifndef USE_BCM_VC
+#ifndef WITH_BCM_VC
 	params->fftin = fftwf_alloc_complex(fft_size);
 	params->fftout = fftwf_alloc_complex(fft_size);
 	params->fft = fftwf_plan_dft_1d(fft_size, params->fftin, params->fftout, FFTW_FORWARD, FFTW_MEASURE);
@@ -325,7 +325,7 @@ void *demodulate(void *params) {
 	debug_print("Starting demod thread, devices %d:%d, signal %p\n", demod_params->device_start, demod_params->device_end, demod_params->mp3_signal);
 
 	// initialize fft engine
-#ifdef USE_BCM_VC
+#ifdef WITH_BCM_VC
 	int mb = mbox_open();
 	struct GPU_FFT *fft;
 	int ret = gpu_fft_prepare(mb, fft_size_log, GPU_FFT_FWD, FFT_BATCH, &fft);
@@ -360,7 +360,7 @@ void *demodulate(void *params) {
 	// initialize fft window
 	// blackman 7
 	// the whole matrix is computed
-#ifdef USE_BCM_VC
+#ifdef WITH_BCM_VC
 	ALIGN float ALIGN2 window[fft_size * 2];
 #else
 	ALIGN float ALIGN2 window[fft_size];
@@ -377,7 +377,7 @@ void *demodulate(void *params) {
 			+ (a4 * cos((8.0 * M_PI * i) / (fft_size - 1)))
 			- (a5 * cos((10.0 * M_PI * i) / (fft_size - 1)))
 			+ (a6 * cos((12.0 * M_PI * i) / (fft_size - 1)));
-#ifdef USE_BCM_VC
+#ifdef WITH_BCM_VC
 		window[i * 2] = window[i * 2 + 1] = (float)x;
 #else
 		window[i] = (float)x;
@@ -393,7 +393,7 @@ void *demodulate(void *params) {
 	while (true) {
 
 		if(do_exit) {
-#ifdef USE_BCM_VC
+#ifdef WITH_BCM_VC
 			log(LOG_INFO, "Freeing GPU memory\n");
 			gpu_fft_release(fft);
 #endif
@@ -436,7 +436,7 @@ void *demodulate(void *params) {
 
 		if(dev->input->sfmt == SFMT_S16) {
 			float const scale = 1.0f / dev->input->fullscale;
-#ifdef USE_BCM_VC
+#ifdef WITH_BCM_VC
 			struct GPU_FFT_COMPLEX *ptr = fft->in;
 			for(size_t b = 0; b < FFT_BATCH; b++, ptr += fft->step) {
 				short *buf2 = (short *)(dev->input->buffer + dev->input->bufs + b * bps);
@@ -454,7 +454,7 @@ void *demodulate(void *params) {
 #endif
 		} else if(dev->input->sfmt == SFMT_F32) {
 			float const scale = 1.0f / dev->input->fullscale;
-#ifdef USE_BCM_VC
+#ifdef WITH_BCM_VC
 			struct GPU_FFT_COMPLEX *ptr = fft->in;
 			for(size_t b = 0; b < FFT_BATCH; b++, ptr += fft->step) {
 				float *buf2 = (float *)(dev->input->buffer + dev->input->bufs + b * bps);
@@ -472,7 +472,7 @@ void *demodulate(void *params) {
 #endif
 		} else {	// S8 or U8
 			levels_ptr = (dev->input->sfmt == SFMT_U8 ? levels_u8 : levels_s8);
-#ifdef USE_BCM_VC
+#ifdef WITH_BCM_VC
 			sample_fft_arg sfa = {fft_size / 4, fft->in};
 			for (size_t i = 0; i < FFT_BATCH; i++) {
 				samplefft(&sfa, dev->input->buffer + dev->input->bufs + i * bps, window, levels_ptr);
@@ -494,13 +494,13 @@ void *demodulate(void *params) {
 			}
 #endif
 		}
-#ifdef USE_BCM_VC
+#ifdef WITH_BCM_VC
 		gpu_fft_execute(fft);
 #else
 		fftwf_execute(demod_params->fft);
 #endif
 
-#ifdef USE_BCM_VC
+#ifdef WITH_BCM_VC
 		for (int i = 0; i < dev->channel_count; i++) {
 			float *wavein = dev->channels[i].wavein + dev->waveend;
 			__builtin_prefetch(wavein, 1);
@@ -528,7 +528,7 @@ void *demodulate(void *params) {
 				dev->channels[j].iq_in[2*dev->waveend+1] = fftout[dev->bins[j]][1];
 			}
 		}
-#endif // USE_BCM_VC
+#endif // WITH_BCM_VC
 
 		dev->waveend += FFT_BATCH;
 
@@ -644,7 +644,7 @@ void *demodulate(void *params) {
 					memmove(channel->iq_in, channel->iq_in + 2 * WAVE_BATCH, (dev->waveend - WAVE_BATCH) * sizeof(float) * 2);
 				}
 
-#ifdef USE_BCM_VC
+#ifdef WITH_BCM_VC
 				afc.finalize(dev, i, fft->out);
 #else
 				afc.finalize(dev, i, demod_params->fftout);
@@ -799,7 +799,7 @@ int main(int argc, char* argv[]) {
 	// If executing other than as root, GPU memory gets alloc'd and the
 	// 'permission denied' message on /dev/mem kills rtl_airband without
 	// releasing GPU memory.
-#ifdef USE_BCM_VC
+#ifdef WITH_BCM_VC
 	// XXX should probably do this check in other circumstances also.
 	if(0 != getuid()) {
 		cerr<<"FFT library requires that rtl_airband be executed as root\n";
@@ -837,7 +837,7 @@ int main(int argc, char* argv[]) {
 		if(root.exists("localtime") && (bool)root["localtime"] == true)
 			use_localtime = true;
 		if(root.exists("multiple_demod_threads") && (bool)root["multiple_demod_threads"] == true) {
-#ifdef USE_BCM_VC
+#ifdef WITH_BCM_VC
 			cerr<<"Using multiple_demod_threads not supported with BCM VideoCore for FFT\n";
 			exit(1);
 #endif

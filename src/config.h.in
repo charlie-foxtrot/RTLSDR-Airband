@@ -26,5 +26,5 @@
 #cmakedefine WITH_PROFILING
 #cmakedefine WITH_PULSEAUDIO
 #cmakedefine NFM
-#cmakedefine USE_BCM_VC
+#cmakedefine WITH_BCM_VC
 #endif // !_CONFIG_H

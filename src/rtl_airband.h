@@ -30,7 +30,7 @@
 #include <libconfig.h++>
 
 #include "config.h"
-#ifdef USE_BCM_VC
+#ifdef WITH_BCM_VC
 #include "hello_fft/gpu_fft.h"
 #else
 #include <fftw3.h>
@@ -95,7 +95,7 @@
 #define RESET_BIT(a, x) (a) &= ~(1 << (x))
 #define IS_SET(a, x) (a) & (1 << (x))
 
-#if defined USE_BCM_VC
+#if defined WITH_BCM_VC
 struct sample_fft_arg
 {
 	size_t fft_size_by4;
@@ -336,7 +336,7 @@ struct demod_params_t {
 	int device_start;
 	int device_end;
 
-#ifndef USE_BCM_VC
+#ifndef WITH_BCM_VC
 	fftwf_plan fft;
 	fftwf_complex* fftin;
 	fftwf_complex* fftout;

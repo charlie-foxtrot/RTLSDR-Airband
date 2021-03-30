@@ -11,8 +11,7 @@ SET_SOURCE_FILES_PROPERTIES(${hello_fft_source_files} PROPERTIES LANGUAGE CXX )
 add_library(hello_fft
 	${hello_fft_source_files}
 )
-# FIXME: find VC include path automatically
 target_include_directories(hello_fft PUBLIC
 	".."
-	"/opt/vc/include"
+	${BCM_VC_INCLUDE_DIRS}
 )

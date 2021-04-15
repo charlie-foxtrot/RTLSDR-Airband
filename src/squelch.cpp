@@ -148,13 +148,13 @@ void Squelch::process_raw_sample(const float &sample) {
 	sample_count_++;
 
 	// Auto noise floor
-	//  - doing this every 16 samples instead of every sample allows a gradual signal increase
+	//  - Doing this every 16 samples instead of every sample allows a gradual signal increase
 	//    to cross the squelch threshold (that is a function of the noise floor) sooner.
-	//  - Not updating when squelch is open prevents the noise floor (and squelch threshold) from
-	//    slowly increasing during a long signal.
-	// TODO: is there an issue not updating noise floor when squelch is open?  Mabye a sharp
-	//       increase in noise causing squelch to open and never close?
-	if (sample_count_ % 16 == 0 && !is_open() && !signal_outside_filter()) {
+	//  - Updating even when squelch is open and / or signal is outside filter means the noise
+	//    floor (and squelch threshold) will slowly increasing during a long signal.  This can lead
+	//    to flapping, but this keeps a sudden and sustained increase of noise from locking squelch
+	//    OPEN.
+	if (sample_count_ % 16 == 0) {
 		calculate_noise_floor();
 	}
 

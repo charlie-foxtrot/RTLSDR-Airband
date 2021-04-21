@@ -315,6 +315,7 @@ struct mixinput_t {
 	float ampfactor;
 	float ampl, ampr;
 	bool ready;
+	bool has_signal;
 	pthread_mutex_t mutex;
 	size_t input_overrun_count;
 };
@@ -402,7 +403,7 @@ float level_to_dBFS(const float &level);
 mixer_t *getmixerbyname(const char *name);
 int mixer_connect_input(mixer_t *mixer, float ampfactor, float balance);
 void mixer_disable_input(mixer_t *mixer, int input_idx);
-void mixer_put_samples(mixer_t *mixer, int input_idx, float *samples, unsigned int len);
+void mixer_put_samples(mixer_t *mixer, int input_idx, float *samples, bool has_signal, unsigned int len);
 void *mixer_thread(void *params);
 const char *mixer_get_error();
 

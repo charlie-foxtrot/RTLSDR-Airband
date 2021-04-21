@@ -75,6 +75,7 @@ int mixer_connect_input(mixer_t *mixer, float ampfactor, float balance) {
 	if(balance != 0.0f)
 		mixer->channel.mode = MM_STEREO;
 	mixer->inputs[i].ready = false;
+	mixer->inputs[i].has_signal = false;
 	mixer->inputs[i].input_overrun_count = 0;
 	SET_BIT(mixer->input_mask, i);
 	SET_BIT(mixer->inputs_todo, i);
@@ -93,13 +94,16 @@ void mixer_disable_input(mixer_t *mixer, int input_idx) {
 	}
 }
 
-void mixer_put_samples(mixer_t *mixer, int input_idx, float *samples, unsigned int len) {
+void mixer_put_samples(mixer_t *mixer, int input_idx, float *samples, bool has_signal, unsigned int len) {
 	assert(mixer);
 	assert(samples);
 	assert(input_idx < mixer->input_count);
 	mixinput_t *input = &mixer->inputs[input_idx];
 	pthread_mutex_lock(&input->mutex);
-	memcpy(input->wavein, samples, len * sizeof(float));
+	input->has_signal = has_signal;
+	if (has_signal) {
+		memcpy(input->wavein, samples, len * sizeof(float));
+	}
 	if(input->ready == true) {
 		debug_print("input %d overrun\n", input_idx);
 		input->input_overrun_count++;
@@ -109,19 +113,13 @@ void mixer_put_samples(mixer_t *mixer, int input_idx, float *samples, unsigned i
 	pthread_mutex_unlock(&input->mutex);
 }
 
-static bool mix_waveforms(float *sum, float *in, float mult, int size) {
-	if(mult == 0.0f) return false;
-	bool squelch_open = false;
+void mix_waveforms(float *sum, float *in, float mult, int size) {
+	if (mult == 0.0f) {
+		return;
+	}
 	for(int s = 0; s < size; s++) {
 		sum[s] += in[s] * mult;
 	}
-	for(int s = 0; s < size; s++) {
-		if(in[s] != 0.0f) {
-			squelch_open = true;
-			break;
-		}
-	}
-	return squelch_open;
 }
 
 /* Samples are delivered to mixer inputs in batches of WAVE_BATCH size (default 1000, ie. 1/8 secs
@@ -180,13 +178,14 @@ void *mixer_thread(void *param) {
 						channel->state = CH_WORKING;
 					}
 					debug_bulk_print("mixer[%d]: ampleft=%.1f ampright=%.1f\n", i, input->ampfactor * input->ampl, input->ampfactor * input->ampr);
-					/* left channel */
-					if(mix_waveforms(channel->waveout, input->wavein, input->ampfactor * input->ampl, WAVE_BATCH))
+					if(input->has_signal) {
+						/* left channel */
+						mix_waveforms(channel->waveout, input->wavein, input->ampfactor * input->ampl, WAVE_BATCH);
+						/* right channel */
+						if(channel->mode == MM_STEREO) {
+							mix_waveforms(channel->waveout_r, input->wavein, input->ampfactor * input->ampr, WAVE_BATCH);
+						}
 						channel->axcindicate = SIGNAL;
-					/* right channel */
-					if(channel->mode == MM_STEREO) {
-						if(mix_waveforms(channel->waveout_r, input->wavein, input->ampfactor * input->ampr, WAVE_BATCH))
-							channel->axcindicate = SIGNAL;
 					}
 					input->ready = false;
 					RESET_BIT(mixer->inputs_todo, j);

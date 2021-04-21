@@ -515,7 +515,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 			gettimeofday(&fdata->last_write_time, NULL);
 		} else if(channel->outputs[k].type == O_MIXER) {
 			mixer_data *mdata = (mixer_data *)(channel->outputs[k].data);
-			mixer_put_samples(mdata->mixer, mdata->input, channel->waveout, WAVE_BATCH);
+			mixer_put_samples(mdata->mixer, mdata->input, channel->waveout, channel->axcindicate != NO_SIGNAL, WAVE_BATCH);
 #ifdef WITH_PULSEAUDIO
 		} else if(channel->outputs[k].type == O_PULSE) {
 			pulse_data *pdata = (pulse_data *)(channel->outputs[k].data);

@@ -262,6 +262,9 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		channel->freq_idx = 0;
 		channel->highpass = chans[j].exists("highpass") ? (int)chans[j]["highpass"] : 100;
 		channel->lowpass = chans[j].exists("lowpass") ? (int)chans[j]["lowpass"] : 2500;
+		channel->lame = NULL;
+		channel->lamebuf = NULL;
+
 		if(chans[j].exists("modulation")) {
 #ifdef NFM
 			if(!strncmp(chans[j]["modulation"], "nfm", 3)) {

@@ -285,6 +285,7 @@ struct channel_t {
 	int highpass;               // highpass filter cutoff
 	int lowpass;                // lowpass filter cutoff
 	lame_t lame;                // Context for LAME MP3 encoding if needed
+	unsigned char *lamebuf;		// Buffer used by each lame encode
 };
 
 enum rec_modes { R_MULTICHANNEL, R_SCAN };

@@ -291,21 +291,17 @@ static int open_file(file_data *fdata, mix_modes mixmode, int is_audio) {
 	return 0;
 }
 
-// Buffer used by each lame encode. Each channel is handled sequentially by
-// the output thread, so this is reused sequentially.
-unsigned char lamebuf[LAMEBUF_SIZE];
-
 static void close_file(channel_t *channel, file_data *fdata) {
 	if (!fdata) {
 		return;
 	}
 
 	if(fdata->type == O_FILE && fdata->f && channel->lame) {
-		int encoded = lame_encode_flush_nogap(channel->lame, lamebuf, LAMEBUF_SIZE);
+		int encoded = lame_encode_flush_nogap(channel->lame, channel->lamebuf, LAMEBUF_SIZE);
 		debug_print("closing file %s flushed %d\n", fdata->file_path, encoded);
 
 		if (encoded > 0) {
-			size_t written = fwrite((void *)lamebuf, 1, (size_t)encoded, fdata->f);
+			size_t written = fwrite((void *)channel->lamebuf, 1, (size_t)encoded, fdata->f);
 			if (written == 0 || written < (size_t)encoded)
 				log(LOG_WARNING, "Problem writing %s (%s)\n", fdata->file_path, strerror(errno));
 		}
@@ -425,7 +421,6 @@ static bool output_file_ready(channel_t *channel, file_data *fdata, mix_modes mi
 	return true;
 }
 
-int16_t iq_buf[2 * WAVE_BATCH];
 // Create all the output for a particular channel.
 void process_outputs(channel_t *channel, int cur_scan_freq) {
 	int mp3_bytes = 0;
@@ -436,7 +431,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 			channel->waveout,
 			(channel->mode == MM_STEREO ? channel->waveout_r : NULL),
 			WAVE_BATCH,
-			lamebuf,
+			channel->lamebuf,
 			LAMEBUF_SIZE
 		);
 		if (mp3_bytes < 0)
@@ -447,7 +442,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 		if(channel->outputs[k].type == O_ICECAST) {
 			icecast_data *icecast = (icecast_data *)(channel->outputs[k].data);
 			if(icecast->shout == NULL || mp3_bytes <= 0) continue;
-			int ret = shout_send(icecast->shout, lamebuf, mp3_bytes);
+			int ret = shout_send(icecast->shout, channel->lamebuf, mp3_bytes);
 			if (ret != SHOUTERR_SUCCESS || shout_queuelen(icecast->shout) > MAX_SHOUT_QUEUELEN) {
 				if (shout_queuelen(icecast->shout) > MAX_SHOUT_QUEUELEN)
 					log(LOG_WARNING, "Exceeded max backlog for %s:%d/%s, disconnecting\n",
@@ -490,17 +485,16 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 			};
 
 			size_t buflen = 0, written = 0;
-			void *dataptr = NULL;
 			if (channel->outputs[k].type == O_FILE) {
-				dataptr = lamebuf;
 				buflen = (size_t)mp3_bytes;
+				written = fwrite(channel->lamebuf, 1, buflen, fdata->f);
 			} else if(channel->outputs[k].type == O_RAWFILE) {
-				dataptr = iq_buf;
+				int16_t iq_buf[2 * WAVE_BATCH];
 				buflen = 2 * WAVE_BATCH * sizeof(int16_t);
 				for(size_t k = 0; k < 2 * WAVE_BATCH; iq_buf[k] = (int16_t)(channel->iq_out[k]), k++)
 					;
+				written = fwrite(iq_buf, 1, buflen, fdata->f);
 			}
-			written = fwrite(dataptr, 1, buflen, fdata->f);
 			if(written < buflen) {
 				if(ferror(fdata->f))
 					log(LOG_WARNING, "Cannot write to %s (%s), output disabled\n",
@@ -515,7 +509,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 			gettimeofday(&fdata->last_write_time, NULL);
 		} else if(channel->outputs[k].type == O_MIXER) {
 			mixer_data *mdata = (mixer_data *)(channel->outputs[k].data);
-			mixer_put_samples(mdata->mixer, mdata->input, channel->waveout, WAVE_BATCH);
+			mixer_put_samples(mdata->mixer, mdata->input, channel->waveout, channel->axcindicate != NO_SIGNAL, WAVE_BATCH);
 #ifdef WITH_PULSEAUDIO
 		} else if(channel->outputs[k].type == O_PULSE) {
 			pulse_data *pdata = (pulse_data *)(channel->outputs[k].data);

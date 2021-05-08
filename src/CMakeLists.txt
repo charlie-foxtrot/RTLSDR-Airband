@@ -5,6 +5,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 
 if(UNIX OR MINGW)
 	add_definitions(-D_FILE_OFFSET_BITS=64)
+	# isnormal()
+	add_definitions(-D_POSIX_C_SOURCE=200112L)
 endif()
 
 CHECK_CXX_COMPILER_FLAG(-pthread CXX_HAS_PTHREAD)

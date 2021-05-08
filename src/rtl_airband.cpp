@@ -624,6 +624,11 @@ void *demodulate(void *params) {
 						// apply the notch filter, will be a no-op if not configured
 						fparms->notch_filter.apply(channel->waveout[j]);
 
+						// sanitize the output to prevent assertion failure in libmp3lame on NaN or infinity
+						if(!isnormal(channel->waveout[j])) {
+							channel->waveout[j] = 0.f;
+						}
+
 						channel->axcindicate = SIGNAL;
 						if(channel->has_iq_outputs) {
 							channel->iq_out[2*(j - AGC_EXTRA)] = real;

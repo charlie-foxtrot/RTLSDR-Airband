@@ -405,7 +405,7 @@ void Squelch::calculate_noise_floor(void) {
 	static const float decay_factor = 0.97f;
 	static const float new_factor = 1.0 - decay_factor;
 
-	noise_floor_ = noise_floor_ * decay_factor + std::min(pre_filter_.capped_, noise_floor_) * new_factor + 0.00000003f;
+	noise_floor_ = noise_floor_ * decay_factor + std::min(pre_filter_.capped_, noise_floor_) * new_factor + 1e-6f;
 
 	// Need to update moving_avg_cap_ - depends on noise_floor_
 	calculate_moving_avg_cap();

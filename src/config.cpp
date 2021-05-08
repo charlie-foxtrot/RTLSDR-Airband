@@ -213,6 +213,7 @@ static struct freq_t *mk_freqlist( int n )
 		fl[i].agcavgfast = 0.5f;
 		fl[i].squelch = Squelch();
 		fl[i].active_counter = 0;
+		fl[i].modulation = MOD_AM;
 	}
 	return fl;
 }
@@ -255,7 +256,6 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			channel->waveout[k] = 0.5;
 		}
 		channel->axcindicate = NO_SIGNAL;
-		channel->modulation = MOD_AM;
 		channel->mode = MM_MONO;
 		channel->need_mp3 = 0;
 		channel->freq_count = 1;
@@ -265,16 +265,14 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		channel->lame = NULL;
 		channel->lamebuf = NULL;
 
+		modulations channel_modulation = MOD_AM;
 		if(chans[j].exists("modulation")) {
 #ifdef NFM
-			if(!strncmp(chans[j]["modulation"], "nfm", 3)) {
-				channel->modulation = MOD_NFM;
-				channel->needs_raw_iq = 1;
+			if(strncmp(chans[j]["modulation"], "nfm", 3) == 0) {
+				channel_modulation = MOD_NFM;
 			} else
 #endif
-			if(!strncmp(chans[j]["modulation"], "am", 2)) {
-				channel->modulation = MOD_AM;
-			} else {
+			if(strncmp(chans[j]["modulation"], "am", 2) != 0) {
 				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: unknown modulation\n";
 				error();
 			}
@@ -288,6 +286,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			{
 				channel->freqlist[0].label = strdup(chans[j]["label"]);
 			}
+			channel->freqlist[0].modulation = channel_modulation;
 		} else { /* R_SCAN */
 			channel->freq_count = chans[j]["freqs"].getLength();
 			if(channel->freq_count < 1) {
@@ -315,10 +314,35 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 					<<channel->freq_count<<" elements\n";
 				error();
 			}
+			if(chans[j].exists("modulation") && chans[j].exists("modulations")) {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: can't set both modulation and modulations\n";
+				error();
+			}
+			if(chans[j].exists("modulations") && chans[j]["modulations"].getLength() < channel->freq_count) {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: modulations should be a list with at least "
+					<<channel->freq_count<<" elements\n";
+				error();
+			}
+
 			for(int f = 0; f<channel->freq_count; f++) {
 				channel->freqlist[f].frequency = parse_anynum2int((chans[j]["freqs"][f]));
 				if(chans[j].exists("labels")) {
 					channel->freqlist[f].label = strdup(chans[j]["labels"][f]);
+				}
+				if(chans[j].exists("modulations")) {
+#ifdef NFM
+					if(strncmp(chans[j]["modulations"][f], "nfm", 3) == 0) {
+						channel->freqlist[f].modulation = MOD_NFM;
+					} else
+#endif
+					if(strncmp(chans[j]["modulations"][f], "am", 2) == 0) {
+						channel->freqlist[f].modulation = MOD_AM;
+					} else {
+						cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] modulations.["<<f<<"]: unknown modulation\n";
+						error();
+					}
+				} else {
+					channel->freqlist[f].modulation = channel_modulation;
 				}
 			}
 // Set initial frequency for scanning
@@ -501,6 +525,15 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			 / (double)(dev->input->sample_rate / fft_size) - 1.0
 		) % fft_size;
 		debug_print("bins[%d]: %zu\n", jj, dev->bins[jj]);
+
+#ifdef NFM
+		for(int f = 0; f < channel->freq_count; f++) {
+			if(channel->freqlist[f].modulation == MOD_NFM) {
+				channel->needs_raw_iq = 1;
+				break;
+			}
+		}
+#endif
 
 		if(channel->needs_raw_iq) {
 // Downmixing is done only for NFM and raw IQ outputs. It's not critical to have some residual

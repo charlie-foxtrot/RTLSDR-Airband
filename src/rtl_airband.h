@@ -256,6 +256,7 @@ struct freq_t {
 	size_t active_counter;		// count of loops where channel has signal
 	NotchFilter notch_filter;	// notch filter - good to remove CTCSS tones
 	LowpassFilter lowpass_filter;	// lowpass filter, applied to I/Q after derotation, set at bandwidth/2 to remove out of band noise
+	enum modulations modulation;
 };
 struct channel_t {
 	float wavein[WAVE_LEN];		// FFT output waveform
@@ -269,7 +270,6 @@ struct channel_t {
 	float alpha;
 #endif
 	uint32_t dm_dphi, dm_phi;	// derotation frequency and current phase value
-	enum modulations modulation;
 	enum mix_modes mode;		// mono or stereo
 	status axcindicate;
 	unsigned char afc;			//0 - AFC disabled; 1 - minimal AFC; 2 - more aggressive AFC and so on to 255

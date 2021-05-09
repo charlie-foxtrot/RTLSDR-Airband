@@ -572,7 +572,7 @@ void *demodulate(void *params) {
 						}
 					}
 
-					if(channel->modulation == MOD_AM) {
+					if(fparms->modulation == MOD_AM) {
 						// if squelch is just opening then bootstrip agcavgfast with prior values of wavein
 						if (fparms->squelch.first_open_sample()) {
 							for (int k = j - AGC_EXTRA; k < j; k++) {
@@ -591,7 +591,7 @@ void *demodulate(void *params) {
 
 					// If squelch is still open then do modulation-specific processing
 					if (fparms->squelch.is_open()) {
-						if(channel->modulation == MOD_AM) {
+						if(fparms->modulation == MOD_AM) {
 
 							if( channel->wavein[j] > fparms->squelch.squelch_level() ) {
 								fparms->agcavgfast = fparms->agcavgfast * 0.995f + channel->wavein[j] * 0.005f;
@@ -604,7 +604,7 @@ void *demodulate(void *params) {
 							}
 						}
 #ifdef NFM
-						else if(channel->modulation == MOD_NFM) {
+						else if(fparms->modulation == MOD_NFM) {
 							// FM demod
 							if(fm_demod == FM_FAST_ATAN2) {
 								channel->waveout[j] = polar_disc_fast(real, imag, channel->pr, channel->pj);

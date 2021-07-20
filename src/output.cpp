@@ -489,11 +489,8 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 				buflen = (size_t)mp3_bytes;
 				written = fwrite(channel->lamebuf, 1, buflen, fdata->f);
 			} else if(channel->outputs[k].type == O_RAWFILE) {
-				int16_t iq_buf[2 * WAVE_BATCH];
-				buflen = 2 * WAVE_BATCH * sizeof(int16_t);
-				for(size_t k = 0; k < 2 * WAVE_BATCH; iq_buf[k] = (int16_t)(1024.0f * channel->iq_out[k]), k++)
-					;
-				written = fwrite(iq_buf, 1, buflen, fdata->f);
+				buflen = 2 * sizeof(float) * WAVE_BATCH;
+				written = fwrite(channel->iq_out, 1, buflen, fdata->f);
 			}
 			if(written < buflen) {
 				if(ferror(fdata->f))

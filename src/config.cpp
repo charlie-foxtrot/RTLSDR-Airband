@@ -120,10 +120,10 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 
 			if (outs[o].exists("include_freq") && (bool)(outs[o]["include_freq"]) && channel->freq_count == 1) {
 				char tmp[64];
-				snprintf(tmp, sizeof(tmp), "_%d.cs16", channel->freqlist[0].frequency);
+				snprintf(tmp, sizeof(tmp), "_%d.cf32", channel->freqlist[0].frequency);
 				fdata->suffix = strdup(tmp);
 			} else {
-				fdata->suffix = strdup(".cs16");
+				fdata->suffix = strdup(".cf32");
 			}
 
 			fdata->continuous = outs[o].exists("continuous") ?

@@ -152,9 +152,24 @@ void *mixer_thread(void *param) {
 	while(!do_exit) {
 		usleep(interval_usec);
 		if(do_exit) return 0;
+
+                // iterate over all mixers
 		for(int i = 0; i < mixer_count; i++) {
 			mixer_t *mixer = mixers + i;
 			if(mixer->enabled == false) continue;
+
+                        // do we have the scanner mixer? currently identified by its name "scanner". (experimental)
+                        if(!strcmp(mixer->name, "scanner")) {
+                        	mixer->is_scanner = true;
+                        	if (mixer->hold_count > 0) {
+                        		// scanner is still holding on an input but count down runs...
+                            		mixer->hold_count--;
+                          	} else {
+                            		// scanner currently not holding - impossible input -1 means no active input
+                            		mixer->scanner_active_input=-1;
+                          	}
+                        }
+
 			channel_t *channel = &mixer->channel;
 
 			if(channel->state == CH_READY) {		// previous output not yet handled by output thread
@@ -166,6 +181,8 @@ void *mixer_thread(void *param) {
 				}
 			}
 
+
+                        // iterate over all inputs of the mixer
 			for(int j = 0; j < mixer->input_count; j++) {
 				mixinput_t *input = mixer->inputs + j;
 				pthread_mutex_lock(&input->mutex);
@@ -178,14 +195,23 @@ void *mixer_thread(void *param) {
 						channel->state = CH_WORKING;
 					}
 					debug_bulk_print("mixer[%d]: ampleft=%.1f ampright=%.1f\n", i, input->ampfactor * input->ampl, input->ampfactor * input->ampr);
-					if(input->has_signal) {
+
+                                        // (re)set scanner to hold if necessary
+                                        if(input->has_signal && mixer->is_scanner && (mixer->scanner_active_input==-1 || mixer->scanner_active_input==j)) {
+                                        	// we have to hold on the current input
+                                        	mixer->hold_count = 20;   // reset the counter to hold for 20 cycles (a bit more than a second)
+                                        	mixer->scanner_active_input = j;   // j is th ecurrent channel to hold on
+                                        }
+
+					// test if the current input should be mixed into the output
+                                        if(input->has_signal && (!mixer->is_scanner || (mixer->is_scanner && j==mixer->scanner_active_input))) {
 						/* left channel */
 						mix_waveforms(channel->waveout, input->wavein, input->ampfactor * input->ampl, WAVE_BATCH);
 						/* right channel */
 						if(channel->mode == MM_STEREO) {
 							mix_waveforms(channel->waveout_r, input->wavein, input->ampfactor * input->ampr, WAVE_BATCH);
 						}
-						channel->axcindicate = SIGNAL;
+	  					channel->axcindicate = SIGNAL;
 					}
 					input->ready = false;
 					RESET_BIT(mixer->inputs_todo, j);

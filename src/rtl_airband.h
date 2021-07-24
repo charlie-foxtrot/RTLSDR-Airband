@@ -331,6 +331,9 @@ struct mixer_t {
 	channel_t channel;
 	mixinput_t inputs[MAX_MIXINPUTS];
 	size_t output_overrun_count;
+        bool is_scanner;                     // true --> this mixer acts as a scanner
+        int scanner_active_input;            // index of the current input; -1 if non is active
+        int hold_count;                      // counter indicating how many cycles to hold on an input; 0 means not holding but scanning
 };
 
 struct demod_params_t {

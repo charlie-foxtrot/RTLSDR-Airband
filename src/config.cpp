@@ -189,8 +189,40 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				pdata->stream_name = strdup(buf);
 			}
 #endif
+#ifdef WITH_RAW_STREAM
+		} else if(!strncmp(outs[o]["type"], "raw_stream", 6)) {
+			if(parsing_mixers) {
+				cerr << "Configuration error: mixers.["<<i<<"] outputs.["<<o<<"]: raw stream not supported for mixers, ignoring";
+				continue;
+			}
+
+			channel->outputs[oo].data = XCALLOC(1, sizeof(struct raw_stream_data));
+			channel->outputs[oo].type = O_RAW_STREAM;
+
+			raw_stream_data *sdata = (raw_stream_data *)channel->outputs[oo].data;
+
+			sdata->continuous = outs[o].exists("continuous") ? (bool)(outs[o]["continuous"]) : false;
+
+			if (outs[o].exists("dest_ip")) {
+				sdata->dest_ip = strdup(outs[o]["dest_ip"]);
+			} else {
+				cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: missing dest_ip\n";
+				error();
+			}
+
+			if (outs[o].exists("dest_port")) {
+				sdata->dest_port = (int)outs[o]["dest_port"];
+			} else {
+				cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: missing dest_port\n";
+				error();
+			}
+#endif
 		} else {
-			cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: unknown output type\n";
+			if(parsing_mixers) {
+				cerr << "Configuration error: mixers.["<<i<<"] outputs.["<<o<<"]: unknown output type\n";
+			} else {
+				cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: unknown output type\n";
+			}
 			error();
 		}
 		channel->outputs[oo].enabled = true;

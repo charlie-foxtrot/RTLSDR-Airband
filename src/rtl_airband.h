@@ -39,6 +39,9 @@
 #include <pulse/context.h>
 #include <pulse/stream.h>
 #endif
+#ifdef WITH_RAW_STREAM
+#include <netinet/in.h>		// sockaddr_in
+#endif
 #include "input-common.h"	// input_t
 #include "squelch.h"
 
@@ -121,6 +124,9 @@ enum output_type {
 #ifdef WITH_PULSEAUDIO
 	, O_PULSE
 #endif
+#ifdef WITH_RAW_STREAM
+	, O_RAW_STREAM
+#endif
 };
 
 struct icecast_data {
@@ -161,6 +167,18 @@ struct pulse_data {
 	pa_channel_map lmap, rmap;
 	mix_modes mode;
 	bool continuous;
+};
+#endif
+
+#ifdef WITH_RAW_STREAM
+struct raw_stream_data {
+	bool continuous;
+	const char *dest_ip;
+	int dest_port;
+
+	int send_socket;
+	struct sockaddr_in dest_addr;
+	int dest_addr_len;
 };
 #endif
 
@@ -421,6 +439,14 @@ void pulse_start();
 void pulse_shutdown(pulse_data *pdata);
 void pulse_write_stream(pulse_data *pdata, mix_modes mode, float *data_left, float *data_right, size_t len);
 #endif
+
+#ifdef WITH_RAW_STREAM
+// raw_stream.cpp
+bool raw_stream_init(raw_stream_data *sdata);
+void raw_stream_write(raw_stream_data *sdata, float *data, size_t len);
+void raw_stream_shutdown(raw_stream_data *sdata);
+#endif
+
 #endif /* _RTL_AIRBAND_H */
 
 // vim: ts=4

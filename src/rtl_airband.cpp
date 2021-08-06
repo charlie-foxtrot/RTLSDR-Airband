@@ -1013,6 +1013,14 @@ int main(int argc, char* argv[]) {
 					pulse_init();
 					pulse_setup((pulse_data *)(output->data), channel->mode);
 #endif
+#ifdef WITH_RAW_STREAM
+				} else if(output->type == O_RAW_STREAM) {
+					raw_stream_data *sdata = (raw_stream_data *)(output->data);
+					if (!raw_stream_init(sdata)) {
+						cerr << "Failed to initialize device " << i << " channel " << j << " output " << k << " - aborting\n";
+						error();
+					}
+#endif
 				}
 			}
 		}

@@ -25,6 +25,7 @@
 #cmakedefine WITH_SOAPYSDR
 #cmakedefine WITH_PROFILING
 #cmakedefine WITH_PULSEAUDIO
+#cmakedefine WITH_RAW_STREAM
 #cmakedefine NFM
 #cmakedefine WITH_BCM_VC
 #endif // !_CONFIG_H

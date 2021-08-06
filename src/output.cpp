@@ -515,6 +515,16 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 
 			pulse_write_stream(pdata, channel->mode, channel->waveout, channel->waveout_r, (size_t)WAVE_BATCH * sizeof(float));
 #endif
+#ifdef WITH_RAW_STREAM
+		} else if(channel->outputs[k].type == O_RAW_STREAM) {
+			raw_stream_data *sdata = (raw_stream_data *)channel->outputs[k].data;
+
+			if(sdata->continuous == false && channel->axcindicate == NO_SIGNAL) {
+				continue;
+			}
+
+			raw_stream_write(sdata, channel->waveout, (size_t)WAVE_BATCH * sizeof(float));
+#endif
 		}
 	}
 }
@@ -541,6 +551,11 @@ void disable_channel_outputs(channel_t *channel) {
 		} else if(output->type == O_PULSE) {
 			pulse_data *pdata = (pulse_data *)(output->data);
 			pulse_shutdown(pdata);
+#endif
+#ifdef WITH_RAW_STREAM
+		} else if(output->type == O_RAW_STREAM) {
+			raw_stream_data *sdata = (raw_stream_data *)output->data;
+			raw_stream_shutdown(sdata);
 #endif
 		}
 	}
@@ -821,6 +836,14 @@ void* output_check_thread(void*) {
 							if (pdata->context == NULL){
 								pulse_setup(pdata, dev->channels[j].mode);
 							}
+						}
+#endif
+#ifdef WITH_RAW_STREAM
+					} else if(dev->channels[j].outputs[k].type == O_RAW_STREAM) {
+						raw_stream_data *sdata = (raw_stream_data *)dev->channels[j].outputs[k].data;
+
+						if(dev->input->state == INPUT_FAILED) {
+							raw_stream_shutdown(sdata);
 						}
 #endif
 					}

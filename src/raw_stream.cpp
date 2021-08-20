@@ -26,7 +26,7 @@ bool raw_stream_init(raw_stream_data *sdata) {
 		return false;
 	}
 
-	log(LOG_INFO, "raw_stream: sending to %s:%d\n", sdata->dest_ip, sdata->dest_port);
+	log(LOG_INFO, "raw_stream: sending 1 channel of 32-bit float at %d Hz to %s:%d\n", WAVE_RATE, sdata->dest_ip, sdata->dest_port);
 	return true;
 }
 

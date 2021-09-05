@@ -507,6 +507,19 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 		} else if(channel->outputs[k].type == O_MIXER) {
 			mixer_data *mdata = (mixer_data *)(channel->outputs[k].data);
 			mixer_put_samples(mdata->mixer, mdata->input, channel->waveout, channel->axcindicate != NO_SIGNAL, WAVE_BATCH);
+		} else if(channel->outputs[k].type == O_UDP_STREAM) {
+			udp_stream_data *sdata = (udp_stream_data *)channel->outputs[k].data;
+
+			if(sdata->continuous == false && channel->axcindicate == NO_SIGNAL) {
+				continue;
+			}
+
+			if(channel->mode == MM_MONO) {
+				udp_stream_write(sdata, channel->waveout, (size_t)WAVE_BATCH * sizeof(float));
+			} else {
+				udp_stream_write(sdata, channel->waveout, channel->waveout_r, (size_t)WAVE_BATCH * sizeof(float));
+			}
+
 #ifdef WITH_PULSEAUDIO
 		} else if(channel->outputs[k].type == O_PULSE) {
 			pulse_data *pdata = (pulse_data *)(channel->outputs[k].data);
@@ -514,16 +527,6 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 				continue;
 
 			pulse_write_stream(pdata, channel->mode, channel->waveout, channel->waveout_r, (size_t)WAVE_BATCH * sizeof(float));
-#endif
-#ifdef WITH_RAW_STREAM
-		} else if(channel->outputs[k].type == O_RAW_STREAM) {
-			raw_stream_data *sdata = (raw_stream_data *)channel->outputs[k].data;
-
-			if(sdata->continuous == false && channel->axcindicate == NO_SIGNAL) {
-				continue;
-			}
-
-			raw_stream_write(sdata, channel->waveout, (size_t)WAVE_BATCH * sizeof(float));
 #endif
 		}
 	}
@@ -547,15 +550,13 @@ void disable_channel_outputs(channel_t *channel) {
 		} else if(output->type == O_MIXER) {
 			mixer_data *mdata = (mixer_data *)(output->data);
 			mixer_disable_input(mdata->mixer, mdata->input);
+		} else if(output->type == O_UDP_STREAM) {
+			udp_stream_data *sdata = (udp_stream_data *)output->data;
+			udp_stream_shutdown(sdata);
 #ifdef WITH_PULSEAUDIO
 		} else if(output->type == O_PULSE) {
 			pulse_data *pdata = (pulse_data *)(output->data);
 			pulse_shutdown(pdata);
-#endif
-#ifdef WITH_RAW_STREAM
-		} else if(output->type == O_RAW_STREAM) {
-			raw_stream_data *sdata = (raw_stream_data *)output->data;
-			raw_stream_shutdown(sdata);
 #endif
 		}
 	}
@@ -825,6 +826,12 @@ void* output_check_thread(void*) {
 								shout_setup(icecast, dev->channels[j].mode);
 							}
 						}
+					} else if(dev->channels[j].outputs[k].type == O_UDP_STREAM) {
+						udp_stream_data *sdata = (udp_stream_data *)dev->channels[j].outputs[k].data;
+
+						if(dev->input->state == INPUT_FAILED) {
+							udp_stream_shutdown(sdata);
+						}
 #ifdef WITH_PULSEAUDIO
 					} else if(dev->channels[j].outputs[k].type == O_PULSE) {
 						pulse_data *pdata = (pulse_data *)(dev->channels[j].outputs[k].data);
@@ -836,14 +843,6 @@ void* output_check_thread(void*) {
 							if (pdata->context == NULL){
 								pulse_setup(pdata, dev->channels[j].mode);
 							}
-						}
-#endif
-#ifdef WITH_RAW_STREAM
-					} else if(dev->channels[j].outputs[k].type == O_RAW_STREAM) {
-						raw_stream_data *sdata = (raw_stream_data *)dev->channels[j].outputs[k].data;
-
-						if(dev->input->state == INPUT_FAILED) {
-							raw_stream_shutdown(sdata);
 						}
 #endif
 					}

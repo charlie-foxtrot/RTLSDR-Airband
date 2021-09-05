@@ -28,6 +28,7 @@
 #include <shout/shout.h>
 #include <lame/lame.h>
 #include <libconfig.h++>
+#include <netinet/in.h>         // sockaddr_in
 
 #include "config.h"
 #ifdef WITH_BCM_VC
@@ -38,9 +39,6 @@
 #ifdef WITH_PULSEAUDIO
 #include <pulse/context.h>
 #include <pulse/stream.h>
-#endif
-#ifdef WITH_RAW_STREAM
-#include <netinet/in.h>		// sockaddr_in
 #endif
 #include "input-common.h"	// input_t
 #include "squelch.h"
@@ -120,12 +118,10 @@ enum output_type {
 	O_ICECAST,
 	O_FILE,
 	O_RAWFILE,
-	O_MIXER
+	O_MIXER,
+	O_UDP_STREAM
 #ifdef WITH_PULSEAUDIO
 	, O_PULSE
-#endif
-#ifdef WITH_RAW_STREAM
-	, O_RAW_STREAM
 #endif
 };
 
@@ -156,6 +152,16 @@ struct file_data {
 	enum output_type type;
 };
 
+struct udp_stream_data {
+	bool continuous;
+	const char *dest_ip;
+	int dest_port;
+
+	int send_socket;
+	struct sockaddr_in dest_addr;
+	int dest_addr_len;
+};
+
 #ifdef WITH_PULSEAUDIO
 struct pulse_data {
 	const char *server;
@@ -167,18 +173,6 @@ struct pulse_data {
 	pa_channel_map lmap, rmap;
 	mix_modes mode;
 	bool continuous;
-};
-#endif
-
-#ifdef WITH_RAW_STREAM
-struct raw_stream_data {
-	bool continuous;
-	const char *dest_ip;
-	int dest_port;
-
-	int send_socket;
-	struct sockaddr_in dest_addr;
-	int dest_addr_len;
 };
 #endif
 
@@ -430,6 +424,12 @@ const char *mixer_get_error();
 int parse_devices(libconfig::Setting &devs);
 int parse_mixers(libconfig::Setting &mx);
 
+// udp_stream.cpp
+bool udp_stream_init(udp_stream_data *sdata, mix_modes mode);
+void udp_stream_write(udp_stream_data *sdata, float *data, size_t len);
+void udp_stream_write(udp_stream_data *sdata, float *data_left, float *data_right, size_t len);
+void udp_stream_shutdown(udp_stream_data *sdata);
+
 #ifdef WITH_PULSEAUDIO
 #define PULSE_STREAM_LATENCY_LIMIT 10000000UL
 // pulse.cpp
@@ -438,13 +438,6 @@ int pulse_setup(pulse_data *pdata, mix_modes mixmode);
 void pulse_start();
 void pulse_shutdown(pulse_data *pdata);
 void pulse_write_stream(pulse_data *pdata, mix_modes mode, float *data_left, float *data_right, size_t len);
-#endif
-
-#ifdef WITH_RAW_STREAM
-// raw_stream.cpp
-bool raw_stream_init(raw_stream_data *sdata);
-void raw_stream_write(raw_stream_data *sdata, float *data, size_t len);
-void raw_stream_shutdown(raw_stream_data *sdata);
 #endif
 
 #endif /* _RTL_AIRBAND_H */

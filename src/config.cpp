@@ -65,10 +65,11 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			fdata->type = O_FILE;
 			if (!outs[o].exists("directory") || !outs[o].exists("filename_template")) {
 				if(parsing_mixers) {
-					cerr<<"Configuration error: mixers.["<<i<<"] outputs.["<<o<<"]: both directory and filename_template required for file\n";
+					cerr << "Configuration error: mixers.["<<i<<"] outputs.["<<o<<"]: ";
 				} else {
-					cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: both directory and filename_template required for file\n";
+					cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: ";
 				}
+				cerr << "both directory and filename_template required for file\n";
 				error();
 			}
 			fdata->basename = (char *)XCALLOC(1, strlen(outs[o]["directory"]) + strlen(outs[o]["filename_template"]) + 2);
@@ -165,6 +166,37 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			}
 			debug_print("dev[%d].chan[%d].out[%d] connected to mixer %s as input %d (ampfactor=%.1f balance=%.1f)\n",
 				i, j, o, name, mdata->input, ampfactor, balance);
+		} else if(!strncmp(outs[o]["type"], "udp_stream", 6)) {
+			channel->outputs[oo].data = XCALLOC(1, sizeof(struct udp_stream_data));
+			channel->outputs[oo].type = O_UDP_STREAM;
+
+			udp_stream_data *sdata = (udp_stream_data *)channel->outputs[oo].data;
+
+			sdata->continuous = outs[o].exists("continuous") ? (bool)(outs[o]["continuous"]) : false;
+
+			if (outs[o].exists("dest_ip")) {
+				sdata->dest_ip = strdup(outs[o]["dest_ip"]);
+			} else {
+				if (parsing_mixers) {
+					cerr << "Configuration error: mixers.["<<i<<"] outputs.["<<o<<"]: ";
+				} else {
+					cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: ";
+				}
+				cerr << "missing dest_ip\n";
+				error();
+			}
+
+			if (outs[o].exists("dest_port")) {
+				sdata->dest_port = (int)outs[o]["dest_port"];
+			} else {
+				if (parsing_mixers) {
+					cerr << "Configuration error: mixers.["<<i<<"] outputs.["<<o<<"]: ";
+				} else {
+					cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: ";
+				}
+				cerr << "missing dest_port\n";
+				error();
+			}
 #ifdef WITH_PULSEAUDIO
 		} else if(!strncmp(outs[o]["type"], "pulse", 5)) {
 			channel->outputs[oo].data = XCALLOC(1, sizeof(struct pulse_data));
@@ -189,40 +221,13 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				pdata->stream_name = strdup(buf);
 			}
 #endif
-#ifdef WITH_RAW_STREAM
-		} else if(!strncmp(outs[o]["type"], "raw_stream", 6)) {
-			if(parsing_mixers) {
-				cerr << "Configuration error: mixers.["<<i<<"] outputs.["<<o<<"]: raw stream not supported for mixers, ignoring";
-				continue;
-			}
-
-			channel->outputs[oo].data = XCALLOC(1, sizeof(struct raw_stream_data));
-			channel->outputs[oo].type = O_RAW_STREAM;
-
-			raw_stream_data *sdata = (raw_stream_data *)channel->outputs[oo].data;
-
-			sdata->continuous = outs[o].exists("continuous") ? (bool)(outs[o]["continuous"]) : false;
-
-			if (outs[o].exists("dest_ip")) {
-				sdata->dest_ip = strdup(outs[o]["dest_ip"]);
-			} else {
-				cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: missing dest_ip\n";
-				error();
-			}
-
-			if (outs[o].exists("dest_port")) {
-				sdata->dest_port = (int)outs[o]["dest_port"];
-			} else {
-				cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: missing dest_port\n";
-				error();
-			}
-#endif
 		} else {
 			if(parsing_mixers) {
-				cerr << "Configuration error: mixers.["<<i<<"] outputs.["<<o<<"]: unknown output type\n";
+				cerr << "Configuration error: mixers.["<<i<<"] outputs.["<<o<<"]: ";
 			} else {
-				cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: unknown output type\n";
+				cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: ";
 			}
+			cerr << "unknown output type\n";
 			error();
 		}
 		channel->outputs[oo].enabled = true;

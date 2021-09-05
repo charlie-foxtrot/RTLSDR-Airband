@@ -985,6 +985,12 @@ int main(int argc, char* argv[]) {
 			output_t *output = channel->outputs + k;
 			if(output->type == O_ICECAST) {
 				shout_setup((icecast_data *)(output->data), channel->mode);
+			} else if(output->type == O_UDP_STREAM) {
+				udp_stream_data *sdata = (udp_stream_data *)(output->data);
+				if (!udp_stream_init(sdata, channel->mode)) {
+					cerr << "Failed to initialize mixer " << i << " output " << k << " - aborting\n";
+					error();
+				}
 #ifdef WITH_PULSEAUDIO
 			} else if(output->type == O_PULSE) {
 				pulse_init();
@@ -1008,18 +1014,16 @@ int main(int argc, char* argv[]) {
 				output_t *output = channel->outputs + k;
 				if(output->type == O_ICECAST) {
 					shout_setup((icecast_data *)(output->data), channel->mode);
+				} else if(output->type == O_UDP_STREAM) {
+					udp_stream_data *sdata = (udp_stream_data *)(output->data);
+					if (!udp_stream_init(sdata, channel->mode)) {
+						cerr << "Failed to initialize device " << i << " channel " << j << " output " << k << " - aborting\n";
+						error();
+					}
 #ifdef WITH_PULSEAUDIO
 				} else if(output->type == O_PULSE) {
 					pulse_init();
 					pulse_setup((pulse_data *)(output->data), channel->mode);
-#endif
-#ifdef WITH_RAW_STREAM
-				} else if(output->type == O_RAW_STREAM) {
-					raw_stream_data *sdata = (raw_stream_data *)(output->data);
-					if (!raw_stream_init(sdata)) {
-						cerr << "Failed to initialize device " << i << " channel " << j << " output " << k << " - aborting\n";
-						error();
-					}
 #endif
 				}
 			}

@@ -56,9 +56,6 @@ set(WITH_SOAPYSDR FALSE)
 option(PULSEAUDIO "Enable PulseAudio support" ON)
 set(WITH_PULSEAUDIO FALSE)
 
-option(RAW_STREAM "Enable raw stream output support")
-set(WITH_RAW_STREAM FALSE)
-
 option(PROFILING "Enable profiling with gperftools")
 set(WITH_PROFILING FALSE)
 
@@ -107,11 +104,6 @@ if(PULSEAUDIO)
 		list(APPEND link_dirs ${PULSEAUDIO_LIBRARY_DIRS})
 		set(WITH_PULSEAUDIO TRUE)
 	endif()
-endif()
-
-if(RAW_STREAM)
-	list(APPEND rtl_airband_extra_sources raw_stream.cpp)
-	set(WITH_RAW_STREAM TRUE)
 endif()
 
 if(PROFILING)
@@ -184,7 +176,6 @@ message(STATUS "  - Platform:\t\t${PLATFORM}")
 message(STATUS "  - Broadcom VideoCore GPU:\t${WITH_BCM_VC}")
 message(STATUS "  - NFM support:\t\t${NFM}")
 message(STATUS "  - PulseAudio:\t\trequested: ${PULSEAUDIO}, enabled: ${WITH_PULSEAUDIO}")
-message(STATUS "  - Raw stream output:\trequested: ${RAW_STREAM}, enabled: ${WITH_RAW_STREAM}")
 message(STATUS "  - Profiling:\t\trequested: ${PROFILING}, enabled: ${WITH_PROFILING}")
 
 configure_file(
@@ -210,6 +201,7 @@ add_library (rtl_airband_base OBJECT
 	rtl_airband.cpp
 	squelch.cpp
 	util.cpp
+	udp_stream.cpp
 	${CMAKE_CURRENT_BINARY_DIR}/version.cpp
 	${rtl_airband_extra_sources}
 	)

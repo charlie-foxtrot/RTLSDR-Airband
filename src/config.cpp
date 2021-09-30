@@ -174,20 +174,26 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 
 			sdata->continuous = outs[o].exists("continuous") ? (bool)(outs[o]["continuous"]) : false;
 
-			if (outs[o].exists("dest_ip")) {
-				sdata->dest_ip = strdup(outs[o]["dest_ip"]);
+			if (outs[o].exists("dest_address")) {
+				sdata->dest_address = strdup(outs[o]["dest_address"]);
 			} else {
 				if (parsing_mixers) {
 					cerr << "Configuration error: mixers.["<<i<<"] outputs.["<<o<<"]: ";
 				} else {
 					cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: ";
 				}
-				cerr << "missing dest_ip\n";
+				cerr << "missing dest_address\n";
 				error();
 			}
 
 			if (outs[o].exists("dest_port")) {
-				sdata->dest_port = (int)outs[o]["dest_port"];
+				if (outs[o]["dest_port"].getType() == libconfig::Setting::TypeInt) {
+					char buffer [12];
+					sprintf(buffer, "%d", (int)outs[o]["dest_port"]);
+					sdata->dest_port = strdup(buffer);
+				} else {
+					sdata->dest_port = strdup(outs[o]["dest_port"]);
+				}
 			} else {
 				if (parsing_mixers) {
 					cerr << "Configuration error: mixers.["<<i<<"] outputs.["<<o<<"]: ";

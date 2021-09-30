@@ -987,7 +987,7 @@ int main(int argc, char* argv[]) {
 				shout_setup((icecast_data *)(output->data), channel->mode);
 			} else if(output->type == O_UDP_STREAM) {
 				udp_stream_data *sdata = (udp_stream_data *)(output->data);
-				if (!udp_stream_init(sdata, channel->mode)) {
+				if (!udp_stream_init(sdata, channel->mode, (size_t)WAVE_BATCH * sizeof(float))) {
 					cerr << "Failed to initialize mixer " << i << " output " << k << " - aborting\n";
 					error();
 				}
@@ -1016,7 +1016,7 @@ int main(int argc, char* argv[]) {
 					shout_setup((icecast_data *)(output->data), channel->mode);
 				} else if(output->type == O_UDP_STREAM) {
 					udp_stream_data *sdata = (udp_stream_data *)(output->data);
-					if (!udp_stream_init(sdata, channel->mode)) {
+					if (!udp_stream_init(sdata, channel->mode, (size_t)WAVE_BATCH * sizeof(float))) {
 						cerr << "Failed to initialize device " << i << " channel " << j << " output " << k << " - aborting\n";
 						error();
 					}

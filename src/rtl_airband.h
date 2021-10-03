@@ -28,6 +28,7 @@
 #include <shout/shout.h>
 #include <lame/lame.h>
 #include <libconfig.h++>
+#include <netinet/in.h>         // sockaddr_in
 
 #include "config.h"
 #ifdef WITH_BCM_VC
@@ -117,7 +118,8 @@ enum output_type {
 	O_ICECAST,
 	O_FILE,
 	O_RAWFILE,
-	O_MIXER
+	O_MIXER,
+	O_UDP_STREAM
 #ifdef WITH_PULSEAUDIO
 	, O_PULSE
 #endif
@@ -148,6 +150,19 @@ struct file_data {
 	timeval last_write_time;
 	FILE *f;
 	enum output_type type;
+};
+
+struct udp_stream_data {
+	float *stereo_buffer;
+	size_t stereo_buffer_len;
+
+	bool continuous;
+	const char *dest_address;
+	const char *dest_port;
+
+	int send_socket;
+	struct sockaddr dest_sockaddr;
+	socklen_t dest_sockaddr_len;
 };
 
 #ifdef WITH_PULSEAUDIO
@@ -412,6 +427,12 @@ const char *mixer_get_error();
 int parse_devices(libconfig::Setting &devs);
 int parse_mixers(libconfig::Setting &mx);
 
+// udp_stream.cpp
+bool udp_stream_init(udp_stream_data *sdata, mix_modes mode, size_t len);
+void udp_stream_write(udp_stream_data *sdata, float *data, size_t len);
+void udp_stream_write(udp_stream_data *sdata, float *data_left, float *data_right, size_t len);
+void udp_stream_shutdown(udp_stream_data *sdata);
+
 #ifdef WITH_PULSEAUDIO
 #define PULSE_STREAM_LATENCY_LIMIT 10000000UL
 // pulse.cpp
@@ -421,6 +442,7 @@ void pulse_start();
 void pulse_shutdown(pulse_data *pdata);
 void pulse_write_stream(pulse_data *pdata, mix_modes mode, float *data_left, float *data_right, size_t len);
 #endif
+
 #endif /* _RTL_AIRBAND_H */
 
 // vim: ts=4

@@ -406,8 +406,8 @@ static bool output_file_ready(channel_t *channel, file_data *fdata, mix_modes mi
 
 	size_t file_path_len = strlen(fdata->basename) + strlen(timestamp) + strlen(fdata->suffix) + 11; // include space for '\0' and possible freq in Hz
 	fdata->file_path = (char *)XCALLOC(1, file_path_len);
-	if (fdata->include_freq_in_filename) {
-		sprintf(fdata->file_path, "%s_%d%s%s", fdata->basename, channel->freqlist[channel->freq_idx].frequency, timestamp, fdata->suffix);
+	if (fdata->include_freq) {
+		sprintf(fdata->file_path, "%s%s_%d%s", fdata->basename, timestamp, channel->freqlist[channel->freq_idx].frequency, fdata->suffix);
 	} else {
 		sprintf(fdata->file_path, "%s%s%s", fdata->basename, timestamp, fdata->suffix);
 	}

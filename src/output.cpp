@@ -403,13 +403,18 @@ static bool output_file_ready(channel_t *channel, file_data *fdata, mix_modes mi
 		log(LOG_NOTICE, "strftime returned 0\n");
 		return false;
 	}
-	size_t file_path_len = strlen(fdata->basename) + strlen(timestamp) + strlen(fdata->suffix) + 1;
+
+	size_t file_path_len = strlen(fdata->basename) + strlen(timestamp) + strlen(fdata->suffix) + 11; // include space for '\0' and possible freq in Hz
 	fdata->file_path = (char *)XCALLOC(1, file_path_len);
-	sprintf(fdata->file_path, "%s%s%s", fdata->basename, timestamp, fdata->suffix);
+	if (fdata->include_freq) {
+		sprintf(fdata->file_path, "%s%s_%d%s", fdata->basename, timestamp, channel->freqlist[channel->freq_idx].frequency, fdata->suffix);
+	} else {
+		sprintf(fdata->file_path, "%s%s%s", fdata->basename, timestamp, fdata->suffix);
+	}
 
 	static char const *tmp_suffix = ".tmp";
 	fdata->file_path_tmp = (char *)XCALLOC(1, file_path_len + strlen(tmp_suffix));
-	sprintf(fdata->file_path_tmp, "%s%s%s%s", fdata->basename, timestamp, fdata->suffix, tmp_suffix);
+	sprintf(fdata->file_path_tmp, "%s%s", fdata->file_path, tmp_suffix);
 
 	fdata->open_time = fdata->last_write_time = current_time;
 

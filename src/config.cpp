@@ -74,20 +74,15 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			}
 			fdata->basename = (char *)XCALLOC(1, strlen(outs[o]["directory"]) + strlen(outs[o]["filename_template"]) + 2);
 			sprintf(fdata->basename, "%s/%s", (const char *)outs[o]["directory"], (const char *)outs[o]["filename_template"]);
-
-			if (outs[o].exists("include_freq") && (bool)(outs[o]["include_freq"]) && channel->freq_count == 1) {
-				char tmp[64];
-				snprintf(tmp, sizeof(tmp), "_%d.mp3", channel->freqlist[0].frequency);
-				fdata->suffix = strdup(tmp);
-			} else {
-				fdata->suffix = strdup(".mp3");
-			}
+			fdata->suffix = strdup(".mp3");
 
 			fdata->continuous = outs[o].exists("continuous") ?
 				(bool)(outs[o]["continuous"]) : false;
 			fdata->append = (!outs[o].exists("append")) || (bool)(outs[o]["append"]);
 			fdata->split_on_transmission = outs[o].exists("split_on_transmission") ?
 				(bool)(outs[o]["split_on_transmission"]) : false;
+			fdata->include_freq = outs[o].exists("include_freq") ?
+				(bool)(outs[o]["include_freq"]) : false;
 			channel->need_mp3 = 1;
 
 			if(fdata->split_on_transmission) {
@@ -118,20 +113,15 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 
 			fdata->basename = (char *)XCALLOC(1, strlen(outs[o]["directory"]) + strlen(outs[o]["filename_template"]) + 2);
 			sprintf(fdata->basename, "%s/%s", (const char *)outs[o]["directory"], (const char *)outs[o]["filename_template"]);
-
-			if (outs[o].exists("include_freq") && (bool)(outs[o]["include_freq"]) && channel->freq_count == 1) {
-				char tmp[64];
-				snprintf(tmp, sizeof(tmp), "_%d.cf32", channel->freqlist[0].frequency);
-				fdata->suffix = strdup(tmp);
-			} else {
-				fdata->suffix = strdup(".cf32");
-			}
+			fdata->suffix = strdup(".cf32");
 
 			fdata->continuous = outs[o].exists("continuous") ?
 				(bool)(outs[o]["continuous"]) : false;
 			fdata->append = (!outs[o].exists("append")) || (bool)(outs[o]["append"]);
 			fdata->split_on_transmission = outs[o].exists("split_on_transmission") ?
 				(bool)(outs[o]["split_on_transmission"]) : false;
+			fdata->include_freq = outs[o].exists("include_freq") ?
+				(bool)(outs[o]["include_freq"]) : false;
 			channel->needs_raw_iq = channel->has_iq_outputs = 1;
 
 			if(fdata->continuous && fdata->split_on_transmission) {

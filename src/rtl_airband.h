@@ -128,7 +128,9 @@ enum output_type {
 struct icecast_data {
 	const char *hostname;
 	int port;
+#ifdef LIBSHOUT_HAS_TLS
 	int tls_mode;
+#endif
 	const char *username;
 	const char *password;
 	const char *mountpoint;

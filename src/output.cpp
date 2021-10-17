@@ -62,9 +62,11 @@ void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 	if (shout_set_port(shouttemp, icecast->port) != SHOUTERR_SUCCESS) {
 		shout_free(shouttemp); return;
 	}
+#ifdef LIBSHOUT_HAS_TLS
 	if (shout_set_tls(shouttemp, icecast->tls_mode) != SHOUTERR_SUCCESS) {
 		shout_free(shouttemp); return;
 	}
+#endif
 	char mp[100];
 	sprintf(mp, "/%s", icecast->mountpoint);
 	if (shout_set_mount(shouttemp, mp) != SHOUTERR_SUCCESS) {

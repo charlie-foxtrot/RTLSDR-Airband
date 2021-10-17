@@ -56,6 +56,7 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				idata->send_scan_freq_tags = (bool)outs[o]["send_scan_freq_tags"];
 			else
 				idata->send_scan_freq_tags = 0;
+#ifdef LIBSHOUT_HAS_TLS
 			if(outs[o].exists("tls")) {
 				if(outs[o]["tls"].getType() == libconfig::Setting::TypeString) {
 					if(!strcmp(outs[o]["tls"], "auto")) {
@@ -89,6 +90,7 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			} else {
 				idata->tls_mode = SHOUT_TLS_DISABLED;
 			}
+#endif // LIBSHOUT_HAS_TLS
 			channel->need_mp3 = 1;
 		} else if(!strncmp(outs[o]["type"], "file", 4)) {
 			channel->outputs[oo].data = XCALLOC(1, sizeof(struct file_data));

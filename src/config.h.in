@@ -27,4 +27,5 @@
 #cmakedefine WITH_PULSEAUDIO
 #cmakedefine NFM
 #cmakedefine WITH_BCM_VC
+#cmakedefine LIBSHOUT_HAS_TLS
 #endif // !_CONFIG_H

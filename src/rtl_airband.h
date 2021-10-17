@@ -43,8 +43,7 @@
 #include "input-common.h"	// input_t
 #include "squelch.h"
 
-#define ALIGN
-#define ALIGN2 __attribute__((aligned(32)))
+#define ALIGNED32 __attribute__((aligned(32)))
 #define SLEEP(x) usleep(x * 1000)
 #define THREAD pthread_t
 #define GOTOXY(x, y) printf("%c[%d;%df",0x1B,y,x)
@@ -249,8 +248,8 @@ private:
 class Signal {
 public:
 	Signal(void) {
-		cond_ = PTHREAD_COND_INITIALIZER;
-		mutex_ = PTHREAD_MUTEX_INITIALIZER;
+		pthread_cond_init(&cond_, NULL);
+		pthread_mutex_init(&mutex_, NULL);
 	}
 	void send(void) {
 		pthread_mutex_lock(&mutex_);

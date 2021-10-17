@@ -1,4 +1,4 @@
-name: CMake
+name: Test build
 
 on:
   [ push, pull_request ]
@@ -10,7 +10,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ ubuntu-latest, ubuntu-18.04 ]
+        os: [ ubuntu-latest, ubuntu-18.04, macos-11, macos-10.15 ]
     runs-on: ${{ matrix.os }}
     steps:
     - name: Checkout repository
@@ -18,10 +18,12 @@ jobs:
 
     - name: Install packaged dependencies
       run: |
-        sudo apt-get update
-        sudo apt-get install libmp3lame-dev libshout3-dev libconfig++-dev libfftw3-dev librtlsdr-dev libsoapysdr-dev libpulse-dev
+        if [[ "$RUNNER_OS" == "Linux" ]]; then sudo apt-get update; fi
+        if [[ "$RUNNER_OS" == "Linux" ]]; then sudo apt-get install libmp3lame-dev libshout3-dev libconfig++-dev libfftw3-dev librtlsdr-dev libsoapysdr-dev libpulse-dev; fi
+        if [[ "$RUNNER_OS" == "macOS" ]]; then brew update; fi
+        if [[ "$RUNNER_OS" == "macOS" ]]; then brew install lame libshout libconfig fftw librtlsdr soapysdr pulseaudio; fi
 
-    - name: Configure CMake
+    - name: Configure
       run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
     - name: Build

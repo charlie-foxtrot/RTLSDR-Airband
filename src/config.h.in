@@ -28,4 +28,5 @@
 #cmakedefine NFM
 #cmakedefine WITH_BCM_VC
 #cmakedefine LIBSHOUT_HAS_TLS
+#define SINCOSF @SINCOSF@
 #endif // !_CONFIG_H

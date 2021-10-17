@@ -30,7 +30,7 @@
 #include <shout/shout.h>
 #include <lame/lame.h>
 #include "rtl_airband.h"
-
+#include "config.h"
 
 FILE *debugf;
 
@@ -141,7 +141,7 @@ static float sin_lut[257], cos_lut[257];
 
 void sincosf_lut_init() {
 	for(uint32_t i = 0; i < 256; i++)
-		sincosf(2.0f * M_PI * (float)i / 256.0f, sin_lut + i, cos_lut + i);
+		SINCOSF(2.0F * M_PI * (float)i / 256.0f, sin_lut + i, cos_lut + i);
 	sin_lut[256] = sin_lut[0];
 	cos_lut[256] = cos_lut[0];
 }

@@ -464,7 +464,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			if(libconfig::Setting::TypeList == chans[j]["squelch_snr_threshold"].getType()) {
 				// New-style array of per-frequency squelch settings
 				for(int f = 0; f<channel->freq_count; f++) {
-					float snr;
+					float snr = 0.f;
 					if (libconfig::Setting::TypeFloat == chans[j]["squelch_snr_threshold"][f].getType()) {
 						snr = (float)chans[j]["squelch_snr_threshold"][f];
 					} else if (libconfig::Setting::TypeInt == chans[j]["squelch_snr_threshold"][f].getType()) {

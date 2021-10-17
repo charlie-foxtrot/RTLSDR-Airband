@@ -347,7 +347,7 @@ void *demodulate(void *params) {
 	fftwf_complex* fftin = demod_params->fftin;
 	fftwf_complex* fftout = demod_params->fftout;
 #endif
-	ALIGN float ALIGN2 levels_u8[256], levels_s8[256];
+	float ALIGNED32 levels_u8[256], levels_s8[256];
 	float *levels_ptr = NULL;
 
 	for (int i=0; i<256; i++) {
@@ -361,9 +361,9 @@ void *demodulate(void *params) {
 	// blackman 7
 	// the whole matrix is computed
 #ifdef WITH_BCM_VC
-	ALIGN float ALIGN2 window[fft_size * 2];
+	float ALIGNED32 window[fft_size * 2];
 #else
-	ALIGN float ALIGN2 window[fft_size];
+	float ALIGNED32 window[fft_size];
 #endif
 	const double a0 = 0.27105140069342f;
 	const double a1 = 0.43329793923448f;	const double a2 = 0.21812299954311f;

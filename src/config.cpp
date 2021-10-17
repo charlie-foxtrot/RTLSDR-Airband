@@ -56,6 +56,39 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				idata->send_scan_freq_tags = (bool)outs[o]["send_scan_freq_tags"];
 			else
 				idata->send_scan_freq_tags = 0;
+			if(outs[o].exists("tls")) {
+				if(outs[o]["tls"].getType() == libconfig::Setting::TypeString) {
+					if(!strcmp(outs[o]["tls"], "auto")) {
+						idata->tls_mode = SHOUT_TLS_AUTO;
+					} else if(!strcmp(outs[o]["tls"], "auto_no_plain")) {
+						idata->tls_mode = SHOUT_TLS_AUTO_NO_PLAIN;
+					} else if(!strcmp(outs[o]["tls"], "transport")) {
+						idata->tls_mode = SHOUT_TLS_RFC2818;
+					} else if(!strcmp(outs[o]["tls"], "upgrade")) {
+						idata->tls_mode = SHOUT_TLS_RFC2817;
+					} else if(!strcmp(outs[o]["tls"], "disabled")) {
+						idata->tls_mode = SHOUT_TLS_DISABLED;
+					} else {
+						if (parsing_mixers) {
+							cerr<<"Configuration error: mixers.["<<i<<"] outputs.["<<o<<"]: ";
+						} else {
+							cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: ";
+						}
+						cerr<<"invalid value for tls; must be one of: auto, auto_no_plain, transport, upgrade, disabled\n";
+						error();
+					}
+				} else {
+					if (parsing_mixers) {
+						cerr<<"Configuration error: mixers.["<<i<<"] outputs.["<<o<<"]: ";
+					} else {
+						cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: ";
+					}
+					cerr<<"tls value must be a string\n";
+					error();
+				}
+			} else {
+				idata->tls_mode = SHOUT_TLS_DISABLED;
+			}
 			channel->need_mp3 = 1;
 		} else if(!strncmp(outs[o]["type"], "file", 4)) {
 			channel->outputs[oo].data = XCALLOC(1, sizeof(struct file_data));

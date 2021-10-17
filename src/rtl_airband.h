@@ -128,6 +128,7 @@ enum output_type {
 struct icecast_data {
 	const char *hostname;
 	int port;
+	int tls_mode;
 	const char *username;
 	const char *password;
 	const char *mountpoint;

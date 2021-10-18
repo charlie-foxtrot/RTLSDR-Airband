@@ -60,7 +60,7 @@ void log(int priority, const char *format, ...) {
 	if(do_syslog)
 		vsyslog(priority, format, args);
 	else if(foreground)
-		vprintf(format, args);
+		vfprintf(stderr, format, args);
 	va_end(args);
 }
 

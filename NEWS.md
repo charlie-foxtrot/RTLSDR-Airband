@@ -1,12 +1,58 @@
 # NEWS
 
+Version 4.0.0 (Oct 19, 2021):
+
+* RTLSDR-Airband is now built with CMake. Refer to the wiki for updated
+  compilation instructions.
+* When compiling the program, a new `PLATFORM` value `native` can now be
+  specified. It enables `-march=native -mtune=native` compilation options. This
+  causes the compiler to apply the most appropriate optimizations for the
+  hardware on which the app is being built (thx @charlie-foxtrot).
+* BACKWARDS-INCOMPATIBLE CHANGE: Signal level and noise level estimates
+  displayed in the textual waterfalls are now expressed in dBFS (decibels
+  related to the full scale of the analog-to-digital converter). The main
+  benefit of the new approach is that these values do not depend on the
+  `fft_size` value(thx @charlie-foxtrot).
+* BACKWARDS-INCOMPATIBLE CHANGE: Improved squelch algorithm with new
+  configuration parameters. `squelch` keyword has been replaced with
+  `squelch_threshold` which takes an absolute signal value in dBFS as an
+  argument. Alternatively, a minimum signal-to-noise ratio (in dB) that should
+  trigger the squelch might be configured using `squelch_snr_threshold` option
+  (thx @charlie-foxtrot).
+* BACKWARDS-INCOMPATIBLE CHANGE: `include_freq` config option for file outputs
+  now causes the frequency to be appended after the timestamp rather than
+  before it. This feature now works correctly in scan mode, when
+  `split_on_transmission` feature is enabled. (thx @charlie-foxtrot).
+* BACKWARDS-INCOMPATIBLE CHANGE: sample format in files produced by `rawfile`
+  outputs has been changed from CS16 to CF32. File name suffix is now `.cf32`.
+* Improved squelch indicator in the textual waterfalls. In addition to the `*`
+  character indicating that the squelch is open, there is also a `~` character
+  indicating that the channel has a signal that is being suppressed because it
+  is outside the band of the channel filter (thx @charlie-foxtrot).
+* New output type `udp_stream` for sending uncompressed audio to another host
+  via UDP/IP (thx @charlie-foxtrot).
+* Added `multiple_output_threads` global option. When set to `true`, a separate
+  output thread is spawned for each device (thx @charlie-foxtrot).
+* Modulation in scan mode is now configurable per channel (thx
+  @charlie-foxtrot).
+* SoapySDR errors like TIMEOUT or OVERFLOW are no longer treated as fatal. They
+  often appear intermittently, especially when the CPU usage is high. There is
+  no point in failing the input in this case.
+* Added `.tmp` suffix to the names of the output files currently being written
+  to. The suffix is removed when the file is closed. External applications that
+  consume recorded files can now figure out which files are not yet complete.
+* Added logging and statistics for output thread overruns and mixer
+  input/output overruns (thx @charlie-foxtrot).
+* The program can now be built on MacOS.
+* Miscellaneous bug fixes and code cleanups.
+
 Version 3.2.1 (Nov 13, 2020):
 
 * Fixed a compile error when using libshout older than 2.4.0
 
 Version 3.2.0 (Nov 08, 2020):
 
-* Added `split_per_transmission` output file option which allows creating
+* Added `split_on_transmission` output file option which allows creating
   a new file for every transmission on the channel (thx @charlie-foxtrot).
 * Added `include_freq` output file option, which causes the channel frequency
   to be appended to the file name (thx @charlie-foxtrot).

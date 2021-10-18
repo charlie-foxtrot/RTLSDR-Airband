@@ -1,53 +1,6 @@
-RTLSDR-Airband
-=====================
+# RTLSDR-Airband
 
-This is a development branch of RTLSDR-Airband.
-
-**NOTE: The program is now built with cmake. Building instructions from the Wiki do not apply to this branch. Please use the following procedure:**
-
-- Install all required dependencies as per the Wiki.
-- Install cmake and pkg-config:
-
-```
-apt-get install cmake pkg-config
-```
-
-- Clone the repository and switch to the `unstable` branch:
-
-```
-git clone https://github.com/szpajder/RTLSDR-Airband.git
-cd RTLSDR-Airband
-git checkout unstable
-```
-
-- Build the program as follows:
-
-```
-mkdir build
-cd build
-cmake ../
-make
-make install
-```
-
-- The following options may be specified when running `cmake`:
-
-  - `-DPLATFORM=<platform_name>` - optimize the build for the given hardware. `<platform_name>` might be one of: `rpiv1`, `rpiv2`, `armv7-generic`, `armv8-generic`, `native`.
-  - `-DNFM=1` - enables narrow FM support (0 disables).
-  - `-DRTLSDR=0 -DMIRISDR=0 -DSOAPYSDR=0 -DPULSEAUDIO=0` - disables respective SDR driver and/or feature. They are all enabled by default and will be built if necessary dependencies are detected.
-  - `-DPROFILING=1` - enable profiling support with Google Perftools.
-
-Example:
-
-```
-cmake -DPLATFORM=rpiv2 -DSOAPYSDR=0 -DPROFILING=1 ../
-```
-
-The Wiki will be updated once the new build system is declared stable and a new release is made.
-
-=====================
-
-**Current stable release: [3.2.1](https://github.com/szpajder/RTLSDR-Airband/releases/latest)** (released November 13, 2020)
+**Current stable release: [4.0.0](https://github.com/szpajder/RTLSDR-Airband/releases/latest)** (released October 19, 2021)
 
 RTLSDR-Airband receives analog radio voice channels and produces
 audio streams which can be routed to various outputs, such as online
@@ -56,23 +9,23 @@ supported by the program was Realtek DVB-T dongle (hence the project's
 name). However, thanks to SoapySDR vendor-neutral SDR library, other
 radios are now supported as well.
 
-Documentation
---------------------
+## Documentation
+
 User's manual is now on the [wiki](https://github.com/szpajder/RTLSDR-Airband/wiki).
 
-Credits and thanks
---------------------
+## Credits and thanks
+
 I hereby express my gratitude to everybody who helped with the development and testing
 of RTLSDR-Airband. Special thanks go to:
 
- * Dave Pascoe
- * SDR Guru
- * Marcus Ströbel
- * strix-technica
- * charlie-foxtrot
+* Dave Pascoe
+* SDR Guru
+* Marcus Ströbel
+* strix-technica
+* charlie-foxtrot
 
-License
---------------------
+## License
+
 Copyright (C) 2015-2021 Tomasz Lemiech <szpajder@gmail.com>
 
 Based on original work by Wong Man Hang <microtony@gmail.com>
@@ -90,23 +43,25 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-Open Source Licenses of bundled code
----------------------
+## Open Source Licenses of bundled code
+
 ### gpu_fft
+
 BCM2835 "GPU_FFT" release 2.0
 Copyright (c) 2014, Andrew Holme.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
- * Redistributions of source code must retain the above copyright
-   notice, this list of conditions and the following disclaimer.
- * Redistributions in binary form must reproduce the above copyright
-   notice, this list of conditions and the following disclaimer in the
-   documentation and/or other materials provided with the distribution.
- * Neither the name of the copyright holder nor the
-   names of its contributors may be used to endorse or promote products
-   derived from this software without specific prior written permission.
+
+* Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+* Redistributions in binary form must reproduce the above copyright
+  notice, this list of conditions and the following disclaimer in the
+  documentation and/or other materials provided with the distribution.
+* Neither the name of the copyright holder nor the
+  names of its contributors may be used to endorse or promote products
+  derived from this software without specific prior written permission.
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
 ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -120,6 +75,8 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ### rtl-sdr
- * Copyright (C) 2012 by Steve Markgraf <steve@steve-m.de>
- * Copyright (C) 2015 by Kyle Keen <keenerd@gmail.com>
- * GNU General Public License Version 2
+
+* Copyright (C) 2012 by Steve Markgraf <steve@steve-m.de>
+* Copyright (C) 2015 by Kyle Keen <keenerd@gmail.com>
+* GNU General Public License Version 2
+

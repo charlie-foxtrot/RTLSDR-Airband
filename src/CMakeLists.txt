@@ -200,8 +200,9 @@ endif()
 if(BCM_VC)
 	find_package(BCM_VC)
 	if(BCM_VC_FOUND)
-		list(APPEND rtl_airband_extra_libs ${BCM_VC_LIBRARIES} hello_fft)
 		add_subdirectory(hello_fft)
+		list(APPEND rtl_airband_obj_files $<TARGET_OBJECTS:hello_fft>)
+		list(APPEND rtl_airband_extra_libs ${BCM_VC_LIBRARIES})
 		set(WITH_BCM_VC TRUE)
 	endif()
 endif()
@@ -268,9 +269,7 @@ target_include_directories (rtl_airband_base PUBLIC
 # can't do this per target with cmake <3.13
 link_directories(${link_dirs})
 
-set(rtl_airband_obj_files
-	$<TARGET_OBJECTS:rtl_airband_base>
-)
+list(APPEND rtl_airband_obj_files $<TARGET_OBJECTS:rtl_airband_base>)
 
 add_executable (rtl_airband ${rtl_airband_obj_files})
 

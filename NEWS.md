@@ -1,5 +1,9 @@
 # NEWS
 
+Version 4.0.1 (Nov 14, 2021):
+
+* Fixed compilation error on RaspberryPi OS 11 (Bullseye)
+
 Version 4.0.0 (Oct 19, 2021):
 
 * RTLSDR-Airband is now built with CMake. Refer to the wiki for updated

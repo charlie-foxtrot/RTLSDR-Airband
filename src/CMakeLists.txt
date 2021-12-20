@@ -96,7 +96,7 @@ set(CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES_SAVE})
 
 option(NFM "Enable support for narrow FM channels" OFF)
 
-set(PLATFORM "native" CACHE STRING "Optimize the build for the given hardware platform")
+set(PLATFORM "default" CACHE STRING "Optimize the build for the given hardware platform")
 
 option(RTLSDR "Enable RTL-SDR support" ON)
 set(WITH_RTLSDR FALSE)
@@ -190,10 +190,23 @@ elseif(PLATFORM STREQUAL "armv7-generic")
 elseif(PLATFORM STREQUAL "armv8-generic")
 	add_definitions(-march=armv8-a+crc -mtune=cortex-a53)
 elseif(PLATFORM STREQUAL "native")
-	add_definitions(-march=native -mtune=native)
+	CHECK_CXX_COMPILER_FLAG(-march=native CXX_HAS_MARCH_NATIVE)
+	if(CXX_HAS_MARCH_NATIVE)
+		add_definitions(-march=native)
+	else()
+		message(FATAL_ERROR "Cannot build with PLATFORM=native: the compiler does not support -march=native option")
+	endif()
+	CHECK_CXX_COMPILER_FLAG(-mtune=native CXX_HAS_MTUNE_NATIVE)
+	if(CXX_HAS_MTUNE_NATIVE)
+		add_definitions(-mtune=native)
+	else()
+		message(FATAL_ERROR "Cannot build with PLATFORM=native: the compiler does not support -mtune=native option")
+	endif()
+elseif(PLATFORM STREQUAL "default")
+	# NOOP
 else()
 	message(FATAL_ERROR "Unknown platform '${PLATFORM}'. Valid options are:
-	rpiv1, rpiv2, armv7-generic, armv8-generic, native")
+	rpiv1, rpiv2, armv7-generic, armv8-generic, native, default")
 endif()
 
 # Try using VC GPU if enabled. Fallback to fftw3f if disabled or if VC lib not found

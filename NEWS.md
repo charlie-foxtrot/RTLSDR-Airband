@@ -1,5 +1,12 @@
 # NEWS
 
+Version 4.0.2 (Dec 26, 2021):
+
+* Added a new `PLATFORM` value `default` (which, as the name says, is the new
+  default). It results in a portable binary without any architecture-specific
+  optimizations. This also allows the program to be built with compilers that
+  do not support `-march=native` option (notably Clang on Apple M1) (#303).
+
 Version 4.0.1 (Nov 14, 2021):
 
 * Fixed compilation error on RaspberryPi OS 11 (Bullseye)

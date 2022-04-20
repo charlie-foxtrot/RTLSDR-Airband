@@ -758,6 +758,7 @@ void write_stats_file(timeval *last_stats_write) {
 	output_channel_noise_levels(file);
 	output_channel_signal_levels(file);
 	output_channel_squelch_counter(file);
+	output_channel_squelch_levels(file);
 	output_channel_flappy_counter(file);
 	output_device_buffer_overflows(file);
 	output_output_overruns(file);

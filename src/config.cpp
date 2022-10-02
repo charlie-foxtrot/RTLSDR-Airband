@@ -367,9 +367,14 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 					<<channel->freq_count<<" elements\n";
 				error();
 			}
-			if(chans[j].exists("squelch") && libconfig::Setting::TypeList == chans[j]["squelch"].getType() && chans[j]["squelch"].getLength() < channel->freq_count) {
-				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch should be an int or a list with at least "
+			if(chans[j].exists("squelch_threshold") && libconfig::Setting::TypeList == chans[j]["squelch_threshold"].getType() && chans[j]["squelch_threshold"].getLength() < channel->freq_count) {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch_threshold should be an int or a list of ints with at least "
 					<<channel->freq_count<<" elements\n";
+				error();
+			}
+			if(chans[j].exists("squelch_snr_threshold") && libconfig::Setting::TypeList == chans[j]["squelch_snr_threshold"].getType() && chans[j]["squelch_snr_threshold"].getLength() < channel->freq_count) {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch_snr_threshold should be an int, a float or a list of " \
+					"ints or floats with at least "<<channel->freq_count<<" elements\n";
 				error();
 			}
 			if(chans[j].exists("notch") && libconfig::Setting::TypeList == chans[j]["notch"].getType() && chans[j]["notch"].getLength() < channel->freq_count) {
@@ -460,7 +465,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			}
 		}
 		if(chans[j].exists("squelch_snr_threshold")) {
-			// Value is SNR in dB, zero disables squelch (ie always open), positive is valid, negative is invalid
+			// Value is SNR in dB, zero disables squelch (ie always open), -1 uses default value, positive is valid, other negative values are invalid
 			if(libconfig::Setting::TypeList == chans[j]["squelch_snr_threshold"].getType()) {
 				// New-style array of per-frequency squelch settings
 				for(int f = 0; f<channel->freq_count; f++) {
@@ -474,7 +479,9 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 						error();
 					}
 
-					if (snr < 0) {
+					if (snr == -1.0) {
+						continue;
+					} else if (snr < 0) {
 						cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch_snr_threshold must be greater than or equal to 0\n";
 						error();
 					} else {
@@ -510,7 +517,10 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				for(int f = 0; f<channel->freq_count; f++) {
 					float freq = (float)chans[j]["notch"][f];
 					float q = chans[j].exists("notch_q") ? (float)chans[j]["notch_q"][f] : default_q;
-					if (q <= 0.0) {
+
+					if (q == 0.0) {
+						q = default_q;
+					} else if (q <= 0.0) {
 						cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] freq.["<<f<<"]: invalid value for notch_q: "
 							<<q<<" (must be greater than 0.0)\n";
 						error();

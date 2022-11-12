@@ -28,7 +28,7 @@
 #include <shout/shout.h>
 #include <lame/lame.h>
 #include <libconfig.h++>
-#include <netinet/in.h>         // sockaddr_in
+#include <netinet/in.h>		 // sockaddr_in
 
 #include "config.h"
 #ifdef WITH_BCM_VC
@@ -42,6 +42,7 @@
 #endif
 #include "input-common.h"	// input_t
 #include "squelch.h"
+#include "ctcss.h"
 
 #define ALIGNED32 __attribute__((aligned(32)))
 #define SLEEP(x) usleep(x * 1000)
@@ -300,9 +301,9 @@ struct channel_t {
 	int has_iq_outputs;
 	enum ch_states state;		// mixer channel state flag
 	output_t *outputs;
-	int highpass;               // highpass filter cutoff
-	int lowpass;                // lowpass filter cutoff
-	lame_t lame;                // Context for LAME MP3 encoding if needed
+	int highpass;			// highpass filter cutoff
+	int lowpass;			// lowpass filter cutoff
+	lame_t lame;			// Context for LAME MP3 encoding if needed
 	unsigned char *lamebuf;		// Buffer used by each lame encode
 };
 
@@ -448,4 +449,4 @@ void pulse_write_stream(pulse_data *pdata, mix_modes mode, float *data_left, flo
 
 #endif /* _RTL_AIRBAND_H */
 
-// vim: ts=4
+// vim: noet ts=4

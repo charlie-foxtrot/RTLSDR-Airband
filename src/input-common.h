@@ -81,3 +81,5 @@ int input_set_centerfreq(input_t * const input, int const centerfreq);
 int input_stop(input_t * const input);
 
 #endif // _INPUT_COMMON_H
+
+// vim: noet ts=4

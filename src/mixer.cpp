@@ -214,4 +214,4 @@ void *mixer_thread(void *param) {
 	return 0;
 }
 
-// vim: ts=4
+// vim: noet ts=4

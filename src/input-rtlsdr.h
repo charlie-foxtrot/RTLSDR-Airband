@@ -31,3 +31,4 @@ typedef struct {
 	int bufcnt;		// libusb buffer count
 } rtlsdr_dev_data_t;
 
+// vim: noet ts=4

@@ -181,4 +181,4 @@ MODULE_EXPORT input_t *file_input_new() {
 	return input;
 }
 
-// vim: ts=4
+// vim: noet ts=4

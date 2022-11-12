@@ -88,3 +88,5 @@ void udp_stream_shutdown(udp_stream_data *sdata) {
 		close(sdata->send_socket);
 	}
 }
+
+// vim: noet ts=4

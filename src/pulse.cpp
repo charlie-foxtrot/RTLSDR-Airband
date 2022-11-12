@@ -252,3 +252,5 @@ end:
 	PA_LOOP_UNLOCK(mainloop);
 	return;
 }
+
+// vim: noet ts=4

@@ -30,3 +30,5 @@ typedef struct {
 	int gain;		// gain in dB
 	int bufcnt;		// libusb buffer count
 } mirisdr_dev_data_t;
+
+// vim: noet ts=4

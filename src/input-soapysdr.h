@@ -34,3 +34,5 @@ typedef struct {
 	size_t channel;		// HW channel number
 	bool agc;		// enable AGC
 } soapysdr_dev_data_t;
+
+// vim: noet ts=4

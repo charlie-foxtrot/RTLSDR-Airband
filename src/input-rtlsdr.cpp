@@ -256,3 +256,5 @@ MODULE_EXPORT input_t *rtlsdr_input_new() {
 	input->stop = &rtlsdr_stop;
 	return input;
 }
+
+// vim: noet ts=4

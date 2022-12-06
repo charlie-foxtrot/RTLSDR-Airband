@@ -395,3 +395,5 @@ MODULE_EXPORT input_t *soapysdr_input_new() {
 	input->stop = NULL;
 	return input;
 }
+
+// vim: noet ts=4

@@ -134,3 +134,4 @@ int input_set_centerfreq(input_t * const input, int const centerfreq) {
 	return 0;
 }
 
+// vim: noet ts=4

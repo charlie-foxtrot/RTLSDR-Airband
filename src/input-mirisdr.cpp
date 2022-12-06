@@ -237,3 +237,5 @@ MODULE_EXPORT input_t *mirisdr_input_new() {
 	input->stop = &mirisdr_stop;
 	return input;
 }
+
+// vim: noet ts=4

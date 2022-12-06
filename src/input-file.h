@@ -28,4 +28,4 @@ typedef struct {
 	float speedup_factor;
 } file_dev_data_t;
 
-// vim: ts=4
+// vim: noet ts=4

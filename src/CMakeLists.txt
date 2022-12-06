@@ -271,6 +271,7 @@ add_library (rtl_airband_base OBJECT
 	squelch.cpp
 	util.cpp
 	udp_stream.cpp
+	ctcss.cpp
 	${CMAKE_CURRENT_BINARY_DIR}/version.cpp
 	${rtl_airband_extra_sources}
 	)

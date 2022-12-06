@@ -22,3 +22,5 @@
 
 // input-helpers.cpp
 void circbuffer_append(input_t * const input, unsigned char *buf, size_t len);
+
+// vim: noet ts=4

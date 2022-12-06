@@ -343,8 +343,8 @@ static void close_if_necessary(channel_t *channel, file_data *fdata) {
 	gettimeofday(&current_time, NULL);
 
 	if (fdata->split_on_transmission) {
-		double duration_sec = delta_sec(&fdata->open_time,       &current_time);
-		double idle_sec     = delta_sec(&fdata->last_write_time, &current_time);
+		double duration_sec = delta_sec(&fdata->open_time, &current_time);
+		double idle_sec = delta_sec(&fdata->last_write_time, &current_time);
 
 		if (duration_sec > MAX_TRANSMISSION_TIME_SEC ||
 			(duration_sec > MIN_TRANSMISSION_TIME_SEC && idle_sec > MAX_TRANSMISSION_IDLE_SEC)) {
@@ -388,7 +388,7 @@ static bool output_file_ready(channel_t *channel, file_data *fdata, mix_modes mi
 
 	close_if_necessary(channel, fdata);
 
-	if (fdata->f) {     // still open
+	if (fdata->f) { // still open
 		return true;
 	}
 
@@ -622,20 +622,20 @@ static void output_channel_signal_levels(FILE *f) {
 }
 
 static void output_channel_squelch_levels(FILE *f) {
-    fprintf(f, "# HELP channel_squelch_level Squelch squelch_level.\n"
-            "# TYPE channel_squelch_level gauge\n");
+	fprintf(f, "# HELP channel_squelch_level Squelch squelch_level.\n"
+			"# TYPE channel_squelch_level gauge\n");
 
-    for (int i = 0; i < device_count; i++) {
-        device_t* dev = devices + i;
-        for (int j = 0; j < dev->channel_count; j++) {
-            channel_t* channel = devices[i].channels + j;
-            for (int k = 0; k < channel->freq_count; k++) {
-                print_channel_metric(f, "channel_squelch_level", channel->freqlist[k].frequency, channel->freqlist[k].label);
-                fprintf(f, "\t%.3f\n", channel->freqlist[k].squelch.squelch_level());
-            }
-        }
-    }
-    fprintf(f, "\n");
+	for (int i = 0; i < device_count; i++) {
+		device_t* dev = devices + i;
+		for (int j = 0; j < dev->channel_count; j++) {
+			channel_t* channel = devices[i].channels + j;
+			for (int k = 0; k < channel->freq_count; k++) {
+				print_channel_metric(f, "channel_squelch_level", channel->freqlist[k].frequency, channel->freqlist[k].label);
+				fprintf(f, "\t%.3f\n", channel->freqlist[k].squelch.squelch_level());
+			}
+		}
+	}
+	fprintf(f, "\n");
 }
 
 static void output_channel_squelch_counter(FILE *f) {
@@ -666,6 +666,40 @@ static void output_channel_flappy_counter(FILE *f) {
 			for (int k = 0; k < channel->freq_count; k++) {
 				print_channel_metric(f, "channel_flappy_counter", channel->freqlist[k].frequency, channel->freqlist[k].label);
 				fprintf(f, "\t%zu\n", channel->freqlist[k].squelch.flappy_count());
+			}
+		}
+	}
+	fprintf(f, "\n");
+}
+
+static void output_channel_ctcss_counter(FILE *f) {
+	fprintf(f, "# HELP channel_ctcss_counter count of windows with CTCSS detected.\n"
+			"# TYPE channel_ctcss_counter counter\n");
+
+	for (int i = 0; i < device_count; i++) {
+		device_t* dev = devices + i;
+		for (int j = 0; j < dev->channel_count; j++) {
+			channel_t* channel = devices[i].channels + j;
+			for (int k = 0; k < channel->freq_count; k++) {
+				print_channel_metric(f, "channel_ctcss_counter", channel->freqlist[k].frequency, channel->freqlist[k].label);
+				fprintf(f, "\t%zu\n", channel->freqlist[k].squelch.ctcss_count());
+			}
+		}
+	}
+	fprintf(f, "\n");
+}
+
+static void output_channel_no_ctcss_counter(FILE *f) {
+	fprintf(f, "# HELP channel_no_ctcss_counter count of windows without CTCSS detected.\n"
+			"# TYPE channel_no_ctcss_counter counter\n");
+
+	for (int i = 0; i < device_count; i++) {
+		device_t* dev = devices + i;
+		for (int j = 0; j < dev->channel_count; j++) {
+			channel_t* channel = devices[i].channels + j;
+			for (int k = 0; k < channel->freq_count; k++) {
+				print_channel_metric(f, "channel_no_ctcss_counter", channel->freqlist[k].frequency, channel->freqlist[k].label);
+				fprintf(f, "\t%zu\n", channel->freqlist[k].squelch.no_ctcss_count());
 			}
 		}
 	}
@@ -760,6 +794,8 @@ void write_stats_file(timeval *last_stats_write) {
 	output_channel_squelch_counter(file);
 	output_channel_squelch_levels(file);
 	output_channel_flappy_counter(file);
+	output_channel_ctcss_counter(file);
+	output_channel_no_ctcss_counter(file);
 	output_device_buffer_overflows(file);
 	output_output_overruns(file);
 	output_input_overruns(file);
@@ -903,4 +939,4 @@ void* output_check_thread(void*) {
 	return 0;
 }
 
-// vim: ts=4
+// vim: noet ts=4

@@ -1,6 +1,8 @@
 # RTLSDR-Airband
 
-**Current stable release: [4.0.2](https://github.com/szpajder/RTLSDR-Airband/releases/latest)** (released December 26, 2021)
+**NOTE: Repo URL has moved to https://github.com/charlie-foxtrot/RTLSDR-Airband see [#342](https://github.com/charlie-foxtrot/RTLSDR-Airband/discussions/342) for info**
+
+**Current stable release: [4.0.2](https://github.com/charlie-foxtrot/RTLSDR-Airband/releases/latest)** (released December 26, 2021)
 
 RTLSDR-Airband receives analog radio voice channels and produces
 audio streams which can be routed to various outputs, such as online
@@ -11,7 +13,7 @@ radios are now supported as well.
 
 ## Documentation
 
-User's manual is now on the [wiki](https://github.com/szpajder/RTLSDR-Airband/wiki).
+User's manual is now on the [wiki](https://github.com/charlie-foxtrot/RTLSDR-Airband/wiki).
 
 ## Credits and thanks
 
@@ -26,7 +28,9 @@ of RTLSDR-Airband. Special thanks go to:
 
 ## License
 
-Copyright (C) 2015-2021 Tomasz Lemiech <szpajder@gmail.com>
+Copyright (C) 2015-2022 charlie-foxtrot
+
+Copyright (C) 2015-2022 Tomasz Lemiech <szpajder@gmail.com>
 
 Based on original work by Wong Man Hang <microtony@gmail.com>
 

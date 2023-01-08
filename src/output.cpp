@@ -587,6 +587,7 @@ static void print_channel_metric(FILE *f, char const *name, float freq, char *la
 	fprintf(f, "}");
 }
 
+//RAW Noise levels
 static void output_channel_noise_levels(FILE *f) {
 	fprintf(f, "# HELP channel_noise_level Squelch noise_level.\n"
 			"# TYPE channel_noise_level gauge\n");
@@ -604,6 +605,7 @@ static void output_channel_noise_levels(FILE *f) {
 	fprintf(f, "\n");
 }
 
+//RAW Signal levels
 static void output_channel_signal_levels(FILE *f) {
 	fprintf(f, "# HELP channel_signal_level Squelch signal_level.\n"
 			"# TYPE channel_signal_level gauge\n");
@@ -615,6 +617,42 @@ static void output_channel_signal_levels(FILE *f) {
 			for (int k = 0; k < channel->freq_count; k++) {
 				print_channel_metric(f, "channel_signal_level", channel->freqlist[k].frequency, channel->freqlist[k].label);
 				fprintf(f, "\t%.3f\n", channel->freqlist[k].squelch.signal_level());
+			}
+		}
+	}
+	fprintf(f, "\n");
+}
+
+//dBFS Noise levels
+static void output_dbfs_noise_levels(FILE *f) {
+	fprintf(f, "# HELP dBFS_noise_level Squelch noise_level converted to dBFS.\n"
+			"# TYPE dBFS_noise_level gauge\n");
+
+	for (int i = 0; i < device_count; i++) {
+		device_t* dev = devices + i;
+		for (int j = 0; j < dev->channel_count; j++) {
+			channel_t* channel = devices[i].channels + j;
+			for (int k = 0; k < channel->freq_count; k++) {
+				print_channel_metric(f, "dBFS_noise_level", channel->freqlist[k].frequency, channel->freqlist[k].label);
+				fprintf(f, "\t%.3f\n", level_to_dBFS(channel->freqlist[k].squelch.noise_level()));
+			}
+		}
+	}
+	fprintf(f, "\n");
+}
+
+//dBFS Signal levels
+static void output_dbfs_signal_levels(FILE *f) {
+	fprintf(f, "# HELP dBFS_signal_level Squelch signal_level converted to dBFS.\n"
+			"# TYPE dBFS_signal_level gauge\n");
+
+	for (int i = 0; i < device_count; i++) {
+		device_t* dev = devices + i;
+		for (int j = 0; j < dev->channel_count; j++) {
+			channel_t* channel = devices[i].channels + j;
+			for (int k = 0; k < channel->freq_count; k++) {
+				print_channel_metric(f, "dBFS_signal_level", channel->freqlist[k].frequency, channel->freqlist[k].label);
+				fprintf(f, "\t%.3f\n", level_to_dBFS(channel->freqlist[k].squelch.signal_level()));
 			}
 		}
 	}

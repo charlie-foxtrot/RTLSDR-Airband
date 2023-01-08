@@ -1,0 +1,36 @@
+#!/bin/bash
+
+unameOut="$(uname -s)"
+
+echo "Running on ${unameOut}"
+
+case "${unameOut}" in
+    Linux*)
+        echo "Installing Linux dependencies"
+        sudo apt-get update -y
+        sudo apt-get install -y \
+            libmp3lame-dev \
+            libshout3-dev \
+            libconfig++-dev \
+            libfftw3-dev \
+            librtlsdr-dev \
+            libsoapysdr-dev \
+            libpulse-dev
+        ;;
+    Darwin*)
+        echo "Installing MacOS dependencies"
+        brew update
+        brew install \
+            lame \
+            libshout \
+            libconfig \
+            fftw \
+            librtlsdr \
+            soapysdr \
+            pulseaudio
+        ;;
+
+    *)
+        echo "Error: Machine not supported"
+        exit -1
+esac

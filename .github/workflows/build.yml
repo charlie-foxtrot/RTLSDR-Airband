@@ -1,9 +1,11 @@
 name: Test build
 
 on:
-  schedule:
-    - cron: '5 4 * * 5'
+  push:
+    branches: [main, unstable]
   pull_request:
+  schedule:
+    - cron: '0 11 * * *' # run daily 
 
 env:
   BUILD_TYPE: Release
@@ -14,7 +16,7 @@ jobs:
       matrix:
         os: [ ubuntu-20.04, ubuntu-22.04, macos-11, macos-12 ]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 12
+    timeout-minutes: 25
     steps:
     - name: Checkout repository
       uses: actions/checkout@main

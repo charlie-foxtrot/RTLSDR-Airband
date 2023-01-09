@@ -1,7 +1,9 @@
 name: Test build
 
 on:
-  [ push, pull_request ]
+  schedule:
+    - cron: '5 4 * * 5'
+  pull_request:
 
 env:
   BUILD_TYPE: Release
@@ -12,6 +14,7 @@ jobs:
       matrix:
         os: [ ubuntu-20.04, ubuntu-22.04, macos-11, macos-12 ]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
     steps:
     - name: Checkout repository
       uses: actions/checkout@main

@@ -16,7 +16,7 @@ jobs:
       matrix:
         os: [ ubuntu-20.04, ubuntu-22.04, ubuntu-latest, macos-11, macos-12, macos-latest ]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
     - name: Checkout repository
       uses: actions/checkout@main

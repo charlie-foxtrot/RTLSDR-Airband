@@ -96,7 +96,7 @@ int mirisdr_init(input_t * const input) {
 	}
 
 	dev_data->dev = NULL;
-	mirisdr_open(&dev_data->dev, MIRISDR_HW_DEFAULT, dev_data->index);
+	mirisdr_open(&dev_data->dev, dev_data->index);
 	if(NULL == dev_data->dev) {
 		log(LOG_ERR, "Failed to open mirisdr device #%d.\n", dev_data->index);
 		error();

@@ -27,8 +27,9 @@ case "${unameOut}" in
             libconfig \
             fftw \
             librtlsdr \
-#            soapysdr \
             pulseaudio
+#            soapysdr \
+
         ;;
 
     *)

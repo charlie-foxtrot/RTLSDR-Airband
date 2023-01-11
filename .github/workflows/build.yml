@@ -25,7 +25,7 @@ jobs:
       run: .github/install_dependencies
 
     - name: Configure
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNFM=TRUE
 
     - name: Build
       run: VERBOSE=1 cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}

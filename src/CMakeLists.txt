@@ -285,6 +285,7 @@ link_directories(${link_dirs})
 list(APPEND rtl_airband_obj_files $<TARGET_OBJECTS:rtl_airband_base>)
 
 add_executable (rtl_airband ${rtl_airband_obj_files})
+set_property(TARGET rtl_airband PROPERTY ENABLE_EXPORTS 1)
 
 target_link_libraries (rtl_airband
 	dl

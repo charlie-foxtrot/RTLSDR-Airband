@@ -1,7 +1,11 @@
 name: Test build
 
 on:
-  [ push, pull_request ]
+  push:
+    branches: [main, unstable]
+  pull_request:
+  schedule:
+    - cron: '0 11 * * *' # run daily 
 
 env:
   BUILD_TYPE: Release
@@ -10,21 +14,18 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ ubuntu-latest, ubuntu-18.04, macos-11, macos-10.15 ]
+        os: [ ubuntu-20.04, ubuntu-22.04, ubuntu-latest, macos-11, macos-12, macos-latest ]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@main
 
     - name: Install packaged dependencies
-      run: |
-        if [[ "$RUNNER_OS" == "Linux" ]]; then sudo apt-get update; fi
-        if [[ "$RUNNER_OS" == "Linux" ]]; then sudo apt-get install libmp3lame-dev libshout3-dev libconfig++-dev libfftw3-dev librtlsdr-dev libsoapysdr-dev libpulse-dev; fi
-        if [[ "$RUNNER_OS" == "macOS" ]]; then brew update; fi
-        if [[ "$RUNNER_OS" == "macOS" ]]; then brew install lame libshout libconfig fftw librtlsdr soapysdr pulseaudio; fi
+      run: .github/install_dependencies
 
     - name: Configure
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNFM=TRUE
 
     - name: Build
       run: VERBOSE=1 cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}

@@ -4,6 +4,10 @@
 
 **Current stable release: [4.0.3](https://github.com/charlie-foxtrot/RTLSDR-Airband/releases/latest)** (released January 10, 2023)
 
+|`main`|`unstable`|
+|:---:|:---:|
+|![main](https://github.com/charlie-foxtrot/RTLSDR-Airband/actions/workflows/build.yml/badge.svg?branch=main)|![unstable](https://github.com/charlie-foxtrot/RTLSDR-Airband/actions/workflows/build.yml/badge.svg?branch=unstable)|
+
 RTLSDR-Airband receives analog radio voice channels and produces
 audio streams which can be routed to various outputs, such as online
 streaming services like LiveATC.net. Originally the only SDR type

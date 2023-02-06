@@ -1,4 +1,17 @@
 # NEWS
+Version 4.0.3 (Jan 10, 2023):
+
+* Changes in this release:
+  * Add `channel_squelch_level` to stats file, see [#332](https://github.com/charlie-foxtrot/RTLSDR-Airband/pull/332)
+  * Support "default" values in lists for `squelch_snr_threshold` and `notch_q`,
+   see [#334](https://github.com/charlie-foxtrot/RTLSDR-Airband/pull/334)
+  * Set cmake `ENABLE_EXPORTS` property, see [#339](https://github.com/charlie-foxtrot/RTLSDR-Airband/pull/339)
+
+* Other items to note:
+  * Repo maintainer has changed, see [#342](https://github.com/charlie-foxtrot/RTLSDR-Airband/discussions/342)
+  * Repo URL has moved to https://github.com/charlie-foxtrot/RTLSDR-Airband
+  * Default branch / Top of Tree has been renamed to `main`
+
 
 Version 4.0.2 (Dec 26, 2021):
 

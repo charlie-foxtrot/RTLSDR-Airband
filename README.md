@@ -32,7 +32,7 @@ of RTLSDR-Airband. Special thanks go to:
 
 ## License
 
-Copyright (C) 2015-2022 charlie-foxtrot
+Copyright (C) 2022-2023 charlie-foxtrot
 
 Copyright (C) 2015-2022 Tomasz Lemiech <szpajder@gmail.com>
 

@@ -31,7 +31,8 @@ case "${unameOut}" in
             fftw \
             librtlsdr \
             soapysdr \
-            pulseaudio
+            pulseaudio \
+            pkg-config
 
         ;;
 

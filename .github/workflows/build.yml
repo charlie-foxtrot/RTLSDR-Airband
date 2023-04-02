@@ -22,7 +22,7 @@ jobs:
       uses: actions/checkout@main
 
     - name: Install packaged dependencies
-      run: .github/install_dependencies
+      run: sudo .github/install_dependencies
 
     - name: Configure
       run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNFM=TRUE

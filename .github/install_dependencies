@@ -9,8 +9,8 @@ case "${unameOut}" in
         echo "Installing Linux dependencies"
         apt-get update -y
         apt-get install -y \
-            cmake \
             build-essential \
+            cmake \
             libmp3lame-dev \
             libshout3-dev \
             libconfig++-dev \

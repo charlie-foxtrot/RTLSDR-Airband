@@ -2,7 +2,7 @@
 
 unameOut="$(uname -s)"
 
-echo "Running on ${unameOut}"
+echo "Running on ${unameOut} as ${USER}"
 
 case "${unameOut}" in
     Linux*)

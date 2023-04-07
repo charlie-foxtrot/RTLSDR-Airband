@@ -25,10 +25,13 @@ jobs:
       run: .github/install_dependencies
 
     - name: Configure
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNFM=TRUE
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNFM=TRUE -DBUILD_UNITTESTS=TRUE
 
     - name: Build
       run: VERBOSE=1 cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+    - name: Unit Tests
+      run: ${{github.workspace}}/build/unittests/unittests
 
     - name: Install
       run: sudo cmake --install ${{github.workspace}}/build

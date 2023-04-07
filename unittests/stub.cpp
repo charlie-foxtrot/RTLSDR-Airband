@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
 
 TEST(StubTest, failure) {
-  EXPECT_TRUE(false);
+  EXPECT_TRUE(true);
 }

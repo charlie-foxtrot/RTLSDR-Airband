@@ -23,3 +23,7 @@ if(DEBUG_SQUELCH)
 endif()
 
 add_subdirectory (src)
+
+if(BUILD_UNITTESTS)
+   add_subdirectory (unittests)
+endif()

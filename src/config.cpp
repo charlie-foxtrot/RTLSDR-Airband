@@ -387,6 +387,11 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 					<<channel->freq_count<<" elements\n";
 				error();
 			}
+			if(chans[j].exists("ctcss") && libconfig::Setting::TypeList == chans[j]["ctcss"].getType() && chans[j]["ctcss"].getLength() < channel->freq_count) {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: ctcss should be an float or a list of floats with at least "
+					<<channel->freq_count<<" elements\n";
+				error();
+			}
 			if(chans[j].exists("modulation") && chans[j].exists("modulations")) {
 				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: can't set both modulation and modulations\n";
 				error();
@@ -480,7 +485,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 					}
 
 					if (snr == -1.0) {
-						continue;
+						continue; // "disable" for this channel in list
 					} else if (snr < 0) {
 						cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch_snr_threshold must be greater than or equal to 0\n";
 						error();
@@ -525,7 +530,10 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 							<<q<<" (must be greater than 0.0)\n";
 						error();
 					}
-					if(freq <= 0) {
+					
+					if(freq == 0) {
+						continue; // "disable" for this channel in list
+					} else if(freq < 0) {
 						cerr << "devices.["<<i<<"] channels.["<<j<<"] freq.["<<f<<"]: invalid value for notch: "<<freq<<", ignoring\n";
 					} else {
 						channel->freqlist[f].notch_filter = NotchFilter(freq, WAVE_RATE, q);
@@ -541,7 +549,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				}
 				for(int f = 0; f<channel->freq_count; f++) {
 					if(freq <= 0) {
-						cerr << "devices.["<<i<<"] channels.["<<j<<"]: freq value '"<<freq<<"' invalid, ignoring\n";
+						cerr << "devices.["<<i<<"] channels.["<<j<<"]: notch value '"<<freq<<"' invalid, ignoring\n";
 					} else {
 						channel->freqlist[f].notch_filter = NotchFilter(freq, WAVE_RATE, q);
 					}
@@ -552,13 +560,44 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				error();
 			}
 		}
+		if(chans[j].exists("ctcss")) {
+			if(libconfig::Setting::TypeList == chans[j]["ctcss"].getType()) {
+				for(int f = 0; f<channel->freq_count; f++) {
+					float freq = (float)chans[j]["ctcss"][f];
+
+					if(freq == 0) {
+						continue; // "disable" for this channel in list
+					} else if(freq < 0) {
+						cerr << "devices.["<<i<<"] channels.["<<j<<"] freq.["<<f<<"]: invalid value for ctcss: "<<freq<<", ignoring\n";
+					} else {
+						channel->freqlist[f].squelch.set_ctcss_freq(freq, WAVE_RATE);
+					}
+				}
+			} else if(libconfig::Setting::TypeFloat == chans[j]["ctcss"].getType() ) {
+				float freq = (float)chans[j]["ctcss"];
+				for(int f = 0; f<channel->freq_count; f++) {
+					if(freq <= 0) {
+						cerr << "devices.["<<i<<"] channels.["<<j<<"]: ctcss value '"<<freq<<"' invalid, ignoring\n";
+					} else {
+						channel->freqlist[f].squelch.set_ctcss_freq(freq, WAVE_RATE);
+					}
+				}
+			} else {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: ctcss should be an float or a list of floats with at least "
+					<<channel->freq_count<<" elements\n";
+				error();
+			}
+		}
 		if(chans[j].exists("bandwidth")) {
 			channel->needs_raw_iq = 1;
 
 			if(libconfig::Setting::TypeList == chans[j]["bandwidth"].getType()) {
 				for(int f = 0; f<channel->freq_count; f++) {
 					int bandwidth = parse_anynum2int(chans[j]["bandwidth"][f]);
-					if(bandwidth <= 0) {
+					
+					if(bandwidth == 0) {
+						continue; // "disable" for this channel in list
+					} else if(bandwidth < 0) {
 						cerr << "devices.["<<i<<"] channels.["<<j<<"] freq.["<<f<<"]: bandwidth value '"<<bandwidth<<"' invalid, ignoring\n";
 					} else {
 						channel->freqlist[f].lowpass_filter = LowpassFilter((float)bandwidth/2, WAVE_RATE);

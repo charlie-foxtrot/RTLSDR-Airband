@@ -706,6 +706,40 @@ static void output_channel_flappy_counter(FILE *f) {
 	fprintf(f, "\n");
 }
 
+static void output_channel_ctcss_counter(FILE *f) {
+	fprintf(f, "# HELP channel_ctcss_counter count of windows with CTCSS detected.\n"
+			"# TYPE channel_ctcss_counter counter\n");
+
+	for (int i = 0; i < device_count; i++) {
+		device_t* dev = devices + i;
+		for (int j = 0; j < dev->channel_count; j++) {
+			channel_t* channel = devices[i].channels + j;
+			for (int k = 0; k < channel->freq_count; k++) {
+				print_channel_metric(f, "channel_ctcss_counter", channel->freqlist[k].frequency, channel->freqlist[k].label);
+				fprintf(f, "\t%zu\n", channel->freqlist[k].squelch.ctcss_count());
+			}
+		}
+	}
+	fprintf(f, "\n");
+}
+
+static void output_channel_no_ctcss_counter(FILE *f) {
+	fprintf(f, "# HELP channel_no_ctcss_counter count of windows without CTCSS detected.\n"
+			"# TYPE channel_no_ctcss_counter counter\n");
+
+	for (int i = 0; i < device_count; i++) {
+		device_t* dev = devices + i;
+		for (int j = 0; j < dev->channel_count; j++) {
+			channel_t* channel = devices[i].channels + j;
+			for (int k = 0; k < channel->freq_count; k++) {
+				print_channel_metric(f, "channel_no_ctcss_counter", channel->freqlist[k].frequency, channel->freqlist[k].label);
+				fprintf(f, "\t%zu\n", channel->freqlist[k].squelch.no_ctcss_count());
+			}
+		}
+	}
+	fprintf(f, "\n");
+}
+
 static void output_channel_activity_counters(FILE *f) {
 	fprintf(f, "# HELP channel_activity_counter Loops of output_thread with frequency active.\n"
 			"# TYPE channel_activity_counter counter\n");
@@ -796,6 +830,8 @@ void write_stats_file(timeval *last_stats_write) {
 	output_channel_squelch_counter(file);
 	output_channel_squelch_levels(file);
 	output_channel_flappy_counter(file);
+	output_channel_ctcss_counter(file);
+	output_channel_no_ctcss_counter(file);
 	output_device_buffer_overflows(file);
 	output_output_overruns(file);
 	output_input_overruns(file);

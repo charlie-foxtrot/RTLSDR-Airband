@@ -215,5 +215,3 @@ float dBFS_to_level(const float &dBFS) {
 float level_to_dBFS(const float &level) {
 	return std::min(0.0f, 20.0f * log10f(level / fft_size) + dBFS_offset());
 }
-
-// vim: ts=4

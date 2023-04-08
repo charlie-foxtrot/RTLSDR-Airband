@@ -1,4 +1,24 @@
-#include "squelch.h"
+/*
+ * Squelch.cpp
+ *
+ * Copyright (c) 2022-2023 charlie-foxtrot
+ * Copyright (c) 2015-2021 Tomasz Lemiech <szpajder@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include "Squelch.h"
 
 #ifdef DEBUG_SQUELCH
 #include <string.h> // needed for strerror()
@@ -84,12 +104,44 @@ void Squelch::set_squelch_snr_threshold(const float &db) {
 				using_manual_level_ ? "true" : "false", normal_signal_ratio_, flappy_signal_ratio_, moving_avg_cap_);
 }
 
+void Squelch::set_ctcss_freq(const float &ctcss_freq, const float &sample_rate) {
+	// create two CTCSS detectors with different window sizes.  0.4 sec is required to tell between all the "standard"
+	// tones but 0.05 is enough to tell between tones ~20 Hz appart.  Will use ctcss_fast_ until there are enough samples
+	// for ctcss_slow_
+	ctcss_fast_ = CTCSS(ctcss_freq, sample_rate, sample_rate * 0.05);
+	ctcss_slow_ = CTCSS(ctcss_freq, sample_rate, sample_rate * 0.4);
+}
+
 bool Squelch::is_open(void) const {
-	return (current_state_ == OPEN || current_state_ == CLOSING);
+	if (current_state_ != OPEN && current_state_ != CLOSING) {
+		return false;
+	}
+	
+	enum State {
+		CLOSED,				// Audio is suppressed
+		OPENING,			// Transitioning closed -> open
+		CLOSING,			// Transitioning open -> closed
+		LOW_SIGNAL_ABORT,	// Like CLOSING but is_open() is false
+		OPEN				// Audio not suppressed
+	};
+
+
+	if (ctcss_fast_.is_enabled()) {
+		if (ctcss_slow_.enough_samples()){
+			return ctcss_slow_.has_tone();
+		}
+		return ctcss_fast_.has_tone();
+	}
+	
+	return true;
 }
 
 bool Squelch::should_filter_sample(void) {
-	return ((has_pre_filter_signal() || current_state_ != CLOSED) && current_state_ != LOW_SIGNAL_ABORT);
+	return ( (has_pre_filter_signal() || current_state_ != CLOSED) && current_state_ != LOW_SIGNAL_ABORT );
+}
+
+bool Squelch::should_process_audio(void) {
+	return ( current_state_ == OPEN || current_state_ == CLOSING );
 }
 
 bool Squelch::first_open_sample(void) const {
@@ -136,6 +188,14 @@ const size_t & Squelch::flappy_count(void) const {
 	return flappy_count_;
 }
 
+const size_t & Squelch::ctcss_count(void) const {
+	return ctcss_slow_.found_count();
+}
+
+const size_t & Squelch::no_ctcss_count(void) const {
+	return ctcss_slow_.not_found_count();
+}
+
 void Squelch::process_raw_sample(const float &sample) {
 
 	// Update current state based on previous state from last iteration
@@ -149,11 +209,11 @@ void Squelch::process_raw_sample(const float &sample) {
 
 	// Auto noise floor
 	//  - Doing this every 16 samples instead of every sample allows a gradual signal increase
-	//    to cross the squelch threshold (that is a function of the noise floor) sooner.
+	//	to cross the squelch threshold (that is a function of the noise floor) sooner.
 	//  - Updating even when squelch is open and / or signal is outside filter means the noise
-	//    floor (and squelch threshold) will slowly increasing during a long signal.  This can lead
-	//    to flapping, but this keeps a sudden and sustained increase of noise from locking squelch
-	//    OPEN.
+	//	floor (and squelch threshold) will slowly increasing during a long signal.  This can lead
+	//	to flapping, but this keeps a sudden and sustained increase of noise from locking squelch
+	//	OPEN.
 	if (sample_count_ % 16 == 0) {
 		calculate_noise_floor();
 	}
@@ -221,27 +281,46 @@ void Squelch::process_filtered_sample(const float &sample) {
 	}
 }
 
+void Squelch::process_audio_sample(const float &sample) {
+#ifdef DEBUG_SQUELCH
+	audio_input_ = sample;
+#endif
+	
+	if (!ctcss_slow_.is_enabled()) {
+		return;
+	}
+	
+	// ctcss_ is reset on transition to CLOSED and stays "unused" while CLOSED
+	if (current_state_ != CLOSED) {
+		// always send the sample to the slow (more accurate) detector, also send to the fast if there havent been enough yet
+		ctcss_slow_.process_audio_sample(sample);
+		if (!ctcss_slow_.enough_samples()) {
+			ctcss_fast_.process_audio_sample(sample);
+		}
+	}
+}
+
 void Squelch::set_state(State update) {
 
 	// Valid transitions (current_state_ -> next_state_) are:
 
 	//  - CLOSED -> CLOSED
 	//  - CLOSED -> OPENING
-	//    ---------------------------
+	// ---------------------------
 	//  - OPENING -> CLOSED
 	//  - OPENING -> OPENING
 	//  - OPENING -> CLOSING
 	//  - OPENING -> OPEN
-	//    ---------------------------
+	// ---------------------------
 	//  - CLOSING -> CLOSED
 	//  - CLOSING -> OPENING
 	//  - CLOSING -> CLOSING
 	//  - CLOSING -> LOW_SIGNAL_ABORT
 	//  - CLOSING -> OPEN
-	//    ---------------------------
+	// ---------------------------
 	//  - LOW_SIGNAL_ABORT -> CLOSED
 	//  - LOW_SIGNAL_ABORT -> LOW_SIGNAL_ABORT
-	//    ---------------------------
+	// ---------------------------
 	//  - OPEN -> CLOSING
 	//  - OPEN -> LOW_SIGNAL_ABORT
 	//  - OPEN -> OPEN
@@ -366,6 +445,8 @@ void Squelch::update_current_state(void) {
 		using_post_filter_ = false;
 		closed_sample_count_ = 0;
 		current_state_ = next_state_;
+		ctcss_fast_.reset();
+		ctcss_slow_.reset();
 	} else if (next_state_ == CLOSED && current_state_ == CLOSED) {
 		// Count this as a closed sample towards flap detection (can stop counting at recent_sample_size_)
 		if (closed_sample_count_ < recent_sample_size_) {
@@ -449,12 +530,16 @@ bool Squelch::currently_flapping(void) const {
 
  Values written to file are:
 	 - (int16_t) process_raw_sample input
+	 - (int16_t) process_filtered_sample input
+	 - (int16_t) process_audio_sample input
 	 - (int16_t) noise_floor_
 	 - (int16_t) pre_filter_.capped_
 	 - (int16_t) post_filter_.capped_
 	 - (int) current_state_
 	 - (int) delay_
 	 - (int) low_signalcount_
+	 - (int) ctcss_fast_.has_tone()
+	 - (int) ctcss_slow_.has_tone()
 
   The output file can be read / plotted in python as follows:
 
@@ -464,12 +549,16 @@ bool Squelch::currently_flapping(void) const {
 	def plot_squelch_debug(filepath):
 
 		dt = np.dtype([('raw_input', np.single),
+					   ('filtered_input', np.single),
+					   ('audio_input', np.single),
 					   ('noise_floor', np.single),
 					   ('pre_filter_capped', np.single),
 					   ('post_filter_capped', np.single),
 					   ('current_state', np.intc),
 					   ('delay', np.intc),
 					   ('low_signalcount', np.intc)
+					   ('ctcss_fast_has_tone', np.intc)
+					   ('ctcss_slow_has_tone', np.intc)
 					  ])
 
 		dat = np.fromfile(filepath, dtype=dt)
@@ -533,9 +622,11 @@ void Squelch::debug_state(void) {
 	}
 	debug_value(raw_input_);
 	debug_value(filtered_input_);
+	debug_value(audio_input_);
 
 	raw_input_ = 0.0;
 	filtered_input_ = 0.0;
+	audio_input_ = 0.0;
 
 	debug_value(noise_floor_);
 	debug_value(pre_filter_.capped_);
@@ -543,6 +634,8 @@ void Squelch::debug_state(void) {
 	debug_value((int)current_state_);
 	debug_value(delay_);
 	debug_value(low_signal_count_);
+	debug_value((int)ctcss_fast_.has_tone());
+	debug_value((int)ctcss_slow_.has_tone());
 }
 
 #endif // DEBUG_SQUELCH

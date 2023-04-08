@@ -232,6 +232,12 @@ if(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
 	list(APPEND rtl_airband_extra_libs c++)
 endif()
 
+if(BUILD_UNITTESTS)
+	set(BUILD_UNITTESTS TRUE)
+else()
+	set(BUILD_UNITTESTS FALSE)
+endif()
+
 message(STATUS "RTLSDR-Airband configuration summary:\n")
 message(STATUS "- Build type:\t\t${CMAKE_BUILD_TYPE}")
 message(STATUS "- Operating system:\t\t${CMAKE_SYSTEM_NAME}")
@@ -241,6 +247,7 @@ message(STATUS "  - mirisdr:\t\t\trequested: ${MIRISDR}, enabled: ${WITH_MIRISDR
 message(STATUS "  - soapysdr:\t\trequested: ${SOAPYSDR}, enabled: ${WITH_SOAPYSDR}")
 message(STATUS "- Other options:")
 message(STATUS "  - Platform:\t\t${PLATFORM}")
+message(STATUS "  - Build Unit Tests:\t${BUILD_UNITTESTS}")
 message(STATUS "  - Broadcom VideoCore GPU:\t${WITH_BCM_VC}")
 message(STATUS "  - NFM support:\t\t${NFM}")
 message(STATUS "  - PulseAudio:\t\trequested: ${PULSEAUDIO}, enabled: ${WITH_PULSEAUDIO}")
@@ -268,9 +275,12 @@ add_library (rtl_airband_base OBJECT
 	mixer.cpp
 	output.cpp
 	rtl_airband.cpp
-	squelch.cpp
 	util.cpp
 	udp_stream.cpp
+	ctcss.cpp
+	NotchFilter.cpp
+	LowpassFilter.cpp
+	Squelch.cpp
 	${CMAKE_CURRENT_BINARY_DIR}/version.cpp
 	${rtl_airband_extra_sources}
 	)
@@ -284,7 +294,7 @@ link_directories(${link_dirs})
 
 list(APPEND rtl_airband_obj_files $<TARGET_OBJECTS:rtl_airband_base>)
 
-add_executable (rtl_airband ${rtl_airband_obj_files})
+add_executable (rtl_airband rtl_airband_main.cpp ${rtl_airband_obj_files})
 set_property(TARGET rtl_airband PROPERTY ENABLE_EXPORTS 1)
 
 target_link_libraries (rtl_airband
@@ -299,3 +309,39 @@ install(TARGETS rtl_airband
 )
 
 # TODO: install config if not present
+
+
+if(BUILD_UNITTESTS)
+	cmake_minimum_required(VERSION 3.14)
+
+	# GoogleTest requires at least C++14
+	set(CMAKE_CXX_STANDARD 14)
+
+	# pull in GoogleTest as a dependency
+	include(FetchContent)
+	FetchContent_Declare(
+		googletest
+		URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
+	)
+	FetchContent_MakeAvailable(googletest)
+
+	enable_testing()
+
+	file(GLOB_RECURSE TEST_FILES "test_*.cpp")
+
+	add_executable(
+		unittests
+		${TEST_FILES}
+		${rtl_airband_obj_files}
+	)
+	target_link_libraries(
+		unittests
+		GTest::gtest_main
+		${rtl_airband_extra_libs}
+	)
+
+	include(GoogleTest)
+	gtest_discover_tests(unittests)
+
+endif()
+

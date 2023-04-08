@@ -337,6 +337,9 @@ if(BUILD_UNITTESTS)
 	target_link_libraries(
 		unittests
 		GTest::gtest_main
+		dl
+		m
+		pthread	
 		${rtl_airband_extra_libs}
 	)
 

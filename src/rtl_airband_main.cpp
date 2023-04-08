@@ -21,6 +21,7 @@
 #include <fcntl.h>
 #include <cstring>
 #include <syslog.h>
+#include <unistd.h>
 #include <iostream>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -37,6 +38,7 @@ char *debug_path;
 extern int devices_running;
 extern int tui;
 extern bool log_scan_activity;
+extern fm_demod_algo fm_demod;
 void* controller_thread(void* params);
 void init_demod(demod_params_t *params, Signal *signal, int device_start, int device_end);
 void init_output(output_params_t *params, int device_start, int device_end, int mixer_start, int mixer_end);

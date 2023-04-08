@@ -37,7 +37,7 @@
 #include <xmmintrin.h>
 #endif	/* x86 */
 
-#include <unistd.h>
+#include <unistd.h>  // usleep()
 #include <pthread.h>
 #include <syslog.h>
 #include <sys/types.h>
@@ -96,10 +96,6 @@ size_t fft_size_log = DEFAULT_FFT_SIZE_LOG;
 size_t fft_size = 1 << fft_size_log;
 #ifdef NFM
 float alpha = exp(-1.0f/(WAVE_RATE * 2e-4));
-enum fm_demod_algo {
-	FM_FAST_ATAN2,
-	FM_QUADRI_DEMOD
-};
 enum fm_demod_algo fm_demod = FM_FAST_ATAN2;
 #endif
 

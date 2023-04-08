@@ -115,6 +115,11 @@ enum output_type {
 #endif
 };
 
+enum fm_demod_algo {
+	FM_FAST_ATAN2,
+	FM_QUADRI_DEMOD
+};
+
 struct icecast_data {
 	const char *hostname;
 	int port;

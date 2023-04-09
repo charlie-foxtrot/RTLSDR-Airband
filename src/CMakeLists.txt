@@ -256,7 +256,7 @@ message(STATUS "  - Icecast TLS support:\t${LIBSHOUT_HAS_TLS}")
 
 configure_file(
 	"${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
-	"${CMAKE_CURRENT_SOURCE_DIR}/config.h"
+	"${CMAKE_CURRENT_BINARY_DIR}/config.h"
 	@ONLY
 )
 
@@ -286,6 +286,7 @@ add_library (rtl_airband_base OBJECT
 	)
 
 target_include_directories (rtl_airband_base PUBLIC
+	${CMAKE_CURRENT_BINARY_DIR} # needed for config.h
 	${rtl_airband_include_dirs}
 )
 
@@ -296,6 +297,11 @@ list(APPEND rtl_airband_obj_files $<TARGET_OBJECTS:rtl_airband_base>)
 
 add_executable (rtl_airband rtl_airband_main.cpp ${rtl_airband_obj_files})
 set_property(TARGET rtl_airband PROPERTY ENABLE_EXPORTS 1)
+
+# add include for config.h
+target_include_directories (rtl_airband PUBLIC
+	${CMAKE_CURRENT_BINARY_DIR}
+)
 
 target_link_libraries (rtl_airband
 	dl
@@ -316,6 +322,11 @@ if(BUILD_UNITTESTS)
 
 	# GoogleTest requires at least C++14
 	set(CMAKE_CXX_STANDARD 14)
+
+	# set timestamps of URL extracted files to the extraction time
+	if(POLICY CMP0135)
+		cmake_policy(SET CMP0135 NEW)
+	endif()
 
 	# pull in GoogleTest as a dependency
 	include(FetchContent)
@@ -338,9 +349,12 @@ if(BUILD_UNITTESTS)
 		unittests
 		GTest::gtest_main
 		dl
-		m
-		pthread	
 		${rtl_airband_extra_libs}
+	)
+
+	# add include for config.h
+	target_include_directories (unittests PUBLIC
+		${CMAKE_CURRENT_BINARY_DIR}
 	)
 
 	include(GoogleTest)

@@ -18,13 +18,14 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <fcntl.h>
-#include <cstring>
-#include <syslog.h>
-#include <unistd.h>
-#include <iostream>
-#include <sys/wait.h>
-#include <sys/stat.h>
+#include <fcntl.h>    // O_RDWR
+#include <cstring>    // srtcat, strdup, strerror
+#include <syslog.h>   // LOG_*
+#include <unistd.h>   // getopt, optarg, fork, dup2, close, getpid, usleep
+#include <iostream>   // cout, cerr
+#include <signal.h>   // sigaction
+#include <sys/wait.h> // waitpid
+
 #include <libconfig.h++>
 
 #include "logging.h"

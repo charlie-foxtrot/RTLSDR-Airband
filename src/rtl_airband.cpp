@@ -71,6 +71,7 @@
 #include "input-common.h"
 #include "rtl_airband.h"
 #include "squelch.h"
+#include "logging.h"
 
 #ifdef WITH_PROFILING
 #include "gperftools/profiler.h"

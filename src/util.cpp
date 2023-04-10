@@ -32,12 +32,6 @@
 #include "rtl_airband.h"
 #include "config.h"
 
-FILE *debugf;
-
-void error() {
-	close_debug();
-	_exit(1);
-}
 
 int atomic_inc(volatile int *pv)
 {
@@ -62,25 +56,6 @@ void log(int priority, const char *format, ...) {
 	else if(foreground)
 		vfprintf(stderr, format, args);
 	va_end(args);
-}
-
-void init_debug (char *file) {
-#ifdef DEBUG
-	if(!file) return;
-	if((debugf = fopen(file, "a")) == NULL) {
-		std::cerr<<"Could not open debug file "<<file<<": "<<strerror(errno)<<"\n";
-		error();
-	}
-#else
-	UNUSED(file);
-#endif
-}
-
-void close_debug() {
-#ifdef DEBUG
-	if(!debugf) return;
-	fclose(debugf);
-#endif
 }
 
 void tag_queue_put(device_t *dev, int freq, struct timeval tv) {

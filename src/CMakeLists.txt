@@ -278,6 +278,7 @@ add_library (rtl_airband_base OBJECT
 	squelch.cpp
 	util.cpp
 	udp_stream.cpp
+	logging.cpp
 	${CMAKE_CURRENT_BINARY_DIR}/version.cpp
 	${rtl_airband_extra_sources}
 	)
@@ -336,6 +337,10 @@ if(BUILD_UNITTESTS)
 	enable_testing()
 
 	file(GLOB_RECURSE TEST_FILES "test_*.cpp")
+	list(APPEND TEST_FILES 
+		squelch.cpp
+		logging.cpp
+	)
 
 	add_executable(
 		unittests

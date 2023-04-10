@@ -42,6 +42,7 @@
 #endif
 #include "input-common.h"	// input_t
 #include "squelch.h"
+#include "logging.h"
 
 #define ALIGNED32 __attribute__((aligned(32)))
 #define SLEEP(x) usleep(x * 1000)
@@ -52,19 +53,6 @@
 #endif
 #define CFGFILE SYSCONFDIR "/rtl_airband.conf"
 #define PIDFILE "/run/rtl_airband.pid"
-
-#define nop() do {} while (0)
-
-#ifdef DEBUG
-#define DEBUG_PATH "rtl_airband_debug.log"
-#define debug_print(fmt, ...) \
-	do { fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); fflush(debugf); } while (0)
-#define debug_bulk_print(fmt, ...) \
-	do { fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); } while (0)
-#else
-#define debug_print(fmt, ...) nop()
-#define debug_bulk_print(fmt, ...) nop()
-#endif
 
 #define UNUSED(x) (void)(x)
 
@@ -396,7 +384,6 @@ extern device_t *devices;
 extern mixer_t *mixers;
 
 // util.cpp
-void error();
 int atomic_inc(volatile int *pv);
 int atomic_dec(volatile int *pv);
 int atomic_get(volatile int *pv);
@@ -410,9 +397,6 @@ void sincosf_lut_init();
 void sincosf_lut(uint32_t phi, float *sine, float *cosine);
 void *xcalloc(size_t nmemb, size_t size, const char *file, const int line, const char *func);
 void *xrealloc(void *ptr, size_t size, const char *file, const int line, const char *func);
-void init_debug (char *file);
-void close_debug();
-extern FILE *debugf;
 #define XCALLOC(nmemb, size) xcalloc((nmemb), (size), __FILE__, __LINE__, __func__)
 #define XREALLOC(ptr, size) xrealloc((ptr), (size), __FILE__, __LINE__, __func__)
 float dBFS_to_level(const float &dBFS);

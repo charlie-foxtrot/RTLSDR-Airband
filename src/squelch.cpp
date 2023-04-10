@@ -4,9 +4,12 @@
 #include <string.h> // needed for strerror()
 #endif
 
-#include <cassert> // needed for assert()
+#include <cmath>     // pow()
+#include <cassert>   // assert()
+#include <stdlib.h>  // calloc()
+#include <algorithm> // min()
 
-#include "rtl_airband.h" // needed for debug_print()
+#include "logging.h" // debug_print()
 
 using namespace std;
 

@@ -40,7 +40,7 @@
 extern FILE *debugf;
 
 void error();
-void init_debug (char *file);
+void init_debug(const char *file);
 void close_debug();
 
 #endif /* _LOGGING_H */

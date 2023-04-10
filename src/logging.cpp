@@ -31,7 +31,7 @@ void error() {
 	_Exit(1);
 }
 
-void init_debug (char *file) {
+void init_debug (const char *file) {
 #ifdef DEBUG
 	if(!file) return;
 	if((debugf = fopen(file, "a")) == NULL) {

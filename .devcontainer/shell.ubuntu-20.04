@@ -3,8 +3,8 @@
 cd `dirname $0`/../
 
 # build container
-docker build -t rtl_airband -f .devcontainer/Dockerfile.ubuntu-20.04 .
+docker build -t rtl_airband-ubuntu_20.04 -f .devcontainer/Dockerfile.ubuntu-20.04 .
 
 # run bash in container
-docker run --rm -v $(pwd):/app/ -it --entrypoint bash rtl_airband
+docker run --rm -v $(pwd):/app/ -it --entrypoint bash rtl_airband-ubuntu_20.04
 

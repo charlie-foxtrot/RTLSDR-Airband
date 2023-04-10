@@ -835,7 +835,7 @@ void* output_thread(void *param) {
 		}
 #ifdef DEBUG
 		gettimeofday(&te, NULL);
-		debug_bulk_print("mixeroutput: %lu.%lu %lu\n", te.tv_sec, te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec);
+		debug_bulk_print("mixeroutput: %lu.%lu %lu\n", te.tv_sec, (unsigned long) te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec);
 		ts.tv_sec = te.tv_sec;
 		ts.tv_usec = te.tv_usec;
 #endif

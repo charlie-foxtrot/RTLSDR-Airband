@@ -42,6 +42,7 @@
 #endif
 #include "input-common.h"	// input_t
 #include "squelch.h"
+#include "filters.h"
 #include "logging.h"
 
 #define ALIGNED32 __attribute__((aligned(32)))
@@ -192,45 +193,6 @@ enum modulations {
 #endif
 };
 
-class NotchFilter
-{
-public:
-	NotchFilter(void);
-	NotchFilter(float notch_freq, float sample_freq, float q);
-	void apply(float &value);
-
-private:
-	bool enabled_;
-	float e;
-	float p;
-	float d[3];
-	float x[3];
-	float y[3];
-};
-
-class LowpassFilter
-{
-public:
-	LowpassFilter(void);
-	LowpassFilter(float freq, float sample_freq);
-	void apply(float &r, float &j);
-	bool enabled(void) const {return enabled_;}
-
-private:
-	static std::complex<double> blt(std::complex<double> pz);
-	static void expand(std::complex<double> pz[], int npz, std::complex<double> coeffs[]);
-	static void multin(std::complex<double> w, int npz, std::complex<double> coeffs[]);
-	static std::complex<double> evaluate(std::complex<double> topco[], int nz, std::complex<double> botco[], int np, std::complex<double> z);
-	static std::complex<double> eval(std::complex<double> coeffs[], int npz, std::complex<double> z);
-
-	bool enabled_;
-	float ycoeffs[3];
-	float gain;
-
-	std::complex<float> xv[3];
-	std::complex<float> yv[3];
-};
-
 class Signal {
 public:
 	Signal(void) {
@@ -375,7 +337,7 @@ extern bool multiple_output_threads;
 extern char *stats_filepath;
 extern size_t fft_size, fft_size_log;
 extern int device_count, mixer_count;
-extern int shout_metadata_delay, do_syslog, foreground;
+extern int shout_metadata_delay;
 extern volatile int do_exit, device_opened;
 extern float alpha;
 extern device_t *devices;

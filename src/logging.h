@@ -21,7 +21,8 @@
 #ifndef _LOGGING_H
 #define _LOGGING_H 1
 
-#include <cstdio> // FILE
+#include <cstdio>   // FILE
+#include <syslog.h> // LOG_ERR
 
 #define nop() do {} while (0)
 #define UNUSED(x) (void)(x)
@@ -37,11 +38,14 @@
 #define debug_bulk_print(fmt, ...) nop()
 #endif
 
+enum LogDestination { SYSLOG, STDERR, NONE};
+extern LogDestination log_destination;
 extern FILE *debugf;
 
 void error();
 void init_debug(const char *file);
 void close_debug();
+void log(int priority, const char *format, ...);
 
 #endif /* _LOGGING_H */
 

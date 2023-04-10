@@ -4,11 +4,11 @@
 #include <string>
 
 #include "logging.h"
-#include "squelch.h"
+#include "filters.h"
 
 using namespace std;
 
-class SquelchTest : public ::testing::Test
+class FiltersTest : public ::testing::Test
 {
 private:
 	string temp_dir;
@@ -28,9 +28,6 @@ protected:
 
 		debug_filepath = temp_dir + "/debug_file.log";
 		init_debug(debug_filepath.c_str());
-
-		// point logging to stderr
-		log_destination = STDERR;
 	}
 
 	void TearDown(void)
@@ -49,8 +46,14 @@ protected:
 
 };
 
-TEST_F(SquelchTest, default_object)
+TEST_F(FiltersTest, default_notch)
 {
-	Squelch squelch;
-	EXPECT_EQ(squelch.open_count(), 0);
+	NotchFilter notch;
+	EXPECT_FALSE(notch.enabled());
+}
+
+TEST_F(FiltersTest, default_lowpass)
+{
+	LowpassFilter lowpass;
+	EXPECT_FALSE(lowpass.enabled());
 }

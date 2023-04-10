@@ -21,10 +21,12 @@
 #include <cstdio>   // fopen()
 #include <cstring>  // strerror()
 #include <iostream> // cerr()
+#include <stdarg.h> // va_start() / va_end()
 
 #include "logging.h"
 
-FILE *debugf;
+LogDestination log_destination = SYSLOG;
+FILE *debugf = NULL;
 
 void error() {
 	close_debug();
@@ -49,5 +51,22 @@ void close_debug() {
 	if(!debugf) return;
 	fclose(debugf);
 #endif
+}
+
+void log(int priority, const char *format, ...) {
+	va_list args;
+	va_start(args, format);
+	switch (log_destination)
+	{
+	case SYSLOG:
+		vsyslog(priority, format, args);
+		break;
+	case STDERR:
+		vfprintf(stderr, format, args);
+		break;
+	case NONE:
+		break;
+	}
+	va_end(args);
 }
 

@@ -197,7 +197,7 @@ void *mixer_thread(void *param) {
 #ifdef DEBUG
 				gettimeofday(&te, NULL);
 		        debug_bulk_print("mixerinput: %lu.%lu %lu int=%d inp_unhandled=0x%02x inp_mask=0x%02x\n",
-					te.tv_sec, te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec,
+					te.tv_sec, (unsigned long) te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec,
 					mixer->interval, mixer->inputs_todo, mixer->input_mask);
 				ts.tv_sec = te.tv_sec;
 				ts.tv_usec = te.tv_usec;

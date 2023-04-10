@@ -20,7 +20,6 @@
 
 #include <unistd.h>
 #include <stdint.h>			// uint32_t
-#include <syslog.h>
 #include <iostream>
 #include <cstdlib>
 #include <cstdarg>
@@ -31,6 +30,7 @@
 #include <lame/lame.h>
 #include "rtl_airband.h"
 #include "config.h"
+#include "logging.h"
 
 
 int atomic_inc(volatile int *pv)
@@ -46,16 +46,6 @@ int atomic_dec(volatile int *pv)
 int atomic_get(volatile int *pv)
 {
 	return __sync_fetch_and_add(pv, 0);
-}
-
-void log(int priority, const char *format, ...) {
-	va_list args;
-	va_start(args, format);
-	if(do_syslog)
-		vsyslog(priority, format, args);
-	else if(foreground)
-		vfprintf(stderr, format, args);
-	va_end(args);
 }
 
 void tag_queue_put(device_t *dev, int freq, struct timeval tv) {

@@ -1,52 +1,22 @@
-#include <gtest/gtest.h>
-
-#include <stdlib.h> // mkdtemp()
-#include <string>
+#include "test_base_class.h"
 
 #include "logging.h"
 #include "squelch.h"
 
 using namespace std;
 
-class SquelchTest : public ::testing::Test
+class SquelchTest : public TestBaseClass
 {
-private:
-	string temp_dir;
-	string debug_filepath;
-
 protected:
 	void SetUp(void)
 	{
-		// setup debug file
-		char temp_path_template[] = "/tmp/fileXXXXXX";
-		if (mkdtemp(temp_path_template) == NULL) {
-			cerr << "Error making temp dir for test files: " << strerror(errno) << endl;
-			ASSERT_TRUE(false);
-		}
-
-		temp_dir = string(temp_path_template);
-
-		debug_filepath = temp_dir + "/debug_file.log";
-		init_debug(debug_filepath.c_str());
-
-		// point logging to stderr
-		log_destination = STDERR;
+		TestBaseClass::SetUp();
 	}
 
 	void TearDown(void)
 	{
-		close_debug();
-
-		if (unlink(debug_filepath.c_str()) != 0) {
-			cerr << "Error removing debug log file: " << strerror(errno) << endl;
-		}
-
-		if (rmdir(temp_dir.c_str()) != 0) {
-			cerr << "Error removing temp dir for test files: " << strerror(errno) << endl;
-		}
-
+		TestBaseClass::TearDown();
 	}
-
 };
 
 TEST_F(SquelchTest, default_object)

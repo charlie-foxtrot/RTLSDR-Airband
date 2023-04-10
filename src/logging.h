@@ -24,6 +24,7 @@
 #include <cstdio> // FILE
 
 #define nop() do {} while (0)
+#define UNUSED(x) (void)(x)
 
 #ifdef DEBUG
 #define DEBUG_PATH "rtl_airband_debug.log"

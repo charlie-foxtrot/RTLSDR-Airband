@@ -54,8 +54,6 @@
 #define CFGFILE SYSCONFDIR "/rtl_airband.conf"
 #define PIDFILE "/run/rtl_airband.pid"
 
-#define UNUSED(x) (void)(x)
-
 #define MIN_BUF_SIZE 2560000
 #define DEFAULT_SAMPLE_RATE 2560000
 #ifdef NFM

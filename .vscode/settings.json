@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "*.h++": "cpp",
+        "initializer_list": "cpp",
+        "functional": "cpp",
+        "array": "cpp",
+        "string_view": "cpp",
+        "utility": "cpp"
+    }
+}

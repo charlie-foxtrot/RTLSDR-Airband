@@ -10,7 +10,7 @@
 
 	"updateContentCommand" : "apt-get install git",
 
-	"postCreateCommand" : "cmake -B /app/build -DCMAKE_BUILD_TYPE=Debug -DNFM=TRUE",
+	"postCreateCommand" : "cmake -B /app/build -DCMAKE_BUILD_TYPE=Debug -DNFM=TRUE -DBUILD_UNITTESTS=true",
 
 	// vs code extensions to install in the dev container
 	"customizations": {

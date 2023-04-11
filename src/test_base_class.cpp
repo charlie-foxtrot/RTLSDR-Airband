@@ -65,7 +65,7 @@ void delete_directory(const string &root) {
 }
 
 string make_temp_dir(void) {
-	char temp_path_template[] = "/tmp/fileXXXXXX";
+	char temp_path_template[] = "/tmp/temp_unittest_dir_XXXXXX";
 	if (mkdtemp(temp_path_template) == NULL) {
 		cerr << "Error making temp dir for test files: " << strerror(errno) << endl;
 		return "";

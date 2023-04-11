@@ -342,7 +342,7 @@ if(BUILD_UNITTESTS)
 		squelch.cpp
 		logging.cpp
 		filters.cpp
-		test_base_class.cpp
+		generate_signal.cpp
 	)
 
 	add_executable(

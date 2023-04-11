@@ -19,7 +19,6 @@
 
 #include "test_base_class.h"
 
-#include "logging.h"
 #include "squelch.h"
 
 using namespace std;

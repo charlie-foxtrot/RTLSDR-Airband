@@ -30,7 +30,6 @@ protected:
 	void SetUp(void);
 	void TearDown(void);
 
-private:
 	std::string temp_dir;
 };
 

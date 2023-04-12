@@ -17,7 +17,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "logging.h"
+#include "logging.h" // debug_print()
 
 #include "filters.h"
 

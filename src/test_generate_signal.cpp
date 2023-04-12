@@ -193,7 +193,7 @@ TEST_F(GenerateSignalTest, get_sample_only_noise) {
 		float sample = signal.get_sample();
 		min_value = min(sample, min_value);
 		max_value = max(sample, max_value);
-		ASSERT_NE(signal.get_sample(), 0.0);
+		ASSERT_NE(sample, 0.0);
 	}
 
 	EXPECT_LT(max_value, ampl * 0.6);

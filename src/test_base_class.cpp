@@ -104,6 +104,8 @@ TEST(TestHelpers, make_temp_dir) {
 	struct stat info;
 	ASSERT_EQ(stat(temp_dir.c_str(), &info), 0);
 	EXPECT_TRUE(S_ISDIR(info.st_mode));
+
+	delete_directory(temp_dir);
 }
 
 TEST(TestHelpers, delete_directory) {

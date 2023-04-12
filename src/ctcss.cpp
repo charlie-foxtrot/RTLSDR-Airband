@@ -103,7 +103,12 @@ float ToneDetectorSet::sorted_powers(vector<ToneDetectorSet::PowerIndex> &powers
 	return total_power / tones_.size();
 }
 
-
+vector<float> CTCSS::standard_tones = {
+	67.0, 69.3, 71.9, 74.4, 77.0, 79.7, 82.5, 85.4, 88.5, 91.5, 94.8, 97.4, 100.0, 103.5, 107.2,
+	110.9, 114.8, 118.8, 123.0, 127.3, 131.8, 136.5, 141.3, 146.2, 150.0, 151.4, 156.7, 159.8,
+	162.2, 165.5, 167.9, 171.3, 173.8, 177.3, 179.9, 183.5, 186.2, 189.9, 192.8, 196.6, 199.5,
+	203.5, 206.5, 210.7, 218.1, 225.7, 229.1, 233.6, 241.8, 250.3, 254.1
+};
 
 CTCSS::CTCSS(const float & ctcss_freq, const float & sample_rate, int window_size)
 	: enabled_(true), ctcss_freq_(ctcss_freq), window_size_(window_size), found_count_(0), not_found_count_(0) {
@@ -115,13 +120,6 @@ CTCSS::CTCSS(const float & ctcss_freq, const float & sample_rate, int window_siz
 	// frequency per bin.  Adding the target CTCSS frequency first ensures it will be the one
 	// used for that bin.
 	powers_.add(ctcss_freq, sample_rate, window_size_);
-
-	static vector<float> standard_tones = {
-		67.0, 69.3, 71.9, 74.4, 77.0, 79.7, 82.5, 85.4, 88.5, 91.5, 94.8, 97.4, 100.0, 103.5, 107.2,
-		110.9, 114.8, 118.8, 123.0, 127.3, 131.8, 136.5, 141.3, 146.2, 150.0, 151.4, 156.7, 159.8,
-		162.2, 165.5, 167.9, 171.3, 173.8, 177.3, 179.9, 183.5, 186.2, 189.9, 192.8, 196.6, 199.5,
-		203.5, 206.5, 210.7, 218.1, 225.7, 229.1, 233.6, 241.8, 250.3, 254.1
-	};
 		
 	for (vector<float>::const_iterator it = standard_tones.begin(); it != standard_tones.end(); ++it) {
 		powers_.add(*it, sample_rate, window_size_);

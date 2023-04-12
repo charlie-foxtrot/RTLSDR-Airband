@@ -81,6 +81,8 @@ public:
 	bool enough_samples(void) const { return enough_samples_; }
 	bool has_tone(void) const { return !enabled_ || has_tone_; }
 
+	static std::vector<float> standard_tones;
+
 private:
 	bool enabled_;
 	float ctcss_freq_;

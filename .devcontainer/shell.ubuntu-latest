@@ -3,8 +3,8 @@
 cd `dirname $0`/../
 
 # build container
-docker build -t rtl_airband-ubuntu_latest -f .devcontainer/Dockerfile.ubuntu-latest .
+docker build -t rtl_airband.ubuntu-latest -f .devcontainer/Dockerfile.ubuntu-latest .
 
 # run bash in container
-docker run --rm -v $(pwd):/app/ -it --entrypoint bash rtl_airband-ubuntu_latest
+docker run --rm -v $(pwd):/app/ -it --entrypoint bash rtl_airband.ubuntu-latest
 

@@ -193,13 +193,13 @@ TEST_F(GenerateSignalTest, get_sample_only_noise) {
 		float sample = signal.get_sample();
 		min_value = min(sample, min_value);
 		max_value = max(sample, max_value);
-		ASSERT_NE(sample, 0.0);
 	}
 
+	EXPECT_GT(max_value, 0);
 	EXPECT_LT(max_value, ampl * 0.6);
-	EXPECT_GT(min_value, ampl * -0.6);
 
-	signal.write_file("/tmp/noise.dat", 60.0);
+	EXPECT_LT(min_value, 0);
+	EXPECT_GT(min_value, ampl * -0.6);
 }
 
 TEST_F(GenerateSignalTest, get_sample_two_tones_and_noise) {
@@ -223,6 +223,4 @@ TEST_F(GenerateSignalTest, get_sample_two_tones_and_noise) {
 		ASSERT_LT(sample_noise, noise_ampl * 0.6);
 		ASSERT_GT(sample_noise, noise_ampl * -0.6);
 	}
-
-	signal.write_file("/tmp/tones_with_noise.dat", 120.0);
 }

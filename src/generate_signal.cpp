@@ -34,6 +34,12 @@ float Tone::get_sample(void)
 }
 
 Noise::Noise(const float &ampl) : ampl_(ampl) {
+ 
+	// create a seeded generator
+	std::random_device r;
+	std::seed_seq s{r(), r(), r(), r(), r(), r(), r(), r()};
+	generator = std::mt19937(s);
+
 	// centered at 0.0, standard deviation of 0.1
     distribution = normal_distribution<float> (0.0, 0.1);
 }

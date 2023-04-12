@@ -43,7 +43,7 @@ public:
 
 private:
     float ampl_;
-    std::default_random_engine generator;
+    std::mt19937 generator;
     std::normal_distribution<float> distribution;
 };
 

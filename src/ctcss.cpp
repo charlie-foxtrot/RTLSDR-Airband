@@ -64,8 +64,8 @@ void ToneDetector::reset(void) {
 bool ToneDetectorSet::add(const float & tone_freq, const float & sample_rate, int window_size) {
 	ToneDetector new_tone = ToneDetector(tone_freq, sample_rate, window_size);
 	
-	for (vector<ToneDetector>::const_iterator it = tones_.begin(); it != tones_.end(); ++it) {
-		if (new_tone.coefficient() == it->coefficient()) {
+	for (const auto tone : tones_) {
+		if (new_tone.coefficient() == tone.coefficient()) {
 			debug_print("Skipping tone %f, too close to other tones\n", tone_freq);
 			return false;
 		}
@@ -115,14 +115,16 @@ CTCSS::CTCSS(const float & ctcss_freq, const float & sample_rate, int window_siz
 
     debug_print("Adding CTCSS detector for %f Hz with a sample rate of %f and window %d\n", ctcss_freq, sample_rate, window_size_);
 
-	// Add the target CTCSS frequency first followed by the other "standard tones".  The
-	// ToneDetectorSet can't tell between frequencies that are "close" so will only add one
-	// frequency per bin.  Adding the target CTCSS frequency first ensures it will be the one
-	// used for that bin.
+	// Add the target CTCSS frequency first followed by the other "standard tones", except those
+	// within +/- 5 Hz
 	powers_.add(ctcss_freq, sample_rate, window_size_);
 		
-	for (vector<float>::const_iterator it = standard_tones.begin(); it != standard_tones.end(); ++it) {
-		powers_.add(*it, sample_rate, window_size_);
+	for (const auto tone : standard_tones) {
+		if (abs(ctcss_freq - tone) < 5) {
+			debug_print("Skipping tone %f, too close to other tones\n", tone);
+			continue;
+		}
+		powers_.add(tone, sample_rate, window_size_);
 	}
     
     // clear all values to start NOTE: has_tone_ will be true until the first window count of samples are processed
@@ -153,7 +155,8 @@ void CTCSS::process_audio_sample(const float &sample) {
         has_tone_ = true;
         found_count_++;
     } else {
-        debug_print("CTCSS tone of %f Hz not detected - highest power was %f Hz at %f\n", ctcss_freq_, tone_powers[0].freq, tone_powers[0].power);
+        debug_print("CTCSS tone of %f Hz not detected - highest power was %f Hz at %f\n",
+					ctcss_freq_, tone_powers[0].freq, tone_powers[0].power);
         has_tone_ = false;
         not_found_count_++;
     }

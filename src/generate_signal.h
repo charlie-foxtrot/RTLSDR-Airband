@@ -26,6 +26,10 @@
 
 class Tone {
 public:
+    static float WEAK;
+    static float NORMAL;
+    static float STRONG;
+
     Tone(int sample_rate, const float &freq, const float &ampl);
     float get_sample(void);
 
@@ -38,6 +42,10 @@ private:
 
 class Noise {
 public:
+    static float WEAK;
+    static float NORMAL;
+    static float STRONG;
+
     Noise(const float &ampl);
     float get_sample(void);
 

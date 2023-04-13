@@ -23,6 +23,10 @@
 
 using namespace std;
 
+float Tone::WEAK = 0.05;
+float Tone::NORMAL = 0.2;
+float Tone::STRONG = 0.4;
+
 Tone::Tone(int sample_rate, const float &freq, const float &ampl) : sample_rate_(sample_rate), freq_(freq), ampl_(ampl), sample_count_(0)
 {
 }
@@ -32,6 +36,10 @@ float Tone::get_sample(void)
 	sample_count_++;
 	return ampl_ * sin(2 * M_PI * sample_count_ * freq_ / sample_rate_);
 }
+
+float Noise::WEAK = 0.05;
+float Noise::NORMAL = 0.2;
+float Noise::STRONG = 0.5;
 
 Noise::Noise(const float &ampl) : ampl_(ampl) {
  

@@ -115,31 +115,27 @@ void Squelch::set_ctcss_freq(const float &ctcss_freq, const float &sample_rate) 
 }
 
 bool Squelch::is_open(void) const {
-	if (current_state_ != OPEN && current_state_ != CLOSING) {
-		return false;
-	}
-	
-	enum State {
-		CLOSED,				// Audio is suppressed
-		OPENING,			// Transitioning closed -> open
-		CLOSING,			// Transitioning open -> closed
-		LOW_SIGNAL_ABORT,	// Like CLOSING but is_open() is false
-		OPEN				// Audio not suppressed
-	};
 
+	// if current state is OPEN or CLOSING then decide based on CTCSS (if enabled)
+	if (current_state_ == OPEN || current_state_ == CLOSING) {
 
-	if (ctcss_fast_.is_enabled()) {
-		if (ctcss_slow_.enough_samples()){
-			return ctcss_slow_.has_tone();
+		// if CTCSS is enabled then use slow (more accurate) if it has enough samples, otherwise
+		// use fast (will return false if also not enough samples)
+		if (ctcss_slow_.is_enabled()) {
+			if (ctcss_slow_.enough_samples()){
+				return ctcss_slow_.has_tone();
+			}
+			return ctcss_fast_.has_tone();
 		}
-		return ctcss_fast_.has_tone();
+		
+		return true;
 	}
-	
-	return true;
+
+	return false;
 }
 
 bool Squelch::should_filter_sample(void) {
-	return ( (has_pre_filter_signal() || current_state_ != CLOSED) && current_state_ != LOW_SIGNAL_ABORT );
+	return ((has_pre_filter_signal() || current_state_ != CLOSED) && current_state_ != LOW_SIGNAL_ABORT);
 }
 
 bool Squelch::should_process_audio(void) {

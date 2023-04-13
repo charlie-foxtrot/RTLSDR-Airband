@@ -26,6 +26,8 @@
 #include <stdio.h>  // needed for debug file output
 #endif
 
+#include "ctcss.h"
+
 /*
  Theory of operation:
 
@@ -57,6 +59,11 @@
 
  A count of "recent opens" is maintained as a way to detect squelch flapping (ie rapidly opening and closing).
  When flapping is detected the squelch level is decreased in an attempt to keep squelch open longer.
+
+ CTCSS tone detection can be enabled.  If used, two tone detectors are created at different window lengths.
+ The “fast” detector has less resolution but needs fewer samples while the “slow” detector is more accurate.
+ When CTCSS is enabled, squelch remains CLOSED for an additional 0.05 sec until a tone is detected by the “fast”
+ detector. 
  */
 
 class Squelch {
@@ -65,12 +72,15 @@ public:
 
 	void set_squelch_level_threshold(const float &level);
 	void set_squelch_snr_threshold(const float &db);
+	void set_ctcss_freq(const float &ctcss_freq, const float &sample_rate);
 
 	void process_raw_sample(const float &sample);
 	void process_filtered_sample(const float &sample);
+	void process_audio_sample(const float &sample);
 
 	bool is_open(void) const;
 	bool should_filter_sample(void);
+	bool should_process_audio(void);
 
 	bool first_open_sample(void) const;
 	bool last_open_sample(void) const;
@@ -82,7 +92,8 @@ public:
 
 	const size_t & open_count(void) const;
 	const size_t & flappy_count(void) const;
-
+	const size_t & ctcss_count(void) const;
+	const size_t & no_ctcss_count(void) const;
 
 #ifdef DEBUG_SQUELCH
 	~Squelch(void);
@@ -143,6 +154,9 @@ private:
 	int buffer_tail_;		// index to read buffered values
 	float *buffer_;			// buffer
 
+	CTCSS ctcss_fast_;	  // ctcss tone detection
+	CTCSS ctcss_slow_;	  // ctcss tone detection
+
 	void set_state(State update);
 	void update_current_state(void);
 	bool has_pre_filter_signal(void);
@@ -157,6 +171,7 @@ private:
 	FILE *debug_file_;
 	float raw_input_;
 	float filtered_input_;
+	float audio_input_;
 	void debug_value(const float &value);
 	void debug_value(const int &value);
 	void debug_state(void);

@@ -122,7 +122,7 @@ bool Squelch::is_open(void) const {
 		// if CTCSS is enabled then use slow (more accurate) if it has enough samples, otherwise
 		// use fast (will return false if also not enough samples)
 		if (ctcss_slow_.is_enabled()) {
-			if (ctcss_slow_.enough_samples()){
+			if (ctcss_slow_.enough_samples()) {
 				return ctcss_slow_.has_tone();
 			}
 			return ctcss_fast_.has_tone();

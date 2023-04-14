@@ -97,18 +97,21 @@ TEST_F(SquelchTest, normal_operation) {
 		squelch.process_raw_sample(raw_signal_sample);
 	}
 	ASSERT_TRUE(squelch.is_open());
+	ASSERT_TRUE(squelch.should_process_audio());
 
 	// send through a bunch more "signal" values and squelch stays open
 	for(int i = 0; i < 1000 ; ++i) {
 		squelch.process_raw_sample(raw_signal_sample);
 	}
 	ASSERT_TRUE(squelch.is_open());
+	ASSERT_TRUE(squelch.should_process_audio());
 
 	// send through "no signal" samples and squelch should close quickly
 	for(int i = 0; i < 100 && squelch.is_open() ; ++i) {
 		squelch.process_raw_sample(raw_no_signal_sample);
 	}
 	ASSERT_FALSE(squelch.is_open());
+	ASSERT_FALSE(squelch.should_process_audio());
 }
 
 
@@ -122,24 +125,27 @@ TEST_F(SquelchTest, dead_spot) {
 		squelch.process_raw_sample(raw_signal_sample);
 	}
 	ASSERT_TRUE(squelch.is_open());
+	ASSERT_TRUE(squelch.should_process_audio());
 
 	// send through a bunch more "signal" values and squelch stays open
 	for(int i = 0; i < 1000 ; ++i) {
 		squelch.process_raw_sample(raw_signal_sample);
 	}
 	ASSERT_TRUE(squelch.is_open());
+	ASSERT_TRUE(squelch.should_process_audio());
 
 	// send through a dead spot of "no signal" and squelch should stay open
-	ASSERT_TRUE(squelch.is_open());
 	for(int i = 0; i < 50; ++i) {
 		squelch.process_raw_sample(raw_no_signal_sample);
 		ASSERT_TRUE(squelch.is_open());
+		ASSERT_TRUE(squelch.should_process_audio());
 	}
 
 	// send go back to "signal" samples and squelch stays open
 	for(int i = 0; i < 1000 ; ++i) {
 		squelch.process_raw_sample(raw_signal_sample);
 		ASSERT_TRUE(squelch.is_open());
+		ASSERT_TRUE(squelch.should_process_audio());
 	}
 }
 
@@ -181,8 +187,8 @@ TEST_F(SquelchTest, good_ctcss) {
 	for(int i = 0; i < 500 && !squelch.should_process_audio() ; ++i) {
 		squelch.process_raw_sample(raw_signal_sample);
 	}
-	ASSERT_TRUE(squelch.should_process_audio());
 	ASSERT_FALSE(squelch.is_open());
+	ASSERT_TRUE(squelch.should_process_audio());
 
 	// process audio samples and "signal" samples until squelch is open
 	for(int i = 0; i < 500 && !squelch.is_open() ; ++i) {
@@ -190,12 +196,14 @@ TEST_F(SquelchTest, good_ctcss) {
 		squelch.process_raw_sample(raw_signal_sample);
 	}
 	ASSERT_TRUE(squelch.is_open());
+	ASSERT_TRUE(squelch.should_process_audio());
 
 	// run through a lot more to ensure squelch stays open
 	for(int i = 0; i < 100000; ++i) {
 		squelch.process_audio_sample(signal_with_tone.get_sample());
 		squelch.process_raw_sample(raw_signal_sample);
 		ASSERT_TRUE(squelch.is_open());
+		ASSERT_TRUE(squelch.should_process_audio());
 	}
 
 	EXPECT_GT(squelch.ctcss_count(), 0);

@@ -589,56 +589,43 @@ void *demodulate(void *params) {
 					}
 
 					// If squelch sees power then do modulation-specific processing
-					float waveout = channel->waveout[j];
-					float agcavgfast = fparms->agcavgfast;
-					
 					if (fparms->squelch.should_process_audio()) {
 						if(fparms->modulation == MOD_AM) {
 
 							if( channel->wavein[j] > fparms->squelch.squelch_level() ) {
-								agcavgfast = agcavgfast * 0.995f + channel->wavein[j] * 0.005f;
+								fparms->agcavgfast = fparms->agcavgfast * 0.995f + channel->wavein[j] * 0.005f;
 							}
 
-							waveout = (channel->wavein[j - AGC_EXTRA] - agcavgfast) / (agcavgfast * 1.5f);
-							if (abs(waveout) > 0.8f) {
-								waveout *= 0.85f;
-								agcavgfast *= 1.15f;
+							channel->waveout[j] = (channel->wavein[j - AGC_EXTRA] - fparms->agcavgfast) / (fparms->agcavgfast * 1.5f);
+							if (abs(channel->waveout[j]) > 0.8f) {
+								channel->waveout[j] *= 0.85f;
+								fparms->agcavgfast *= 1.15f;
 							}
 						}
 #ifdef NFM
 						else if(fparms->modulation == MOD_NFM) {
 							// FM demod
 							if(fm_demod == FM_FAST_ATAN2) {
-								waveout = polar_disc_fast(real, imag, channel->pr, channel->pj);
+								channel->waveout[j] = polar_disc_fast(real, imag, channel->pr, channel->pj);
 							} else if(fm_demod == FM_QUADRI_DEMOD) {
-								waveout = fm_quadri_demod(real, imag, channel->pr, channel->pj);
+								channel->waveout[j] = fm_quadri_demod(real, imag, channel->pr, channel->pj);
 							}
 							channel->pr = real;
 							channel->pj = imag;
 
 							// de-emphasis IIR + DC blocking
-							agcavgfast = agcavgfast * 0.995f + waveout * 0.005f;
-							waveout -= agcavgfast;
-							waveout = waveout * (1.0f - channel->alpha) + channel->waveout[j-1] * channel->alpha;
+							fparms->agcavgfast = fparms->agcavgfast * 0.995f + channel->waveout[j] * 0.005f;
+							channel->waveout[j] -= fparms->agcavgfast;
+							channel->waveout[j] = channel->waveout[j] * (1.0f - channel->alpha) + channel->waveout[j-1] * channel->alpha;
 						}
 #endif // NFM
 						
 						// process audio sample for CTCSS, will be no-op if not configured
-						fparms->squelch.process_audio_sample(waveout);
+						fparms->squelch.process_audio_sample(channel->waveout[j]);
 					}
 					
 					// If squelch is still open then save samples to output
 					if (fparms->squelch.is_open()) {
-
-						// save the I/Q samples
-						if(channel->has_iq_outputs) {
-							channel->iq_out[2*(j - AGC_EXTRA)] = real;
-							channel->iq_out[2*(j - AGC_EXTRA)+1] = imag;
-						}
-						
-						// save the waveout and update agc
-						channel->waveout[j] = waveout;
-						fparms->agcavgfast = agcavgfast;
 
 						// apply the notch filter, will be a no-op if not configured
 						fparms->notch_filter.apply(channel->waveout[j]);
@@ -649,6 +636,10 @@ void *demodulate(void *params) {
 						}
 
 						channel->axcindicate = SIGNAL;
+						if(channel->has_iq_outputs) {
+							channel->iq_out[2*(j - AGC_EXTRA)] = real;
+							channel->iq_out[2*(j - AGC_EXTRA)+1] = imag;
+						}
 
 					// Squelch is closed
 					} else {

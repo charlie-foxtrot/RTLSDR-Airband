@@ -9,6 +9,7 @@ set (RTL_AIRBAND_VERSION "${RTL_AIRBAND_VERSION_MAJOR}.${RTL_AIRBAND_VERSION_MIN
 set (CMAKE_CXX_STANDARD 11)
 set (CXX_STANDARD_REQUIRED ON)
 set (CMAKE_CXX_EXTENSIONS OFF)
+set (CMAKE_COMPILE_WARNING_AS_ERROR ON)
 
 if(NOT CMAKE_BUILD_TYPE)
    set(CMAKE_BUILD_TYPE Release)
@@ -24,6 +25,3 @@ endif()
 
 add_subdirectory (src)
 
-if(BUILD_UNITTESTS)
-   add_subdirectory (unittests)
-endif()

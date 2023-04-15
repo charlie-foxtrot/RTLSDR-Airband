@@ -42,6 +42,8 @@
 #endif
 #include "input-common.h"	// input_t
 #include "squelch.h"
+#include "filters.h"
+#include "logging.h"
 
 #define ALIGNED32 __attribute__((aligned(32)))
 #define SLEEP(x) usleep(x * 1000)
@@ -52,21 +54,6 @@
 #endif
 #define CFGFILE SYSCONFDIR "/rtl_airband.conf"
 #define PIDFILE "/run/rtl_airband.pid"
-
-#define nop() do {} while (0)
-
-#ifdef DEBUG
-#define DEBUG_PATH "rtl_airband_debug.log"
-#define debug_print(fmt, ...) \
-	do { fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); fflush(debugf); } while (0)
-#define debug_bulk_print(fmt, ...) \
-	do { fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); } while (0)
-#else
-#define debug_print(fmt, ...) nop()
-#define debug_bulk_print(fmt, ...) nop()
-#endif
-
-#define UNUSED(x) (void)(x)
 
 #define MIN_BUF_SIZE 2560000
 #define DEFAULT_SAMPLE_RATE 2560000
@@ -204,45 +191,6 @@ enum modulations {
 #ifdef NFM
 	, MOD_NFM
 #endif
-};
-
-class NotchFilter
-{
-public:
-	NotchFilter(void);
-	NotchFilter(float notch_freq, float sample_freq, float q);
-	void apply(float &value);
-
-private:
-	bool enabled_;
-	float e;
-	float p;
-	float d[3];
-	float x[3];
-	float y[3];
-};
-
-class LowpassFilter
-{
-public:
-	LowpassFilter(void);
-	LowpassFilter(float freq, float sample_freq);
-	void apply(float &r, float &j);
-	bool enabled(void) const {return enabled_;}
-
-private:
-	static std::complex<double> blt(std::complex<double> pz);
-	static void expand(std::complex<double> pz[], int npz, std::complex<double> coeffs[]);
-	static void multin(std::complex<double> w, int npz, std::complex<double> coeffs[]);
-	static std::complex<double> evaluate(std::complex<double> topco[], int nz, std::complex<double> botco[], int np, std::complex<double> z);
-	static std::complex<double> eval(std::complex<double> coeffs[], int npz, std::complex<double> z);
-
-	bool enabled_;
-	float ycoeffs[3];
-	float gain;
-
-	std::complex<float> xv[3];
-	std::complex<float> yv[3];
 };
 
 class Signal {
@@ -389,14 +337,13 @@ extern bool multiple_output_threads;
 extern char *stats_filepath;
 extern size_t fft_size, fft_size_log;
 extern int device_count, mixer_count;
-extern int shout_metadata_delay, do_syslog, foreground;
+extern int shout_metadata_delay;
 extern volatile int do_exit, device_opened;
 extern float alpha;
 extern device_t *devices;
 extern mixer_t *mixers;
 
 // util.cpp
-void error();
 int atomic_inc(volatile int *pv);
 int atomic_dec(volatile int *pv);
 int atomic_get(volatile int *pv);
@@ -410,9 +357,6 @@ void sincosf_lut_init();
 void sincosf_lut(uint32_t phi, float *sine, float *cosine);
 void *xcalloc(size_t nmemb, size_t size, const char *file, const int line, const char *func);
 void *xrealloc(void *ptr, size_t size, const char *file, const int line, const char *func);
-void init_debug (char *file);
-void close_debug();
-extern FILE *debugf;
 #define XCALLOC(nmemb, size) xcalloc((nmemb), (size), __FILE__, __LINE__, __func__)
 #define XREALLOC(ptr, size) xrealloc((ptr), (size), __FILE__, __LINE__, __func__)
 float dBFS_to_level(const float &dBFS);

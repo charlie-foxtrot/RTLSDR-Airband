@@ -466,13 +466,19 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 			} else if(icecast->send_scan_freq_tags && cur_scan_freq >= 0) {
 				shout_metadata_t *meta = shout_metadata_new();
 				char description[32];
-				if(channel->freqlist[channel->freq_idx].label != NULL)
-					shout_metadata_add(meta, "song", channel->freqlist[channel->freq_idx].label);
-				else {
+				if(channel->freqlist[channel->freq_idx].label != NULL) {
+					if (shout_metadata_add(meta, "song", channel->freqlist[channel->freq_idx].label) != SHOUTERR_SUCCESS) {
+						log(LOG_WARNING, "Failed to add shout metadata\n");
+					}
+				} else {
 					snprintf(description, sizeof(description), "%.3f MHz", channel->freqlist[channel->freq_idx].frequency / 1000000.0);
-					shout_metadata_add(meta, "song", description);
+					if (shout_metadata_add(meta, "song", description) != SHOUTERR_SUCCESS) {
+						log(LOG_WARNING, "Failed to add shout metadata\n");
+					}
 				}
-				shout_set_metadata(icecast->shout, meta);
+				if (shout_set_metadata(icecast->shout, meta) != SHOUTERR_SUCCESS) {
+					log(LOG_WARNING, "Failed to add shout metadata\n");
+				}
 				shout_metadata_free(meta);
 			}
 		} else if(channel->outputs[k].type == O_FILE || channel->outputs[k].type == O_RAWFILE) {
@@ -829,7 +835,7 @@ void* output_thread(void *param) {
 		}
 #ifdef DEBUG
 		gettimeofday(&te, NULL);
-		debug_bulk_print("mixeroutput: %lu.%lu %lu\n", te.tv_sec, te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec);
+		debug_bulk_print("mixeroutput: %lu.%lu %lu\n", te.tv_sec, (unsigned long) te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec);
 		ts.tv_sec = te.tv_sec;
 		ts.tv_usec = te.tv_usec;
 #endif

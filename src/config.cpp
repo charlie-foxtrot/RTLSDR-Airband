@@ -279,6 +279,7 @@ static struct freq_t *mk_freqlist( int n )
 		fl[i].frequency = 0;
 		fl[i].label = NULL;
 		fl[i].agcavgfast = 0.5f;
+		fl[i].volume_multiplier = 1.0f;
 		fl[i].squelch = Squelch();
 		fl[i].active_counter = 0;
 		fl[i].modulation = MOD_AM;
@@ -332,6 +333,12 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		channel->lowpass = chans[j].exists("lowpass") ? (int)chans[j]["lowpass"] : 2500;
 		channel->lame = NULL;
 		channel->lamebuf = NULL;
+#ifdef NFM
+		channel->pr = 0;
+		channel->pj = 0;
+		channel->prev_waveout = 0.5;
+		channel->alpha = dev->alpha;
+#endif
 
 		modulations channel_modulation = MOD_AM;
 		if(chans[j].exists("modulation")) {
@@ -575,12 +582,22 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				}
 			}
 		}
+		if(chans[j].exists("volume_multiplier")) {
+			if(libconfig::Setting::TypeList == chans[j]["volume_multiplier"].getType()) {
+				for(int f = 0; f < channel->freq_count; f++) {
+					channel->freqlist[f].volume_multiplier = (float)chans[j]["volume_multiplier"][f];;
+				}
+			} else {
+				float volume_multiplier = (float)chans[j]["volume_multiplier"];
+				for(int f = 0; f<channel->freq_count; f++) {
+					channel->freqlist[f].volume_multiplier = volume_multiplier;
+				}
+			}
+		}
 
 #ifdef NFM
 		if(chans[j].exists("tau")) {
 			channel->alpha = ((int)chans[j]["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)chans[j]["tau"])));
-		} else {
-			channel->alpha = dev->alpha;
 		}
 #endif
 		libconfig::Setting &outputs = chans[j]["outputs"];

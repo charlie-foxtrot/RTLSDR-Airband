@@ -620,7 +620,7 @@ void *demodulate(void *params) {
 							waveout -= fparms->agcavgfast;
 							waveout = waveout * (1.0f - channel->alpha) + channel->prev_waveout * channel->alpha;
 
-							// save off waveout before notch and volume_multiplier
+							// save off waveout before notch and ampfactor
 							channel->prev_waveout = waveout;
 						}
 #endif // NFM
@@ -628,8 +628,8 @@ void *demodulate(void *params) {
 						// apply the notch filter, will be a no-op if not configured
 						fparms->notch_filter.apply(waveout);
 
-						// apply the volume_multiplier
-						waveout *= fparms->volume_multiplier;
+						// apply the ampfactor
+						waveout *= fparms->ampfactor;
 
 						// make sure the value is between +/- 1 (requirement for libmp3lame)
 						if (isnan(waveout)) {

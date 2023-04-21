@@ -218,7 +218,7 @@ struct freq_t {
 	int frequency;				// scan frequency
 	char *label;				// frequency label
 	float agcavgfast;			// average power, for AGC
-	float volume_multiplier;	// multiplier to increase / decrease volume
+	float ampfactor;			// multiplier to increase / decrease volume
 	Squelch squelch;
 	size_t active_counter;		// count of loops where channel has signal
 	NotchFilter notch_filter;	// notch filter - good to remove CTCSS tones
@@ -234,7 +234,7 @@ struct channel_t {
 #ifdef NFM
 	float pr;					// previous sample - real part
 	float pj;					// previous sample - imaginary part
-	float prev_waveout;         // previous sample - waveout before notch / volume_multiplier
+	float prev_waveout;         // previous sample - waveout before notch / ampfactor
 	float alpha;
 #endif
 	uint32_t dm_dphi, dm_phi;	// derotation frequency and current phase value

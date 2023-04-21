@@ -279,7 +279,7 @@ static struct freq_t *mk_freqlist( int n )
 		fl[i].frequency = 0;
 		fl[i].label = NULL;
 		fl[i].agcavgfast = 0.5f;
-		fl[i].volume_multiplier = 1.0f;
+		fl[i].ampfactor = 1.0f;
 		fl[i].squelch = Squelch();
 		fl[i].active_counter = 0;
 		fl[i].modulation = MOD_AM;
@@ -582,15 +582,15 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				}
 			}
 		}
-		if(chans[j].exists("volume_multiplier")) {
-			if(libconfig::Setting::TypeList == chans[j]["volume_multiplier"].getType()) {
+		if(chans[j].exists("ampfactor")) {
+			if(libconfig::Setting::TypeList == chans[j]["ampfactor"].getType()) {
 				for(int f = 0; f < channel->freq_count; f++) {
-					channel->freqlist[f].volume_multiplier = (float)chans[j]["volume_multiplier"][f];;
+					channel->freqlist[f].ampfactor = (float)chans[j]["ampfactor"][f];;
 				}
 			} else {
-				float volume_multiplier = (float)chans[j]["volume_multiplier"];
+				float ampfactor = (float)chans[j]["ampfactor"];
 				for(int f = 0; f<channel->freq_count; f++) {
-					channel->freqlist[f].volume_multiplier = volume_multiplier;
+					channel->freqlist[f].ampfactor = ampfactor;
 				}
 			}
 		}

@@ -585,10 +585,23 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		if(chans[j].exists("ampfactor")) {
 			if(libconfig::Setting::TypeList == chans[j]["ampfactor"].getType()) {
 				for(int f = 0; f < channel->freq_count; f++) {
-					channel->freqlist[f].ampfactor = (float)chans[j]["ampfactor"][f];;
+					float ampfactor = (float)chans[j]["ampfactor"][f];
+
+					if(ampfactor < 0) {
+						cerr << "devices.["<<i<<"] channels.["<<j<<"] freq.["<<f<<"]: ampfactor '"<<ampfactor<<"' must not be negative\n";
+						error();
+					}
+
+					channel->freqlist[f].ampfactor = ampfactor;
 				}
 			} else {
 				float ampfactor = (float)chans[j]["ampfactor"];
+
+				if(ampfactor < 0) {
+					cerr << "devices.["<<i<<"] channels.["<<j<<"]: ampfactor '"<<ampfactor<<"' must not be negative\n";
+					error();
+				}
+
 				for(int f = 0; f<channel->freq_count; f++) {
 					channel->freqlist[f].ampfactor = ampfactor;
 				}

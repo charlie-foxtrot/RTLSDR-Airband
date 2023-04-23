@@ -94,7 +94,7 @@ void mixer_disable_input(mixer_t *mixer, int input_idx) {
 	}
 }
 
-void mixer_put_samples(mixer_t *mixer, int input_idx, float *samples, bool has_signal, unsigned int len) {
+void mixer_put_samples(mixer_t *mixer, int input_idx, const float *samples, bool has_signal, unsigned int len) {
 	assert(mixer);
 	assert(samples);
 	assert(input_idx < mixer->input_count);
@@ -113,7 +113,7 @@ void mixer_put_samples(mixer_t *mixer, int input_idx, float *samples, bool has_s
 	pthread_mutex_unlock(&input->mutex);
 }
 
-void mix_waveforms(float *sum, float *in, float mult, int size) {
+void mix_waveforms(float *sum, const float *in, float mult, int size) {
 	if (mult == 0.0f) {
 		return;
 	}

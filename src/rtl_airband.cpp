@@ -588,17 +588,19 @@ void *demodulate(void *params) {
 						}
 					}
 
+					float &waveout = channel->waveout[j];
+
 					// If squelch is still open then do modulation-specific processing
 					if (fparms->squelch.is_open()) {
-						if(fparms->modulation == MOD_AM) {
 
+						if(fparms->modulation == MOD_AM) {
 							if( channel->wavein[j] > fparms->squelch.squelch_level() ) {
 								fparms->agcavgfast = fparms->agcavgfast * 0.995f + channel->wavein[j] * 0.005f;
 							}
 
-							channel->waveout[j] = (channel->wavein[j - AGC_EXTRA] - fparms->agcavgfast) / (fparms->agcavgfast * 1.5f);
-							if (abs(channel->waveout[j]) > 0.8f) {
-								channel->waveout[j] *= 0.85f;
+							waveout = (channel->wavein[j - AGC_EXTRA] - fparms->agcavgfast) / (fparms->agcavgfast * 1.5f);
+							if (abs(waveout) > 0.8f) {
+								waveout *= 0.85f;
 								fparms->agcavgfast *= 1.15f;
 							}
 						}
@@ -606,26 +608,38 @@ void *demodulate(void *params) {
 						else if(fparms->modulation == MOD_NFM) {
 							// FM demod
 							if(fm_demod == FM_FAST_ATAN2) {
-								channel->waveout[j] = polar_disc_fast(real, imag, channel->pr, channel->pj);
+								waveout = polar_disc_fast(real, imag, channel->pr, channel->pj);
 							} else if(fm_demod == FM_QUADRI_DEMOD) {
-								channel->waveout[j] = fm_quadri_demod(real, imag, channel->pr, channel->pj);
+								waveout = fm_quadri_demod(real, imag, channel->pr, channel->pj);
 							}
 							channel->pr = real;
 							channel->pj = imag;
 
 							// de-emphasis IIR + DC blocking
-							fparms->agcavgfast = fparms->agcavgfast * 0.995f + channel->waveout[j] * 0.005f;
-							channel->waveout[j] -= fparms->agcavgfast;
-							channel->waveout[j] = channel->waveout[j] * (1.0f - channel->alpha) + channel->waveout[j-1] * channel->alpha;
+							fparms->agcavgfast = fparms->agcavgfast * 0.995f + waveout * 0.005f;
+							waveout -= fparms->agcavgfast;
+							waveout = waveout * (1.0f - channel->alpha) + channel->prev_waveout * channel->alpha;
+
+							// save off waveout before notch and ampfactor
+							channel->prev_waveout = waveout;
 						}
 #endif // NFM
 
 						// apply the notch filter, will be a no-op if not configured
-						fparms->notch_filter.apply(channel->waveout[j]);
+						fparms->notch_filter.apply(waveout);
 
-						// sanitize the output to prevent assertion failure in libmp3lame on NaN or infinity
-						if(!isnormal(channel->waveout[j])) {
-							channel->waveout[j] = 0.f;
+						// apply the ampfactor
+						waveout *= fparms->ampfactor;
+
+						// make sure the value is between +/- 1 (requirement for libmp3lame)
+						if (isnan(waveout)) {
+							waveout = 0.0;
+						}
+						else if (waveout > 1.0) {
+							waveout = 1.0;
+						}
+						else if (waveout < -1.0) {
+							waveout = -1.0;
 						}
 
 						channel->axcindicate = SIGNAL;
@@ -636,7 +650,7 @@ void *demodulate(void *params) {
 
 					// Squelch is closed
 					} else {
-						channel->waveout[j] = 0;
+						waveout = 0;
 						if(channel->has_iq_outputs) {
 							channel->iq_out[2*(j - AGC_EXTRA)] = 0;
 							channel->iq_out[2*(j - AGC_EXTRA)+1] = 0;

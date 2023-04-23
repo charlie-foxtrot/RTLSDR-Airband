@@ -218,6 +218,7 @@ struct freq_t {
 	int frequency;				// scan frequency
 	char *label;				// frequency label
 	float agcavgfast;			// average power, for AGC
+	float ampfactor;			// multiplier to increase / decrease volume
 	Squelch squelch;
 	size_t active_counter;		// count of loops where channel has signal
 	NotchFilter notch_filter;	// notch filter - good to remove CTCSS tones
@@ -233,6 +234,7 @@ struct channel_t {
 #ifdef NFM
 	float pr;					// previous sample - real part
 	float pj;					// previous sample - imaginary part
+	float prev_waveout;         // previous sample - waveout before notch / ampfactor
 	float alpha;
 #endif
 	uint32_t dm_dphi, dm_phi;	// derotation frequency and current phase value
@@ -366,7 +368,7 @@ float level_to_dBFS(const float &level);
 mixer_t *getmixerbyname(const char *name);
 int mixer_connect_input(mixer_t *mixer, float ampfactor, float balance);
 void mixer_disable_input(mixer_t *mixer, int input_idx);
-void mixer_put_samples(mixer_t *mixer, int input_idx, float *samples, bool has_signal, unsigned int len);
+void mixer_put_samples(mixer_t *mixer, int input_idx, const float *samples, bool has_signal, unsigned int len);
 void *mixer_thread(void *params);
 const char *mixer_get_error();
 
@@ -376,8 +378,8 @@ int parse_mixers(libconfig::Setting &mx);
 
 // udp_stream.cpp
 bool udp_stream_init(udp_stream_data *sdata, mix_modes mode, size_t len);
-void udp_stream_write(udp_stream_data *sdata, float *data, size_t len);
-void udp_stream_write(udp_stream_data *sdata, float *data_left, float *data_right, size_t len);
+void udp_stream_write(udp_stream_data *sdata, const float *data, size_t len);
+void udp_stream_write(udp_stream_data *sdata, const float *data_left, const float *data_right, size_t len);
 void udp_stream_shutdown(udp_stream_data *sdata);
 
 #ifdef WITH_PULSEAUDIO
@@ -387,7 +389,7 @@ void pulse_init();
 int pulse_setup(pulse_data *pdata, mix_modes mixmode);
 void pulse_start();
 void pulse_shutdown(pulse_data *pdata);
-void pulse_write_stream(pulse_data *pdata, mix_modes mode, float *data_left, float *data_right, size_t len);
+void pulse_write_stream(pulse_data *pdata, mix_modes mode, const float *data_left, const float *data_right, size_t len);
 #endif
 
 #endif /* _RTL_AIRBAND_H */

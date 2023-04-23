@@ -202,7 +202,7 @@ void pulse_start() {
 	PA_LOOP_UNLOCK(mainloop);
 }
 
-static int pulse_write_single_stream(pa_stream *stream, pulse_data *pdata, float *data, size_t len, bool is_master) {
+static int pulse_write_single_stream(pa_stream *stream, pulse_data *pdata, const float *data, size_t len, bool is_master) {
 	pa_usec_t latency;
 	int ret = -1;
 	int lret;
@@ -237,7 +237,7 @@ end:
 	return ret;
 }
 
-void pulse_write_stream(pulse_data *pdata, mix_modes mode, float *data_left, float *data_right, size_t len) {
+void pulse_write_stream(pulse_data *pdata, mix_modes mode, const float *data_left, const float *data_right, size_t len) {
 	PA_LOOP_LOCK(mainloop);
 	if(!pdata->context || pa_context_get_state(pdata->context) != PA_CONTEXT_READY)
 		goto end;

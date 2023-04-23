@@ -487,7 +487,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 					}
 
 					if (snr == -1.0) {
-						continue;
+						continue; // "disable" for this channel in list
 					} else if (snr < 0) {
 						cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch_snr_threshold must be greater than or equal to 0\n";
 						error();
@@ -499,7 +499,9 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				// Legacy (single squelch for all frequencies)
 				float snr = (libconfig::Setting::TypeFloat == chans[j]["squelch_snr_threshold"].getType()) ? (float)chans[j]["squelch_snr_threshold"] : (int)chans[j]["squelch_snr_threshold"];
 
-				if (snr < 0) {
+				if (snr == -1.0) {
+					continue; // "disable" so use the default without error message
+				} else if (snr < 0) {
 					cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch_snr_threshold must be greater than or equal to 0\n";
 					error();
 				}
@@ -532,7 +534,10 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 							<<q<<" (must be greater than 0.0)\n";
 						error();
 					}
-					if(freq <= 0) {
+
+					if(freq == 0) {
+						continue; // "disable" for this channel in list
+					} else if(freq < 0) {
 						cerr << "devices.["<<i<<"] channels.["<<j<<"] freq.["<<f<<"]: invalid value for notch: "<<freq<<", ignoring\n";
 					} else {
 						channel->freqlist[f].notch_filter = NotchFilter(freq, WAVE_RATE, q);
@@ -547,8 +552,10 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 					error();
 				}
 				for(int f = 0; f<channel->freq_count; f++) {
-					if(freq <= 0) {
-						cerr << "devices.["<<i<<"] channels.["<<j<<"]: freq value '"<<freq<<"' invalid, ignoring\n";
+					if(freq == 0) {
+						continue; // "disable" is default so ignore without error message
+					} else if(freq < 0) {
+						cerr << "devices.["<<i<<"] channels.["<<j<<"]: notch value '"<<freq<<"' invalid, ignoring\n";
 					} else {
 						channel->freqlist[f].notch_filter = NotchFilter(freq, WAVE_RATE, q);
 					}
@@ -565,7 +572,10 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			if(libconfig::Setting::TypeList == chans[j]["bandwidth"].getType()) {
 				for(int f = 0; f<channel->freq_count; f++) {
 					int bandwidth = parse_anynum2int(chans[j]["bandwidth"][f]);
-					if(bandwidth <= 0) {
+
+					if(bandwidth == 0) {
+						continue; // "disable" for this channel in list
+					} else if(bandwidth < 0) {
 						cerr << "devices.["<<i<<"] channels.["<<j<<"] freq.["<<f<<"]: bandwidth value '"<<bandwidth<<"' invalid, ignoring\n";
 					} else {
 						channel->freqlist[f].lowpass_filter = LowpassFilter((float)bandwidth/2, WAVE_RATE);
@@ -573,7 +583,9 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				}
 			} else {
 				int bandwidth = parse_anynum2int(chans[j]["bandwidth"]);
-				if(bandwidth <= 0) {
+				if(bandwidth == 0) {
+					continue; // "disable" is default so ignore without error message
+				} else if(bandwidth < 0) {
 					cerr << "devices.["<<i<<"] channels.["<<j<<"]: bandwidth value '"<<bandwidth<<"' invalid, ignoring\n";
 				} else {
 					for(int f = 0; f<channel->freq_count; f++) {

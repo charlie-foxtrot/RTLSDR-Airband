@@ -65,14 +65,14 @@ bool udp_stream_init(udp_stream_data *sdata, mix_modes mode, size_t len) {
 	return true;
 }
 
-void udp_stream_write(udp_stream_data *sdata, float *data, size_t len) {
+void udp_stream_write(udp_stream_data *sdata, const float *data, size_t len) {
 	if (sdata->send_socket != -1) {
 		// Send without blocking or checking for success
 		sendto(sdata->send_socket, data, len, MSG_DONTWAIT | MSG_NOSIGNAL, &sdata->dest_sockaddr, sdata->dest_sockaddr_len);
 	}
 }
 
-void udp_stream_write(udp_stream_data *sdata, float *data_left, float *data_right, size_t len) {
+void udp_stream_write(udp_stream_data *sdata, const float *data_left, const float *data_right, size_t len) {
 	if (sdata->send_socket != -1) {
 		assert(len * 2 <= sdata->stereo_buffer_len);
 		for (size_t i = 0; i < len; ++i) {

@@ -279,6 +279,7 @@ static struct freq_t *mk_freqlist( int n )
 		fl[i].frequency = 0;
 		fl[i].label = NULL;
 		fl[i].agcavgfast = 0.5f;
+		fl[i].ampfactor = 1.0f;
 		fl[i].squelch = Squelch();
 		fl[i].active_counter = 0;
 		fl[i].modulation = MOD_AM;
@@ -332,6 +333,12 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		channel->lowpass = chans[j].exists("lowpass") ? (int)chans[j]["lowpass"] : 2500;
 		channel->lame = NULL;
 		channel->lamebuf = NULL;
+#ifdef NFM
+		channel->pr = 0;
+		channel->pj = 0;
+		channel->prev_waveout = 0.5;
+		channel->alpha = dev->alpha;
+#endif
 
 		modulations channel_modulation = MOD_AM;
 		if(chans[j].exists("modulation")) {
@@ -497,7 +504,9 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				// Legacy (single squelch for all frequencies)
 				float snr = (libconfig::Setting::TypeFloat == chans[j]["squelch_snr_threshold"].getType()) ? (float)chans[j]["squelch_snr_threshold"] : (int)chans[j]["squelch_snr_threshold"];
 
-				if (snr < 0) {
+				if (snr == -1.0) {
+					continue; // "disable" so use the default without error message
+				} else if (snr < 0) {
 					cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"]: squelch_snr_threshold must be greater than or equal to 0\n";
 					error();
 				}
@@ -548,7 +557,9 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 					error();
 				}
 				for(int f = 0; f<channel->freq_count; f++) {
-					if(freq <= 0) {
+					if(freq == 0) {
+						continue; // "disable" is default so ignore without error message
+					} else if(freq < 0) {
 						cerr << "devices.["<<i<<"] channels.["<<j<<"]: notch value '"<<freq<<"' invalid, ignoring\n";
 					} else {
 						channel->freqlist[f].notch_filter = NotchFilter(freq, WAVE_RATE, q);
@@ -605,7 +616,9 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				}
 			} else {
 				int bandwidth = parse_anynum2int(chans[j]["bandwidth"]);
-				if(bandwidth <= 0) {
+				if(bandwidth == 0) {
+					continue; // "disable" is default so ignore without error message
+				} else if(bandwidth < 0) {
 					cerr << "devices.["<<i<<"] channels.["<<j<<"]: bandwidth value '"<<bandwidth<<"' invalid, ignoring\n";
 				} else {
 					for(int f = 0; f<channel->freq_count; f++) {
@@ -614,12 +627,35 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				}
 			}
 		}
+		if(chans[j].exists("ampfactor")) {
+			if(libconfig::Setting::TypeList == chans[j]["ampfactor"].getType()) {
+				for(int f = 0; f < channel->freq_count; f++) {
+					float ampfactor = (float)chans[j]["ampfactor"][f];
+
+					if(ampfactor < 0) {
+						cerr << "devices.["<<i<<"] channels.["<<j<<"] freq.["<<f<<"]: ampfactor '"<<ampfactor<<"' must not be negative\n";
+						error();
+					}
+
+					channel->freqlist[f].ampfactor = ampfactor;
+				}
+			} else {
+				float ampfactor = (float)chans[j]["ampfactor"];
+
+				if(ampfactor < 0) {
+					cerr << "devices.["<<i<<"] channels.["<<j<<"]: ampfactor '"<<ampfactor<<"' must not be negative\n";
+					error();
+				}
+
+				for(int f = 0; f<channel->freq_count; f++) {
+					channel->freqlist[f].ampfactor = ampfactor;
+				}
+			}
+		}
 
 #ifdef NFM
 		if(chans[j].exists("tau")) {
 			channel->alpha = ((int)chans[j]["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)chans[j]["tau"])));
-		} else {
-			channel->alpha = dev->alpha;
 		}
 #endif
 		libconfig::Setting &outputs = chans[j]["outputs"];

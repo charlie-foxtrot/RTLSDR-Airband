@@ -590,9 +590,8 @@ void *demodulate(void *params) {
 
 					float &waveout = channel->waveout[j];
 
-					// If squelch is still open then do modulation-specific processing
-					if (fparms->squelch.is_open()) {
-
+					// If squelch sees power then do modulation-specific processing
+					if (fparms->squelch.should_process_audio()) {
 						if(fparms->modulation == MOD_AM) {
 							if( channel->wavein[j] > fparms->squelch.squelch_level() ) {
 								fparms->agcavgfast = fparms->agcavgfast * 0.995f + channel->wavein[j] * 0.005f;
@@ -624,6 +623,13 @@ void *demodulate(void *params) {
 							channel->prev_waveout = waveout;
 						}
 #endif // NFM
+						
+						// process audio sample for CTCSS, will be no-op if not configured
+						fparms->squelch.process_audio_sample(waveout);
+					}
+					
+					// If squelch is still open then save samples to output
+					if (fparms->squelch.is_open()) {
 
 						// apply the notch filter, will be a no-op if not configured
 						fparms->notch_filter.apply(waveout);

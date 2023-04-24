@@ -394,6 +394,11 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 					<<channel->freq_count<<" elements\n";
 				error();
 			}
+			if(chans[j].exists("ctcss") && libconfig::Setting::TypeList == chans[j]["ctcss"].getType() && chans[j]["ctcss"].getLength() < channel->freq_count) {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: ctcss should be an float or a list of floats with at least "
+					<<channel->freq_count<<" elements\n";
+				error();
+			}
 			if(chans[j].exists("modulation") && chans[j].exists("modulations")) {
 				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: can't set both modulation and modulations\n";
 				error();
@@ -562,6 +567,34 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				}
 			} else {
 				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: notch should be an float or a list of floats with at least "
+					<<channel->freq_count<<" elements\n";
+				error();
+			}
+		}
+		if(chans[j].exists("ctcss")) {
+			if(libconfig::Setting::TypeList == chans[j]["ctcss"].getType()) {
+				for(int f = 0; f<channel->freq_count; f++) {
+					float freq = (float)chans[j]["ctcss"][f];
+
+					if(freq == 0) {
+						continue; // "disable" for this channel in list
+					} else if(freq < 0) {
+						cerr << "devices.["<<i<<"] channels.["<<j<<"] freq.["<<f<<"]: invalid value for ctcss: "<<freq<<", ignoring\n";
+					} else {
+						channel->freqlist[f].squelch.set_ctcss_freq(freq, WAVE_RATE);
+					}
+				}
+			} else if(libconfig::Setting::TypeFloat == chans[j]["ctcss"].getType() ) {
+				float freq = (float)chans[j]["ctcss"];
+				for(int f = 0; f<channel->freq_count; f++) {
+					if(freq <= 0) {
+						cerr << "devices.["<<i<<"] channels.["<<j<<"]: ctcss value '"<<freq<<"' invalid, ignoring\n";
+					} else {
+						channel->freqlist[f].squelch.set_ctcss_freq(freq, WAVE_RATE);
+					}
+				}
+			} else {
+				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: ctcss should be an float or a list of floats with at least "
 					<<channel->freq_count<<" elements\n";
 				error();
 			}

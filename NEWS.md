@@ -1,4 +1,18 @@
 # NEWS
+
+Version 4.1.0 (April 23, 2023):
+
+* Changes in this release:
+  * Add `channel_dbfs_noise_level` and `channel_dbfs_signal_level` to the stats file, see [#355](https://github.com/charlie-foxtrot/RTLSDR-Airband/pull/355)
+  * Add squelch support for CTCSS, add `channel_ctcss_counter` and `channel_no_ctcss_counter` to the stats file, see [#368](https://github.com/charlie-foxtrot/RTLSDR-Airband/pull/368)
+  * Support `ampfactor` on a per-channel basis (in addition to mixer inputs), see [#369](https://github.com/charlie-foxtrot/RTLSDR-Airband/pull/369)
+  * Fix config error messages, see [#371](https://github.com/charlie-foxtrot/RTLSDR-Airband/pull/371)
+  * Multiple CI / workflow improvements, including:
+    * Addition of Dockerfiles and shell scripts for multiple build environments
+    * Addition of vscode devcontainer configuration
+    * Addition of gtest, code refactoring, addition of unit tests, running unit tests on each pull request
+    * Running more combinations of OSs, build types, and build options on each pull request
+
 Version 4.0.3 (Jan 10, 2023):
 
 * Changes in this release:
@@ -11,7 +25,6 @@ Version 4.0.3 (Jan 10, 2023):
   * Repo maintainer has changed, see [#342](https://github.com/charlie-foxtrot/RTLSDR-Airband/discussions/342)
   * Repo URL has moved to https://github.com/charlie-foxtrot/RTLSDR-Airband
   * Default branch / Top of Tree has been renamed to `main`
-
 
 Version 4.0.2 (Dec 26, 2021):
 

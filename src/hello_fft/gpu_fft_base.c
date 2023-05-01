@@ -49,9 +49,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 unsigned gpu_fft_base_exec_direct (
     struct GPU_FFT_BASE *base,
-    int num_qpus) {
+    unsigned num_qpus) {
 
-    unsigned q, t;
+    unsigned q;
 
     base->peri[V3D_DBCFG] = 0; // Disallow IRQ
     base->peri[V3D_DBQITE] = 0; // Disable IRQ
@@ -77,7 +77,7 @@ unsigned gpu_fft_base_exec_direct (
 
 unsigned gpu_fft_base_exec(
     struct GPU_FFT_BASE *base,
-    int num_qpus) {
+    unsigned num_qpus) {
 
     if (base->vc_msg) {
         // Use mailbox

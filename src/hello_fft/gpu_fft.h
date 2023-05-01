@@ -84,7 +84,7 @@ unsigned int *gpu_fft_shader_code(int);
 
 unsigned gpu_fft_base_exec (
     struct GPU_FFT_BASE *base,
-    int num_qpus);
+    unsigned num_qpus);
 
 int gpu_fft_alloc (
     int mb,

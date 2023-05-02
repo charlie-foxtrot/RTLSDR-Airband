@@ -1,5 +1,10 @@
 # NEWS
 
+Version 4.1.1 (May 1, 2023):
+
+* Changes in this release:
+  * Fix build issues when using VideoCore GPU, see [#378](https://github.com/charlie-foxtrot/RTLSDR-Airband/pull/378)
+
 Version 4.1.0 (April 23, 2023):
 
 * Changes in this release:

@@ -67,7 +67,7 @@ static float *twiddles_base_64(double two_pi, float *out) {
 
 /****************************************************************************/
 
-static float *twiddles_step_16(double two_pi, float *out, double theta) {
+static float *twiddles_step_16(double /*two_pi*/, float *out, double theta) {
     int i;
     for (i=0; i<16; i++) {
         *out++ = ALPHA(theta*k[i]);

@@ -12,6 +12,7 @@ add_library(hello_fft OBJECT
 	${hello_fft_source_files}
 )
 target_include_directories(hello_fft PUBLIC
-	".."
+	".." # needed for rtl_airband.h
+	"${CMAKE_CURRENT_BINARY_DIR}/.." # needed for config.h
 	${BCM_VC_INCLUDE_DIRS}
 )

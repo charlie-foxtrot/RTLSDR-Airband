@@ -91,6 +91,23 @@ if(HAVE_SHOUT_TLS_AUTO AND HAVE_SHOUT_TLS_AUTO_NO_PLAIN AND
 else()
 	set(LIBSHOUT_HAS_TLS FALSE)
 endif()
+
+# check for shout_set_metadata_utf8() - introduced in libshout v2.4.6
+CHECK_CXX_SYMBOL_EXISTS("shout_set_metadata_utf8" ${LIBSHOUT_HEADER}
+	HAVE_SHOUT_SET_METADATA_UTF8)
+if(HAVE_SHOUT_SET_METADATA_UTF8)
+	set(SHOUT_SET_METADATA "shout_set_metadata_utf8")
+else()
+	set(SHOUT_SET_METADATA "shout_set_metadata")
+endif()
+
+# check for shout_set_content_format() - introduced in libshout v2.4.3
+CHECK_CXX_SYMBOL_EXISTS("shout_set_content_format" ${LIBSHOUT_HEADER}
+	HAVE_SHOUT_SET_CONTENT_FORMAT)
+if(NOT HAVE_SHOUT_SET_CONTENT_FORMAT)
+	message(FATAL_ERROR "Required function shout_set_content_format() is unavailable, libshout v2.4.3 or later required")
+endif()
+
 set(CMAKE_REQUIRED_INCLUDES ${CMAKE_REQUIRED_INCLUDES_SAVE})
 set(CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES_SAVE})
 

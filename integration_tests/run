@@ -1,0 +1,58 @@
+#!/bin/bash
+
+set -x
+set -e
+
+REPO_DIR=$(readlink -f `dirname ${0}`/../)
+
+INTEGRATION_TESTS_DIR=${REPO_DIR}/integration_tests
+
+function run_rtl_airband {
+  BIN_PATH=$1
+  CONFIG_PATH=$2
+  OUTPUT_DIR=$3
+
+  mkdir -p ${OUTPUT_DIR}
+  pushd ${OUTPUT_DIR}
+
+  # run for 30 seconds then send kill command
+  ${BIN_PATH} -c ${CONFIG_PATH} -F &
+  PID=$!
+  sleep 30
+  kill $PID
+
+  # wait 5 seconds for files to be closed and renamed
+  sleep 5
+
+  popd
+
+}
+
+# build a version that uses the Broadcom VideoCore GPU
+GPU_BUILD_DIR=${INTEGRATION_TESTS_DIR}/rpiv2
+cmake -B ${GPU_BUILD_DIR} -DNFM=TRUE -DPLATFORM=rpiv2 -DCMAKE_BUILD_TYPE=Release
+VERBOSE=1 cmake --build ${GPU_BUILD_DIR} -j2
+
+# make sure the binary is linking about the GPU library
+ldd ${GPU_BUILD_DIR}/src/rtl_airband | grep libbcm_host
+
+
+# build a version that uses FFTW
+FFTW_BUILD_DIR=${INTEGRATION_TESTS_DIR}/native
+cmake -B ${FFTW_BUILD_DIR} -DNFM=TRUE -DPLATFORM=native -DCMAKE_BUILD_TYPE=Release 
+VERBOSE=1 cmake --build ${FFTW_BUILD_DIR} -j2
+
+# make sure the binary is linking against the FFTW library
+ldd ${FFTW_BUILD_DIR}/src/rtl_airband | grep libfft3f
+
+# make a work dir
+WORK_DIR=${INTEGRATION_TESTS_DIR}/work
+rm -rf ${WORK_DIR} || true
+
+
+# run the noaa config twice, once for each binary
+GPU_WORK_DIR=${WORK_DIR}/gpu/
+FFTW_WORK_DIR=${WORK_DIR}/fftw/
+run_rtl_airband ${GPU_BUILD_DIR}/src/rtl_airband ${INTEGRATION_TESTS_DIR}/configs/noaa.conf ${GPU_WORK_DIR}
+run_rtl_airband ${FFTW_BUILD_DIR}/src/rtl_airband ${INTEGRATION_TESTS_DIR}/configs/noaa.conf ${FFTW_WORK_DIR}
+

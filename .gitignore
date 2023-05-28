@@ -2,3 +2,5 @@ build*/
 .cache
 compile_commands.json
 rtl_airband*.log
+integration_tests/rpiv2
+integration_tests/native

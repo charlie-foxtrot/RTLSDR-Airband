@@ -1,7 +1,7 @@
 FROM ubuntu:20.04
 
 RUN apt-get update && \
-    apt-get install -y 
+    apt-get upgrade -y 
 
 RUN sed -i 's/^# \(.*export LS_OPTIONS.*$\)/\1/g' ~/.bashrc && \
     sed -i 's/^# \(.*alias ll.*$\)/\1/g' ~/.bashrc

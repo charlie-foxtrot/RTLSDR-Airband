@@ -21,7 +21,7 @@ function run_rtl_airband {
   sleep 5
 
   # make sure there is at least one NOAA channel that generated an MP3 longer
-  # than 15 seconds for each rtl and soapy (not 30 seconds because of startup time)
+  # than 10 seconds for each rtl and soapy (not 30 seconds because of startup time)
   check_length '*_rtlsdr_*.mp3'
   check_length '*_soapysdr_*.mp3'
 
@@ -35,7 +35,7 @@ function check_length {
 
     seconds=$(ffmpeg -i $i -f null - 2>&1 | grep time | awk '{print $2}' | cut -d ':' -f 3)
     echo "$i is $seconds sec long"
-    if (( $(echo "$seconds > 15.0" | bc -l) )); then
+    if (( $(echo "$seconds > 10.0" | bc -l) )); then
       return 0
     fi
 

@@ -10,14 +10,10 @@ on:
 jobs:
   build:
     runs-on: [rpi3b]
-    timeout-minutes: 25
+    timeout-minutes: 10
     steps:
     - name: Checkout repository
       uses: actions/checkout@main
 
-    - name: Install packaged dependencies
-      run: .github/install_dependencies
-
     - name: Integration Tests
-      run: |
-        integration_tests/run
+      run: integration_tests/run

@@ -12,7 +12,7 @@ function run_rtl_airband {
   pushd ${OUTPUT_DIR}
 
   # run for 30 seconds then send kill command
-  ${BIN_PATH} -c ${CONFIG_PATH} -F -e &
+  sudo ${BIN_PATH} -c ${CONFIG_PATH} -F -e &
   PID=$!
   sleep 30
   kill $PID
@@ -76,6 +76,6 @@ ldd ${FFTW_BUILD_DIR}/src/rtl_airband | grep libfftw3f
 # run the noaa config twice, once for each binary
 GPU_OUTPUT_DIR=${WORK_DIR}/output_rpiv2/
 FFTW_OUTPUT_DIR=${WORK_DIR}/output_native/
-#run_rtl_airband ${GPU_BUILD_DIR}/src/rtl_airband ${INTEGRATION_TESTS_DIR}/configs/noaa.conf ${GPU_OUTPUT_DIR}
+run_rtl_airband ${GPU_BUILD_DIR}/src/rtl_airband ${INTEGRATION_TESTS_DIR}/configs/noaa.conf ${GPU_OUTPUT_DIR}
 run_rtl_airband ${FFTW_BUILD_DIR}/src/rtl_airband ${INTEGRATION_TESTS_DIR}/configs/noaa.conf ${FFTW_OUTPUT_DIR}
 

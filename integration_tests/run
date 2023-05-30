@@ -15,7 +15,7 @@ function run_rtl_airband {
   sudo ${BIN_PATH} -c ${CONFIG_PATH} -F -e &
   PID=$!
   sleep 30
-  kill $PID
+  sudo kill -SIGINT $PID
 
   # wait 5 seconds for files to be closed and renamed
   sleep 5

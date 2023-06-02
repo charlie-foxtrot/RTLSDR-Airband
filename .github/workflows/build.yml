@@ -11,9 +11,9 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ ubuntu-20.04, ubuntu-22.04, ubuntu-latest, macos-11, macos-12, macos-latest ]
+        os: [ ubuntu-22.04, macos-latest, rpi3b, macos-11, macos-12, ubuntu-latest, ubuntu-20.04 ]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 35 # runtime across all OSs, runs can get queued and mac runs take 15-20 min
     steps:
     - name: Checkout repository
       uses: actions/checkout@main
@@ -30,10 +30,10 @@ jobs:
 
     - name: Build
       run: |
-        VERBOSE=1 cmake --build ${{github.workspace}}/build_Debug -j
-        VERBOSE=1 cmake --build ${{github.workspace}}/build_Debug_NFM -j
-        VERBOSE=1 cmake --build ${{github.workspace}}/build_Release -j
-        VERBOSE=1 cmake --build ${{github.workspace}}/build_Release_NFM -j
+        VERBOSE=1 cmake --build ${{github.workspace}}/build_Debug -j4
+        VERBOSE=1 cmake --build ${{github.workspace}}/build_Debug_NFM -j4
+        VERBOSE=1 cmake --build ${{github.workspace}}/build_Release -j4
+        VERBOSE=1 cmake --build ${{github.workspace}}/build_Release_NFM -j4
 
     - name: Unit Tests
       run: |

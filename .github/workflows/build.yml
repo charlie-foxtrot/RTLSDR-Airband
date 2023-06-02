@@ -30,10 +30,10 @@ jobs:
 
     - name: Build
       run: |
-        VERBOSE=1 cmake --build ${{github.workspace}}/build_Debug -j
-        VERBOSE=1 cmake --build ${{github.workspace}}/build_Debug_NFM -j
-        VERBOSE=1 cmake --build ${{github.workspace}}/build_Release -j
-        VERBOSE=1 cmake --build ${{github.workspace}}/build_Release_NFM -j
+        VERBOSE=1 cmake --build ${{github.workspace}}/build_Debug -j4
+        VERBOSE=1 cmake --build ${{github.workspace}}/build_Debug_NFM -j4
+        VERBOSE=1 cmake --build ${{github.workspace}}/build_Release -j4
+        VERBOSE=1 cmake --build ${{github.workspace}}/build_Release_NFM -j4
 
     - name: Unit Tests
       run: |

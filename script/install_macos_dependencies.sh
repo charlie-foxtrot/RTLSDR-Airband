@@ -11,3 +11,4 @@ brew install \
     soapysdr \
     pulseaudio \
     pkg-config
+brew link openssl

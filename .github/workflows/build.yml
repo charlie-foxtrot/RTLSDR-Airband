@@ -68,7 +68,7 @@ jobs:
     - name: Create macOS package
       if: runner.os == 'macOS'
       run: |
-        tar -zcvf rtl-airband_${{ steps.sha.outputs.snapshot_version }}_${{ matrix.os }}.tgz build_Release_NFM/src/rtl_airband
+        tar -zcvf rtl-airband_${{ steps.sha.outputs.snapshot_version }}_${{ matrix.os }}.tar.gz build_Release_NFM/src/rtl_airband
     
     - name: "Upload package as artifact"
       uses: actions/upload-artifact@v3
@@ -76,7 +76,7 @@ jobs:
         name: "rtl-airband_${{ steps.sha.outputs.snapshot_version }}_${{ matrix.os }}"
         path: |
           *.deb
-          *.tgz
+          *.tar.gz
         retention-days: 7
 
   build-foreign-arch:
@@ -149,11 +149,23 @@ jobs:
           name: "rtl-airband_${{ steps.sha.outputs.snapshot_version }}_multiarch-deb"
           path: "packages/*.deb"
           retention-days: 7
+      
+      - name: "Download all OS packages"
+        run: mkdir /tmp/other-artifacts
+      
+      - uses: actions/download-artifact@v3
+        with:
+          path: /tmp/other-artifacts
+      
+      - name: "Copy artifacts into packages directory"
+        run: find /tmp/other-artifacts -type f -exec mv {} packages/ \;
     
       - name: Release packages
         uses: softprops/action-gh-release@v1
         with:
-          files: packages/*.deb
+          files: |
+            packages/*.deb
+            packages/*.tar.gz
           prerelease: ${{ github.ref_type != 'tag' }}
           name: ${{ github.ref_name }}-${{ steps.sha.outputs.snapshot_version }}
           tag_name: ${{ github.ref_name }}-${{ steps.sha.outputs.snapshot_version }}

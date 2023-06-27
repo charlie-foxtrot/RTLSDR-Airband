@@ -110,6 +110,7 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			fdata->basename = (char *)XCALLOC(1, strlen(outs[o]["directory"]) + strlen(outs[o]["filename_template"]) + 2);
 			sprintf(fdata->basename, "%s/%s", (const char *)outs[o]["directory"], (const char *)outs[o]["filename_template"]);
 			fdata->suffix = strdup(".mp3");
+            fdata->external_script = strdup(outs[o]["external_script"].c_str());
 
 			fdata->continuous = outs[o].exists("continuous") ?
 				(bool)(outs[o]["continuous"]) : false;
@@ -149,6 +150,7 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			fdata->basename = (char *)XCALLOC(1, strlen(outs[o]["directory"]) + strlen(outs[o]["filename_template"]) + 2);
 			sprintf(fdata->basename, "%s/%s", (const char *)outs[o]["directory"], (const char *)outs[o]["filename_template"]);
 			fdata->suffix = strdup(".cf32");
+            fdata->external_script = strdup(outs[o]["external_script"].c_str());
 
 			fdata->continuous = outs[o].exists("continuous") ?
 				(bool)(outs[o]["continuous"]) : false;

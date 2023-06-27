@@ -25,6 +25,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <math.h>
+#include <cstdlib> // For std::system
 #include <ogg/ogg.h>
 #include <vorbis/vorbisenc.h>
 #include <shout/shout.h>
@@ -317,6 +318,17 @@ static void close_file(channel_t *channel, file_data *fdata) {
 		fdata->f = NULL;
 		rename_if_exists(fdata->file_path_tmp, fdata->file_path);
 	}
+
+    // run your shell script here
+    std::string command = fdata->external_script;
+    if (!command.empty()) {
+        command += fdata->file_path;  // add your file path to the command
+        int result = std::system(command.c_str());  // run the command
+        if (result != 0) {
+            // Handle the error. The return value is the exit code of the command, so 0 means success.
+        }
+    }
+
 	free(fdata->file_path);
 	fdata->file_path = NULL;
 	free(fdata->file_path_tmp);

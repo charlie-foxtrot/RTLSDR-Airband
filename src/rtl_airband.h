@@ -132,6 +132,7 @@ struct file_data {
 	char *suffix;
 	char *file_path;
 	char *file_path_tmp;
+    char *external_script;
 	bool continuous;
 	bool append;
 	bool split_on_transmission;
@@ -140,6 +141,7 @@ struct file_data {
 	timeval last_write_time;
 	FILE *f;
 	enum output_type type;
+
 };
 
 struct udp_stream_data {

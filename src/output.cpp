@@ -302,6 +302,21 @@ static void close_file(channel_t *channel, file_data *fdata) {
 		return;
 	}
 
+
+    timeval current_time;
+    gettimeofday(&current_time, NULL);
+
+    double duration_sec = delta_sec(&fdata->open_time,       &current_time);
+
+    if (duration_sec < fdata->min_transmission_sec) {
+        // Duration is less than min_transmission_sec, so skip saving the file
+        free(fdata->file_path);
+        fdata->file_path = NULL;
+        free(fdata->file_path_tmp);
+        fdata->file_path_tmp = NULL;
+        return;
+    }
+
 	if(fdata->type == O_FILE && fdata->f && channel->lame) {
 		int encoded = lame_encode_flush_nogap(channel->lame, channel->lamebuf, LAMEBUF_SIZE);
 		debug_print("closing file %s flushed %d\n", fdata->file_path, encoded);
@@ -345,7 +360,7 @@ static void close_file(channel_t *channel, file_data *fdata) {
 static void close_if_necessary(channel_t *channel, file_data *fdata) {
 	static const double MIN_TRANSMISSION_TIME_SEC = 1.5;
 	static const double MAX_TRANSMISSION_TIME_SEC = 60.0 * 60.0;
-	static const double MAX_TRANSMISSION_IDLE_SEC = 3.0;
+	static const double MAX_TRANSMISSION_IDLE_SEC = 0.5;
 
 	if (!fdata || !fdata->f) {
 		return;

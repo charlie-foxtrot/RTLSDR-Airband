@@ -112,6 +112,12 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			fdata->suffix = strdup(".mp3");
             fdata->external_script = strdup(outs[o]["external_script"].c_str());
 
+            if (outs[o].exists("minimum_length")) {
+                fdata->min_transmission_sec = std::stof(outs[o]["minimum_length"].c_str());
+            } else {
+                fdata->min_transmission_sec = 0.0;
+            }
+
 			fdata->continuous = outs[o].exists("continuous") ?
 				(bool)(outs[o]["continuous"]) : false;
 			fdata->append = (!outs[o].exists("append")) || (bool)(outs[o]["append"]);
@@ -151,6 +157,8 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			sprintf(fdata->basename, "%s/%s", (const char *)outs[o]["directory"], (const char *)outs[o]["filename_template"]);
 			fdata->suffix = strdup(".cf32");
             fdata->external_script = strdup(outs[o]["external_script"].c_str());
+
+            fdata->min_transmission_sec = std::stof(outs[o]["minimum_length"].c_str());
 
 			fdata->continuous = outs[o].exists("continuous") ?
 				(bool)(outs[o]["continuous"]) : false;

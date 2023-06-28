@@ -141,6 +141,7 @@ struct file_data {
 	timeval last_write_time;
 	FILE *f;
 	enum output_type type;
+    float min_transmission_sec;
 
 };
 

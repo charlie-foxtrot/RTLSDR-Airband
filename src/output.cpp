@@ -309,11 +309,14 @@ static void close_file(channel_t *channel, file_data *fdata) {
     double duration_sec = delta_sec(&fdata->open_time,       &current_time);
 
     if (duration_sec < fdata->min_transmission_sec) {
-        // Duration is less than min_transmission_sec, so skip saving the file
+        // Duration is less than min_transmission_sec, so skip saving the file and delete tmp file
         free(fdata->file_path);
         fdata->file_path = NULL;
         free(fdata->file_path_tmp);
         fdata->file_path_tmp = NULL;
+
+        // Delete the temporary file
+        remove(fdata->file_path_tmp);
         return;
     }
 

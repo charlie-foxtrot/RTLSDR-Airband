@@ -343,7 +343,7 @@ static void close_file(channel_t *channel, file_data *fdata) {
  *   if hour is different.
  */
 static void close_if_necessary(channel_t *channel, file_data *fdata) {
-	static const double MIN_TRANSMISSION_TIME_SEC = 1.3;
+	static const double MIN_TRANSMISSION_TIME_SEC = 1.5;
 	static const double MAX_TRANSMISSION_TIME_SEC = 60.0 * 60.0;
 	static const double MAX_TRANSMISSION_IDLE_SEC = 3.0;
 

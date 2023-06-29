@@ -110,12 +110,31 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			fdata->basename = (char *)XCALLOC(1, strlen(outs[o]["directory"]) + strlen(outs[o]["filename_template"]) + 2);
 			sprintf(fdata->basename, "%s/%s", (const char *)outs[o]["directory"], (const char *)outs[o]["filename_template"]);
 			fdata->suffix = strdup(".mp3");
-            fdata->external_script = strdup(outs[o]["external_script"].c_str());
+            if(outs[o].exists("external_script"))
+            {
+                fdata->external_script = strdup(outs[o]["external_script"].c_str());
+            }
+            else
+            {
+                fdata->external_script = strdup("");
+            }
 
-            if (outs[o].exists("minimum_length")) {
-                fdata->min_transmission_sec = std::stof(outs[o]["minimum_length"].c_str());
-            } else {
-                fdata->min_transmission_sec = 0.0;
+            if(outs[o].exists("silence_release"))
+            {
+                fdata->max_idle_sec = outs[o]["silence_release"];
+            }
+            else
+            {
+                fdata->max_idle_sec = 0.5;
+            }
+
+            if(outs[o].exists("minimum_length"))
+            {
+                fdata->min_transmission_sec = outs[o]["minimum_length"];
+            }
+            else
+            {
+                fdata->min_transmission_sec = 1.0;
             }
 
 			fdata->continuous = outs[o].exists("continuous") ?
@@ -156,9 +175,34 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			fdata->basename = (char *)XCALLOC(1, strlen(outs[o]["directory"]) + strlen(outs[o]["filename_template"]) + 2);
 			sprintf(fdata->basename, "%s/%s", (const char *)outs[o]["directory"], (const char *)outs[o]["filename_template"]);
 			fdata->suffix = strdup(".cf32");
-            fdata->external_script = strdup(outs[o]["external_script"].c_str());
 
-            fdata->min_transmission_sec = std::stof(outs[o]["minimum_length"].c_str());
+            if(outs[o].exists("external_script"))
+            {
+                fdata->external_script = strdup(outs[o]["external_script"].c_str());
+            }
+            else
+            {
+                fdata->external_script = strdup("");
+            }
+
+            if(outs[o].exists("silence_release"))
+            {
+                fdata->max_idle_sec = outs[o]["silence_release"];
+            }
+            else
+            {
+                fdata->max_idle_sec = 0.5f;
+            }
+
+            if(outs[o].exists("minimum_length"))
+            {
+                fdata->min_transmission_sec = outs[o]["minimum_length"];
+            }
+            else
+            {
+                fdata->min_transmission_sec = 1.0f;
+            }
+
 
 			fdata->continuous = outs[o].exists("continuous") ?
 				(bool)(outs[o]["continuous"]) : false;

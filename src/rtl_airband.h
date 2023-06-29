@@ -142,6 +142,7 @@ struct file_data {
 	FILE *f;
 	enum output_type type;
     float min_transmission_sec;
+    float max_idle_sec;
 
 };
 

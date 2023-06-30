@@ -308,21 +308,6 @@ static void close_file(channel_t *channel, file_data *fdata) {
 
     double duration_sec = delta_sec(&fdata->open_time,       &current_time);
 
-    if (duration_sec < fdata->min_transmission_sec) {
-        // Duration is less than min_transmission_sec, so skip saving the file and delete tmp file
-
-        // Delete the temporary file
-        remove(fdata->file_path_tmp);
-
-        free(fdata->file_path);
-        fdata->file_path = NULL;
-        free(fdata->file_path_tmp);
-        fdata->file_path_tmp = NULL;
-
-
-        return;
-    }
-
 	if(fdata->type == O_FILE && fdata->f && channel->lame) {
 		int encoded = lame_encode_flush_nogap(channel->lame, channel->lamebuf, LAMEBUF_SIZE);
 		debug_print("closing file %s flushed %d\n", fdata->file_path, encoded);
@@ -343,14 +328,28 @@ static void close_file(channel_t *channel, file_data *fdata) {
     // run your shell script here
     std::string command = fdata->external_script;
     if (!command.empty()) {
-        command += " " + std::string(fdata->file_path) + " > /dev/null 2>&1";
-        int result = std::system(command.c_str());  // run the command
+        if(fdata->file_path != NULL) {
+            command += " " + std::string(fdata->file_path) + " > /dev/null 2>&1";
+            int result = std::system(command.c_str());  // run the command
+            if (result != -1 && WIFEXITED(result)) {
+                int exit_code = WEXITSTATUS(result);
+                if (exit_code != 0) {
+                    log(LOG_WARNING, "system command failed with exit code: %d (%s)\n", exit_code, std::strerror(errno));
+                }
+            } else {
+                log(LOG_WARNING, "system command execution failed: %s\n", std::strerror(errno));
+            }
+        }
     }
 
-	free(fdata->file_path);
-	fdata->file_path = NULL;
-	free(fdata->file_path_tmp);
-	fdata->file_path_tmp = NULL;
+    if (fdata->file_path != NULL) {
+        free(fdata->file_path);
+        fdata->file_path = NULL;
+    }
+    if (fdata->file_path_tmp != NULL) {
+        free(fdata->file_path_tmp);
+        fdata->file_path_tmp = NULL;
+    }
 }
 
 /*
@@ -375,7 +374,7 @@ static void close_if_necessary(channel_t *channel, file_data *fdata) {
 		double idle_sec     = delta_sec(&fdata->last_write_time, &current_time);
 
 		if (duration_sec > MAX_TRANSMISSION_TIME_SEC ||
-			(idle_sec > fdata->max_idle_sec)) {
+			(duration_sec > fdata->min_transmission_sec && idle_sec > fdata->max_idle_sec)) {
 			debug_print("closing file %s, duration %f sec, idle %f sec\n",
 						fdata->file_path, duration_sec, idle_sec);
 			close_file(channel, fdata);

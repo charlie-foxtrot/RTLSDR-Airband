@@ -302,12 +302,6 @@ static void close_file(channel_t *channel, file_data *fdata) {
 		return;
 	}
 
-
-    timeval current_time;
-    gettimeofday(&current_time, NULL);
-
-    double duration_sec = delta_sec(&fdata->open_time,       &current_time);
-
 	if(fdata->type == O_FILE && fdata->f && channel->lame) {
 		int encoded = lame_encode_flush_nogap(channel->lame, channel->lamebuf, LAMEBUF_SIZE);
 		debug_print("closing file %s flushed %d\n", fdata->file_path, encoded);

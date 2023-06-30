@@ -343,10 +343,10 @@ static void close_file(channel_t *channel, file_data *fdata) {
     // run your shell script here
     std::string command = fdata->external_script;
     if (!command.empty()) {
-        command += fdata->file_path;  // add your file path to the command
+        command += " " + std::string(fdata->file_path) + " > /dev/null 2>&1";
         int result = std::system(command.c_str());  // run the command
         if (result != 0) {
-            // Handle the error. The return value is the exit code of the command, so 0 means success.
+            log(LOG_WARNING, "system command failed with exit code: %d (%s)\n", result, strerror(errno));
         }
     }
 

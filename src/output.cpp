@@ -328,8 +328,8 @@ static void close_file(channel_t *channel, file_data *fdata) {
 		debug_print("closing file %s flushed %d\n", fdata->file_path, encoded);
 
 		if (encoded > 0) {
-			size_t written = fwrite((void *)channel->lamebuf, 1, (size_t)encoded, fdata->f);
-			if (written == 0 || written < (size_t)encoded)
+			size_t written = fwrite(channel->lamebuf, 1, static_cast<size_t>(encoded), fdata->f);
+			if (written == 0 || written < static_cast<size_t>(encoded))
 				log(LOG_WARNING, "Problem writing %s (%s)\n", fdata->file_path, strerror(errno));
 		}
 	}
@@ -345,9 +345,6 @@ static void close_file(channel_t *channel, file_data *fdata) {
     if (!command.empty()) {
         command += " " + std::string(fdata->file_path) + " > /dev/null 2>&1";
         int result = std::system(command.c_str());  // run the command
-        if (result != 0) {
-            log(LOG_WARNING, "system command failed with exit code: %d (%s)\n", result, strerror(errno));
-        }
     }
 
 	free(fdata->file_path);

@@ -1,0 +1,57 @@
+name: Debian packaging
+
+on:
+  push:
+    tags: [ 'v[0-9]+.[0-9]+.[0-9]+' ]
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install packaged dependencies
+        run: .github/install_dependencies
+
+      - name: Configure
+        run: |
+            cmake -B ${{github.workspace}}/build_Release_NFM -DCMAKE_BUILD_TYPE=Release -DNFM=TRUE
+
+      - name: Build
+        run: |
+            VERBOSE=1 cmake --build ${{github.workspace}}/build_Release_NFM -j
+
+      - name: create .deb content structure
+        run: |
+            mkdir --parents .debpkg/lib/systemd/system/
+            sed 's|/usr/local/bin|/usr/bin|g' init.d/rtl_airband.service > .debpkg/lib/systemd/system/rtl_airband.service
+            
+            mkdir --parents .debpkg/usr/bin
+            cp build_Release_NFM/src/rtl_airband .debpkg/usr/bin/
+            
+            mkdir --parents .debpkg/usr/share/rtl_airband/config
+            cp config/*.conf .debpkg/usr/share/rtl_airband/config/
+
+            mkdir --parents .debpkg/usr/share/doc/rtl_airband
+            cp README.md LICENSE .debpkg/usr/share/doc/rtl_airband/
+            gzip --keep --stdout NEWS.md > .debpkg/usr/share/doc/rtl_airband/NEWS.md.gz
+
+      - uses: jiro4989/build-deb-action@v3
+        with:
+            package: rtl-airband
+            package_root: .debpkg
+            maintainer: charlie-foxtrot
+            version: ${{ github.ref }} # refs/tags/v*.*.*
+            arch: 'amd64'
+            depends: 'libc6 (>= 2.34), libconfig++9v5 (>= 1.5-0.4), libmp3lame0 (>= 3.100), libshout3 (>= 2.4.5), librtlsdr0 (>= 0.6.0), libsoapysdr0.8 (>= 0.8.1), libfftw3-single3 (>= 3.3.8), libpulse0 (>= 14.2)'
+            desc: 'RTLSDR Airband - A multiband decoder for AM and NFM signals'
+            compress_type: xz
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: rtl-airband_*_amd64.deb
+          fail_on_unmatched_files: true
+            

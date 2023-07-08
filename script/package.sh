@@ -20,7 +20,7 @@ package_root_size="$(du --bytes --summarize --exclude=DEBIAN "${package_root}"/ 
 readonly package_root_size
 readonly installed_size="$(( (package_root_size + 1024 - 1) / 1024 ))"
 
-# # creates control file
+# creates control file
 mkdir -p "${package_root}/DEBIAN/"
 cat << EOF | envsubst > "${package_root}/DEBIAN/control"
 Package: ${PACKAGE}

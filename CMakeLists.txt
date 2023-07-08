@@ -1,6 +1,7 @@
 cmake_minimum_required (VERSION 3.1)
 project (RTLSDR-Airband CXX)
 
+# major, minor and patch should be kept in this order for script/shapshot_version.sh to work.
 set (RTL_AIRBAND_VERSION_MAJOR 4)
 set (RTL_AIRBAND_VERSION_MINOR 1)
 set (RTL_AIRBAND_VERSION_PATCH 1)

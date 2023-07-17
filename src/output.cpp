@@ -78,16 +78,16 @@ void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 	if (shout_set_password(shouttemp, icecast->password) != SHOUTERR_SUCCESS) {
 		shout_free(shouttemp); return;
 	}
-	if (shout_set_format(shouttemp, SHOUT_FORMAT_MP3) != SHOUTERR_SUCCESS){
+	if (shout_set_content_format(shouttemp, SHOUT_FORMAT_MP3, SHOUT_USAGE_AUDIO, NULL) != SHOUTERR_SUCCESS){
 		shout_free(shouttemp); return;
 	}
-	if(icecast->name && shout_set_name(shouttemp, icecast->name) != SHOUTERR_SUCCESS) {
+	if(icecast->name && shout_set_meta(shouttemp, SHOUT_META_NAME, icecast->name) != SHOUTERR_SUCCESS) {
 		shout_free(shouttemp); return;
 	}
-	if(icecast->genre && shout_set_genre(shouttemp, icecast->genre) != SHOUTERR_SUCCESS) {
+	if(icecast->genre && shout_set_meta(shouttemp, SHOUT_META_GENRE, icecast->genre) != SHOUTERR_SUCCESS) {
 		shout_free(shouttemp); return;
 	}
-	if(icecast->description && shout_set_description(shouttemp, icecast->description) != SHOUTERR_SUCCESS) {
+	if(icecast->description && shout_set_meta(shouttemp, SHOUT_META_DESCRIPTION, icecast->description) != SHOUTERR_SUCCESS) {
 		shout_free(shouttemp); return;
 	}
 	char samplerates[20];
@@ -476,7 +476,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 						log(LOG_WARNING, "Failed to add shout metadata\n");
 					}
 				}
-				if (shout_set_metadata(icecast->shout, meta) != SHOUTERR_SUCCESS) {
+				if (SHOUT_SET_METADATA(icecast->shout, meta) != SHOUTERR_SUCCESS) {
 					log(LOG_WARNING, "Failed to add shout metadata\n");
 				}
 				shout_metadata_free(meta);

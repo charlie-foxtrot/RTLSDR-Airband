@@ -8,12 +8,12 @@ case "${unameOut}" in
     Linux*)
         echo "Installing Linux dependencies"
         sudo apt-get update -y
-        sudo apt-get install -y \
+        sudo apt-get install -y --no-install-recommends \
             build-essential \
             cmake \
             libmp3lame-dev \
             libshout3-dev \
-            libconfig++-dev \
+            'libconfig++-dev' \
             libfftw3-dev \
             librtlsdr-dev \
             libsoapysdr-dev \

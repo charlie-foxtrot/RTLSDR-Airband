@@ -1,0 +1,81 @@
+#!/bin/bash
+
+set -x
+set -e
+
+function run_rtl_airband {
+  BIN_PATH=$1
+  CONFIG_PATH=$2
+  OUTPUT_DIR=$3
+
+  mkdir -p ${OUTPUT_DIR}
+  pushd ${OUTPUT_DIR}
+
+  # run for 30 seconds then send kill command
+  sudo ${BIN_PATH} -c ${CONFIG_PATH} -F -e &
+  PID=$!
+  sleep 30
+  sudo kill -SIGINT $PID
+
+  # wait 5 seconds for files to be closed and renamed
+  sleep 5
+
+  # make sure there is at least one NOAA channel that generated an MP3 longer
+  # than 10 seconds for each rtl and soapy (not 30 seconds because of startup time)
+  check_length '*_rtlsdr_*.mp3'
+  check_length '*_soapysdr_*.mp3'
+
+  popd
+
+}
+
+function check_length {
+
+  for i in $@ ; do
+
+    seconds=$(ffmpeg -i $i -f null - 2>&1 | grep time | awk '{print $2}' | cut -d ':' -f 3)
+    echo "$i is $seconds sec long"
+    if (( $(echo "$seconds > 10.0" | bc -l) )); then
+      return 0
+    fi
+
+  done
+
+  return -1
+
+}
+
+REPO_DIR=$(readlink -f `dirname ${0}`/../)
+
+INTEGRATION_TESTS_DIR=${REPO_DIR}/integration_tests
+
+# make a work dir
+WORK_DIR=${INTEGRATION_TESTS_DIR}/work
+rm -rf ${WORK_DIR} || true
+
+cd ${REPO_DIR}
+
+# build a version that uses the Broadcom VideoCore GPU
+GPU_BUILD_DIR=${WORK_DIR}/build_rpiv2
+cmake -B ${GPU_BUILD_DIR} -DNFM=TRUE -DPLATFORM=rpiv2 -DCMAKE_BUILD_TYPE=Release
+VERBOSE=1 cmake --build ${GPU_BUILD_DIR} -j2
+
+# make sure the binary is linking about the GPU library
+ldd ${GPU_BUILD_DIR}/src/rtl_airband | grep libbcm_host
+
+
+# build a version that uses FFTW
+FFTW_BUILD_DIR=${WORK_DIR}/build_native
+cmake -B ${FFTW_BUILD_DIR} -DNFM=TRUE -DPLATFORM=native -DCMAKE_BUILD_TYPE=Release 
+VERBOSE=1 cmake --build ${FFTW_BUILD_DIR} -j2
+
+# make sure the binary is linking against the FFTW library
+ldd ${FFTW_BUILD_DIR}/src/rtl_airband | grep libfftw3f
+
+
+# run the noaa config twice, once for each binary
+GPU_OUTPUT_DIR=${WORK_DIR}/output_rpiv2/
+FFTW_OUTPUT_DIR=${WORK_DIR}/output_native/
+run_rtl_airband ${GPU_BUILD_DIR}/src/rtl_airband ${INTEGRATION_TESTS_DIR}/configs/noaa.conf ${GPU_OUTPUT_DIR}
+run_rtl_airband ${FFTW_BUILD_DIR}/src/rtl_airband ${INTEGRATION_TESTS_DIR}/configs/noaa.conf ${FFTW_OUTPUT_DIR}
+

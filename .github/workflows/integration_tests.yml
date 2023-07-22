@@ -1,0 +1,19 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main, unstable]
+  pull_request:
+  schedule:
+    - cron: '39 13 * * *' # run daily 
+
+jobs:
+  build:
+    runs-on: [rpi3b]
+    timeout-minutes: 10
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@main
+
+    - name: Integration Tests
+      run: integration_tests/run

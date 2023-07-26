@@ -77,18 +77,22 @@ int mixer_connect_input(mixer_t *mixer, float ampfactor, float balance) {
 	mixer->inputs[i].ready = false;
 	mixer->inputs[i].has_signal = false;
 	mixer->inputs[i].input_overrun_count = 0;
-	SET_BIT(mixer->input_mask, i);
-	SET_BIT(mixer->inputs_todo, i);
+	mixer->input_mask[i] = 1;
+	mixer->inputs_todo[i] = 1;
 	mixer->enabled = true;
 	debug_print("ampfactor=%.1f ampl=%.1f ampr=%.1f\n", mixer->inputs[i].ampfactor, mixer->inputs[i].ampl, mixer->inputs[i].ampr);
 	return(mixer->input_count++);
 }
 
 void mixer_disable_input(mixer_t *mixer, int input_idx) {
+    int mixer_sum = 0;
 	assert(mixer);
 	assert(input_idx < mixer->input_count);
-	RESET_BIT(mixer->input_mask, input_idx);
-	if(mixer->input_mask == 0) {
+	mixer->input_mask[input_idx] = 0;
+	for (int i = 0; i < MAX_MIXINPUTS; i++) {
+		mixer_sum = mixer_sum + mixer->input_mask[i];
+	}
+	if(mixer_sum == 0) {
 		log(LOG_NOTICE, "Disabling mixer '%s' - all inputs died\n", mixer->name);
 		mixer_disable(mixer);
 	}
@@ -141,6 +145,7 @@ void *mixer_thread(void *param) {
 	assert(param != NULL);
 	Signal *signal = (Signal *)param;
 	int interval_usec = 1e+6 * WAVE_BATCH / WAVE_RATE / MIX_DIVISOR;
+	int unprocessed_mixer_count;
 
 	debug_print("Starting mixer thread, signal %p\n", signal);
 
@@ -169,7 +174,7 @@ void *mixer_thread(void *param) {
 			for(int j = 0; j < mixer->input_count; j++) {
 				mixinput_t *input = mixer->inputs + j;
 				pthread_mutex_lock(&input->mutex);
-				if(IS_SET(mixer->inputs_todo & mixer->input_mask, j) && input->ready) {
+				if((mixer->inputs_todo[j] & mixer->input_mask[j]) && input->ready) {
 					if(channel->state == CH_DIRTY) {
 						memset(channel->waveout, 0, WAVE_BATCH * sizeof(float));
 						if(channel->mode == MM_STEREO)
@@ -188,24 +193,32 @@ void *mixer_thread(void *param) {
 						channel->axcindicate = SIGNAL;
 					}
 					input->ready = false;
-					RESET_BIT(mixer->inputs_todo, j);
+					mixer->inputs_todo[j] = 0;
 				}
 				pthread_mutex_unlock(&input->mutex);
 			}
 
-			if((mixer->inputs_todo & mixer->input_mask) == 0 || mixer->interval == 0) {	// all good inputs handled or last interval passed
+			unprocessed_mixer_count = 0;
+			for(int k = 0; k < MAX_MIXINPUTS; k++) {
+				unprocessed_mixer_count = unprocessed_mixer_count + ( mixer->inputs_todo[k] & mixer->input_mask[k]);
+            }
+			if((unprocessed_mixer_count == 0) || mixer->interval == 0) {	// all good inputs handled or last interval passed
 #ifdef DEBUG
 				gettimeofday(&te, NULL);
-		        debug_bulk_print("mixerinput: %lu.%lu %lu int=%d inp_unhandled=0x%02x inp_mask=0x%02x\n",
-					te.tv_sec, (unsigned long) te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec,
-					mixer->interval, mixer->inputs_todo, mixer->input_mask);
+                for(int k = 0; k < mixer->input_count; k++) {
+		            debug_bulk_print("mixerinput: %lu.%lu %lu int=%d inp_id=%d inp_unhandled=%d inp_mask=%d\n",
+					    te.tv_sec, (unsigned long) te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec,
+					    mixer->interval, k, mixer->inputs_todo[k], mixer->input_mask[k]);
+                }
 				ts.tv_sec = te.tv_sec;
 				ts.tv_usec = te.tv_usec;
 #endif
 				channel->state = CH_READY;
 				signal->send();
 				mixer->interval = MIX_DIVISOR;
-				mixer->inputs_todo = ONES(mixer->input_count);
+                for(int k = 0; k < mixer->input_count; k++) {
+                    mixer->inputs_todo[k] = 1;
+                }
 			} else {
 				mixer->interval--;
 			}

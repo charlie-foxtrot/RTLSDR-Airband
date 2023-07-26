@@ -77,11 +77,6 @@
 #define LAMEBUF_SIZE 22000 //todo: calculate
 #define MIX_DIVISOR 2
 
-#define ONES(x) ~(~0U << (x))
-#define SET_BIT(a, x) (a) |= (1 << (x))
-#define RESET_BIT(a, x) (a) &= ~(1 << (x))
-#define IS_SET(a, x) (a) & (1 << (x))
-
 #if defined WITH_BCM_VC
 struct sample_fft_arg
 {
@@ -294,8 +289,8 @@ struct mixer_t {
 	bool enabled;
 	int input_count;
 	int interval;
-	unsigned int inputs_todo;
-	unsigned int input_mask;
+	int inputs_todo[MAX_MIXINPUTS] = {0};
+	int input_mask[MAX_MIXINPUTS] = {0};
 	channel_t channel;
 	mixinput_t inputs[MAX_MIXINPUTS];
 	size_t output_overrun_count;

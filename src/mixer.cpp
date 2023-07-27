@@ -85,7 +85,7 @@ int mixer_connect_input(mixer_t *mixer, float ampfactor, float balance) {
 }
 
 void mixer_disable_input(mixer_t *mixer, int input_idx) {
-    int mixer_sum = 0;
+	int mixer_sum = 0;
 	assert(mixer);
 	assert(input_idx < mixer->input_count);
 	mixer->input_mask[input_idx] = 0;
@@ -201,24 +201,24 @@ void *mixer_thread(void *param) {
 			unprocessed_mixer_count = 0;
 			for(int k = 0; k < MAX_MIXINPUTS; k++) {
 				unprocessed_mixer_count = unprocessed_mixer_count + ( mixer->inputs_todo[k] & mixer->input_mask[k]);
-            }
+			}
 			if((unprocessed_mixer_count == 0) || mixer->interval == 0) {	// all good inputs handled or last interval passed
 #ifdef DEBUG
 				gettimeofday(&te, NULL);
-                for(int k = 0; k < mixer->input_count; k++) {
-		            debug_bulk_print("mixerinput: %lu.%lu %lu int=%d inp_id=%d inp_unhandled=%d inp_mask=%d\n",
-					    te.tv_sec, (unsigned long) te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec,
-					    mixer->interval, k, mixer->inputs_todo[k], mixer->input_mask[k]);
-                }
+				for(int k = 0; k < mixer->input_count; k++) {
+					debug_bulk_print("mixerinput: %lu.%lu %lu int=%d inp_id=%d inp_unhandled=%d inp_mask=%d\n",
+						te.tv_sec, (unsigned long) te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec,
+						mixer->interval, k, mixer->inputs_todo[k], mixer->input_mask[k]);
+				}
 				ts.tv_sec = te.tv_sec;
 				ts.tv_usec = te.tv_usec;
 #endif
 				channel->state = CH_READY;
 				signal->send();
 				mixer->interval = MIX_DIVISOR;
-                for(int k = 0; k < mixer->input_count; k++) {
-                    mixer->inputs_todo[k] = 1;
-                }
+				for(int k = 0; k < mixer->input_count; k++) {
+					mixer->inputs_todo[k] = 1;
+				}
 			} else {
 				mixer->interval--;
 			}

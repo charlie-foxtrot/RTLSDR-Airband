@@ -289,8 +289,8 @@ struct mixer_t {
 	bool enabled;
 	int input_count;
 	int interval;
-	int inputs_todo[MAX_MIXINPUTS] = {0};
-	int input_mask[MAX_MIXINPUTS] = {0};
+	bool inputs_todo[MAX_MIXINPUTS] = {false};
+	bool input_mask[MAX_MIXINPUTS] = {false};
 	channel_t channel;
 	mixinput_t inputs[MAX_MIXINPUTS];
 	size_t output_overrun_count;

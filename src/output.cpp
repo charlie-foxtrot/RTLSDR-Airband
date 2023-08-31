@@ -323,6 +323,61 @@ static void close_file(channel_t *channel, file_data *fdata) {
 	fdata->file_path_tmp = NULL;
 }
 
+char* make_dated_subdirectory(const char* basedir, const struct tm *time) {
+	size_t subdir_max_len = strlen(basedir) + 1 + 5 + 3 + 3 + 1;
+	char* subdir = (char*)XCALLOC(1, subdir_max_len);
+
+	// Most likely the subdirectory already exists.
+	// Let's try stat() first.
+	snprintf(subdir, subdir_max_len, "%s/%04d/%02d/%02d", basedir, time->tm_year+1900, time->tm_mon+1, time->tm_mday);
+	struct stat st;
+	if (stat(subdir, &st) == 0 && S_ISDIR(st.st_mode)) {
+		return subdir;
+	}
+
+	// It doesn't exist, let's create it, starting from the top.
+
+	// Year
+	snprintf(subdir, subdir_max_len, "%s/%04d", basedir, time->tm_year+1900);
+	if (mkdir(subdir, 0755) < 0 && errno != EEXIST) {
+		log(LOG_ERR, "Could not create directory %s: %s\n", subdir, strerror(errno));
+		free(subdir);
+		return NULL;
+	}
+
+	// Month
+	snprintf(subdir, subdir_max_len, "%s/%04d/%02d", basedir, time->tm_year+1900, time->tm_mon+1);
+	if (mkdir(subdir, 0755) < 0 && errno != EEXIST) {
+		log(LOG_ERR, "Could not create directory %s: %s\n", subdir, strerror(errno));
+		free(subdir);
+		return NULL;
+	}
+
+	// Day
+	snprintf(subdir, subdir_max_len, "%s/%04d/%02d/%02d", basedir, time->tm_year+1900, time->tm_mon+1, time->tm_mday);
+	if (mkdir(subdir, 0755) < 0 && errno != EEXIST) {
+		log(LOG_ERR, "Could not create directory %s: %s\n", subdir, strerror(errno));
+		free(subdir);
+		return NULL;
+	}
+
+	// It may not be a directory (mkdir would return EEXIST).
+	// Check that it is a directory.
+
+	if (stat(subdir, &st) == 0) {
+		if (!S_ISDIR(st.st_mode)) {
+			log(LOG_ERR, "%s exists but is not a directory\n", subdir);
+			free(subdir);
+			return NULL;
+		} else {
+			log(LOG_ERR, "Could not create directory %s: %s\n", subdir, strerror(errno));
+			free(subdir);
+			return NULL;
+		}
+	}
+	return subdir;
+}
+
 /*
  * Close current output file based on certain conditions:
  * If "split_on_transmission" mode is true check:
@@ -409,12 +464,22 @@ static bool output_file_ready(channel_t *channel, file_data *fdata, mix_modes mi
 		return false;
 	}
 
-	size_t file_path_len = strlen(fdata->basename) + strlen(timestamp) + strlen(fdata->suffix) + 11; // include space for '\0' and possible freq in Hz
+	if (fdata->dated_subdirectories) {
+		fdata->dir = make_dated_subdirectory(fdata->basedir, time);
+		if (fdata->dir == NULL) {
+			log(LOG_ERR, "Failed to create dated subdirectory\n");
+			return false;
+		}
+	} else {
+		fdata->dir = strdup(fdata->basedir);
+	}
+
+	size_t file_path_len = strlen(fdata->dir) + 1 + strlen(fdata->basename) + strlen(timestamp) + strlen(fdata->suffix) + 11; // include space for '\0' and possible freq in Hz
 	fdata->file_path = (char *)XCALLOC(1, file_path_len);
 	if (fdata->include_freq) {
-		sprintf(fdata->file_path, "%s%s_%d%s", fdata->basename, timestamp, channel->freqlist[channel->freq_idx].frequency, fdata->suffix);
+		sprintf(fdata->file_path, "%s/%s%s_%d%s", fdata->dir, fdata->basename, timestamp, channel->freqlist[channel->freq_idx].frequency, fdata->suffix);
 	} else {
-		sprintf(fdata->file_path, "%s%s%s", fdata->basename, timestamp, fdata->suffix);
+		sprintf(fdata->file_path, "%s/%s%s%s", fdata->dir, fdata->basename, timestamp, fdata->suffix);
 	}
 
 	static char const *tmp_suffix = ".tmp";

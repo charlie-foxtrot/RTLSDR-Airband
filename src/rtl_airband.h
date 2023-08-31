@@ -128,10 +128,13 @@ struct icecast_data {
 };
 
 struct file_data {
+	char *basedir;
+	char *dir;
 	char *basename;
 	char *suffix;
 	char *file_path;
 	char *file_path_tmp;
+	bool dated_subdirectories;
 	bool continuous;
 	bool append;
 	bool split_on_transmission;

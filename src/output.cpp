@@ -321,6 +321,8 @@ static void close_file(channel_t *channel, file_data *fdata) {
 	fdata->file_path = NULL;
 	free(fdata->file_path_tmp);
 	fdata->file_path_tmp = NULL;
+	free(fdata->dir);
+	fdata->dir = NULL;
 }
 
 char* make_dated_subdirectory(const char* basedir, const struct tm *time) {

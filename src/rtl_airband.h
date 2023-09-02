@@ -68,7 +68,6 @@
 #define MP3_RATE 8000
 #define MAX_SHOUT_QUEUELEN 32768
 #define TAG_QUEUE_LEN 16
-#define MAX_MIXINPUTS 32
 
 #define MIN_FFT_SIZE_LOG 8
 #define DEFAULT_FFT_SIZE_LOG 9
@@ -239,11 +238,11 @@ struct channel_t {
 	struct freq_t *freqlist;
 	int freq_count;
 	int freq_idx;
-	int output_count;
 	int need_mp3;
 	int needs_raw_iq;
 	int has_iq_outputs;
 	enum ch_states state;		// mixer channel state flag
+	int output_count;
 	output_t *outputs;
 	int highpass;               // highpass filter cutoff
 	int lowpass;                // lowpass filter cutoff
@@ -287,13 +286,13 @@ struct mixinput_t {
 struct mixer_t {
 	const char *name;
 	bool enabled;
-	int input_count;
 	int interval;
-	bool inputs_todo[MAX_MIXINPUTS] = {false};
-	bool input_mask[MAX_MIXINPUTS] = {false};
-	channel_t channel;
-	mixinput_t inputs[MAX_MIXINPUTS];
 	size_t output_overrun_count;
+	int input_count;
+	mixinput_t *inputs;
+	bool *inputs_todo;
+	bool *input_mask;
+	channel_t channel;
 };
 
 struct demod_params_t {

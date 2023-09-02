@@ -60,10 +60,19 @@ int mixer_connect_input(mixer_t *mixer, float ampfactor, float balance) {
 		return(-1);
 	}
 	int i = mixer->input_count;
-	if(i >= MAX_MIXINPUTS) {
-		mixer_set_error("too many inputs");
-		return(-1);
+
+	// allocate new mixer - this could be more efficient by pre-allocating but this
+	// is only run at startup so not a big deal
+	if (mixer->inputs == NULL) {
+		mixer->inputs = (mixinput_t *)XCALLOC(i+1, sizeof(struct mixinput_t));
+		mixer->inputs_todo = (bool *)XCALLOC(i+1, sizeof(bool));
+		mixer->input_mask = (bool *)XCALLOC(i+1, sizeof(bool));
+	} else {
+		mixer->inputs = (mixinput_t *)XREALLOC(mixer->inputs, (i+1) * sizeof(struct mixinput_t));
+		mixer->inputs_todo = (bool *)XREALLOC(mixer->inputs_todo, (i+1) * sizeof(bool));
+		mixer->input_mask = (bool *)XREALLOC(mixer->input_mask, (i+1) * sizeof(bool));
 	}
+
 	mixer->inputs[i].wavein = (float *)XCALLOC(WAVE_LEN, sizeof(float));
 	if((pthread_mutex_init(&mixer->inputs[i].mutex, NULL)) != 0) {
 		mixer_set_error("failed to initialize input mutex");
@@ -215,8 +224,8 @@ void *mixer_thread(void *param) {
 #ifdef DEBUG
 				gettimeofday(&te, NULL);
 
-				char inputs_todo_char[MAX_MIXINPUTS+1];
-				char input_mask_char[MAX_MIXINPUTS+1];
+				char *inputs_todo_char = (char*)XCALLOC(mixer->input_count+1, sizeof(char));
+				char *input_mask_char = (char*)XCALLOC(mixer->input_count+1, sizeof(char));
 				for(int k = 0; k < mixer->input_count; k++) {
 					inputs_todo_char[k] = mixer->inputs_todo[k] ? 'T' : 'F';
 					input_mask_char[k] = mixer->input_mask[k] ? 'T' : 'F';
@@ -227,6 +236,10 @@ void *mixer_thread(void *param) {
 				debug_bulk_print("mixerinput: %lu.%lu %lu int=%d inp_unhandled=%s inp_mask=%s\n",
 					te.tv_sec, (unsigned long) te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec,
 					mixer->interval, inputs_todo_char, input_mask_char);
+
+				free(inputs_todo_char);
+				free(input_mask_char);
+
 				ts.tv_sec = te.tv_sec;
 				ts.tv_usec = te.tv_usec;
 #endif

@@ -856,12 +856,16 @@ int parse_mixers(libconfig::Setting &mx) {
 			cerr<<"Configuration error: mixers.["<<i<<"]: undefined mixer name\n";
 			error();
 		}
-		mixer_t *mixer = &mixers[mm];
 		debug_print("mm=%d name=%s\n", mm, name);
-		mixer->enabled = false;
+		mixer_t *mixer = &mixers[mm];
 		mixer->name = strdup(name);
+		mixer->enabled = false;
 		mixer->interval = MIX_DIVISOR;
 		mixer->output_overrun_count = 0;
+		mixer->input_count = 0;
+		mixer->inputs = NULL;
+		mixer->inputs_todo = NULL;
+		mixer->input_mask = NULL;
 		channel_t *channel = &mixer->channel;
 		channel->highpass = mx[i].exists("highpass") ? (int)mx[i]["highpass"] : 100;
 		channel->lowpass = mx[i].exists("lowpass") ? (int)mx[i]["lowpass"] : 2500;

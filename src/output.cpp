@@ -403,54 +403,44 @@ static void close_if_necessary(channel_t *channel, file_data *fdata) {
  * open that new file.  If that file open succeeded, return true.
  */
 static bool output_file_ready(channel_t *channel, file_data *fdata, mix_modes mixmode, int is_audio) {
-	if (!fdata) {
-		return false;
-	}
+    if (!fdata) {
+        return false;
+    }
 
-	close_if_necessary(channel, fdata);
+    close_if_necessary(channel, fdata);
 
-	if (fdata->f) {     // still open
-		return true;
-	}
+    if (fdata->f) {     // still open
+        return true;
+    }
 
-	timeval current_time;
-	gettimeofday(&current_time, NULL);
-	struct tm *time;
-	if (use_localtime) {
-		time = localtime(&current_time.tv_sec);
-	} else {
-		time = gmtime(&current_time.tv_sec);
-	}
+    timeval current_time;
+    gettimeofday(&current_time, NULL);
 
-	char timestamp[32];
-	if (strftime(timestamp, sizeof(timestamp),
-				 fdata->split_on_transmission ? "_%Y%m%d_%H%M%S" : "_%Y%m%d_%H",
-				 time) == 0) {
-		log(LOG_NOTICE, "strftime returned 0\n");
-		return false;
-	}
+    char timestamp[32];
+    snprintf(timestamp, sizeof(timestamp), "_%ld.%06ld", current_time.tv_sec, current_time.tv_usec);
 
-	size_t file_path_len = strlen(fdata->basename) + strlen(timestamp) + strlen(fdata->suffix) + 11; // include space for '\0' and possible freq in Hz
-	fdata->file_path = (char *)XCALLOC(1, file_path_len);
-	if (fdata->include_freq) {
-		sprintf(fdata->file_path, "%s%s_%d%s", fdata->basename, timestamp, channel->freqlist[channel->freq_idx].frequency, fdata->suffix);
-	} else {
-		sprintf(fdata->file_path, "%s%s%s", fdata->basename, timestamp, fdata->suffix);
-	}
+    size_t file_path_len = strlen(fdata->basename) + strlen(timestamp) + strlen(fdata->suffix) + 11; // include space for '\0' and possible freq in Hz
+    fdata->file_path = (char *)XCALLOC(1, file_path_len);
+    if (fdata->include_freq) {
+        sprintf(fdata->file_path, "%s%s_%d%s", fdata->basename, timestamp, channel->freqlist[channel->freq_idx].frequency, fdata->suffix);
+    } else {
+        sprintf(fdata->file_path, "%s%s%s", fdata->basename, timestamp, fdata->suffix);
+    }
 
-	static char const *tmp_suffix = ".tmp";
-	fdata->file_path_tmp = (char *)XCALLOC(1, file_path_len + strlen(tmp_suffix));
-	sprintf(fdata->file_path_tmp, "%s%s", fdata->file_path, tmp_suffix);
+    static char const *tmp_suffix = ".tmp";
+    fdata->file_path_tmp = (char *)XCALLOC(1, file_path_len + strlen(tmp_suffix));
+    sprintf(fdata->file_path_tmp, "%s%s", fdata->file_path, tmp_suffix);
 
-	fdata->open_time = fdata->last_write_time = current_time;
+    fdata->open_time = fdata->last_write_time = current_time;
 
-	if (open_file(fdata, mixmode, is_audio) < 0) {
-		log(LOG_WARNING, "Cannot open output file %s (%s)\n", fdata->file_path_tmp, strerror(errno));
-		return false;
-	}
+    if (open_file(fdata, mixmode, is_audio) < 0) {
+        log(LOG_WARNING, "Cannot open output file %s (%s)\n", fdata->file_path_tmp, strerror(errno));
+        return false;
+    }
 
-	return true;
+    return true;
 }
+
 
 // Create all the output for a particular channel.
 void process_outputs(channel_t *channel, int cur_scan_freq) {

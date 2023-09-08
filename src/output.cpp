@@ -417,7 +417,7 @@ static bool output_file_ready(channel_t *channel, file_data *fdata, mix_modes mi
     gettimeofday(&current_time, NULL);
 
     char timestamp[32];
-    snprintf(timestamp, sizeof(timestamp), "_%ld.%06ld", current_time.tv_sec, current_time.tv_usec);
+    snprintf(timestamp, sizeof(timestamp), "_%ld.%02ld", current_time.tv_sec, current_time.tv_usec / 10000);
 
     size_t file_path_len = strlen(fdata->basename) + strlen(timestamp) + strlen(fdata->suffix) + 11; // include space for '\0' and possible freq in Hz
     fdata->file_path = (char *)XCALLOC(1, file_path_len);

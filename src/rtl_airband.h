@@ -59,16 +59,14 @@
 #define DEFAULT_SAMPLE_RATE 2560000
 #ifdef NFM
 #define WAVE_RATE 22050
+#define MP3_RATE 22050
 #else
 #define WAVE_RATE 8000
+#define MP3_RATE 8000
 #endif
 #define WAVE_BATCH (WAVE_RATE / 8)
 #define AGC_EXTRA 100
 #define WAVE_LEN (2 * WAVE_BATCH + AGC_EXTRA)
-#ifdef NFM
-#define MP3_RATE 22050
-#else
-#define MP3_RATE 8000
 #define MAX_SHOUT_QUEUELEN 32768
 #define TAG_QUEUE_LEN 16
 #define MAX_MIXINPUTS 32

@@ -154,6 +154,10 @@ lame_t airlame_init(mix_modes mixmode, int highpass, int lowpass) {
 	return lame;
 }
 
+int min(int a, int b) {
+    return (a < b) ? a : b;
+}
+
 class LameTone
 {
 	unsigned char* _data;
@@ -182,20 +186,26 @@ public:
 		lame_t lame = airlame_init(mixmode, 0, 0);
 		if (lame) {
 			_bytes = lame_encode_buffer_ieee_float(lame, buf, (mixmode == MM_STEREO ? buf : NULL), samples, _data, LAMEBUF_SIZE);
-			if (_bytes > 0) {
-				int flush_ofs = _bytes;
-				if (flush_ofs&0x1f)
-					flush_ofs+= 0x20 - (flush_ofs&0x1f);
-				if (flush_ofs < LAMEBUF_SIZE) {
-					int flush_bytes = lame_encode_flush(lame, _data + flush_ofs, LAMEBUF_SIZE - flush_ofs);
-					if (flush_bytes > 0) {
-						memmove(_data + _bytes, _data + flush_ofs, flush_bytes);
-						_bytes+= flush_bytes;
-					}
-				}
-			}
-			else
-				log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n", _bytes);
+            if (_bytes > 0) {
+                int flush_ofs = _bytes;
+
+                int flush_bytes = lame_encode_flush(lame, _data + flush_ofs, LAMEBUF_SIZE - flush_ofs);
+                if (flush_bytes > 0) {
+                    // Implement a short fade-out to the last few samples before flushing
+                    int fade_out_samples = min(100, flush_bytes /
+                                                    static_cast<int>(sizeof(float))); // Use the min function defined above
+                    for (int i = 0; i < fade_out_samples; ++i) {
+                        float fade_out_factor = (fade_out_samples - i) / static_cast<float>(fade_out_samples);
+                        reinterpret_cast<float *>(_data + flush_ofs)[flush_bytes / static_cast<int>(sizeof(float)) - i -
+                                                                     1] *= fade_out_factor;
+                    }
+
+                    memmove(_data + _bytes, _data + flush_ofs, flush_bytes);
+                    _bytes += flush_bytes;
+                }
+            } else {
+                log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n", _bytes);
+            }
 			lame_close(lame);
 		}
 		free(buf);
@@ -272,6 +282,20 @@ static int open_file(file_data *fdata, mix_modes mixmode, int is_audio) {
 		int r = lt_a.write(fdata->f);
 		if (r==0) r = lt_b.write(fdata->f);
 		if (r==0) r = lt_c.write(fdata->f);
+
+        // If appending to an existing file, add silence for the idle time since the last write
+        if (fdata->append && st.st_size > 0) {
+            timeval current_time;
+            gettimeofday(&current_time, NULL);
+
+            double idle_sec = delta_sec(&fdata->last_write_time, &current_time);
+
+            if (idle_sec > fdata->max_idle_sec) {
+                int silence_duration_msec = idle_sec * 1000; // Convert seconds to milliseconds
+                LameTone lt_silence(mixmode, silence_duration_msec, 0); // Create a silence tone with the calculated duration
+                lt_silence.write(fdata->f); // Write the silence tone to the file
+            }
+        }
 
 		// fill in time delta with silence if continuous output mode
 		if (fdata->continuous) {

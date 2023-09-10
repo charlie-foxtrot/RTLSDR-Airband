@@ -163,6 +163,7 @@ class LameTone
 {
 	unsigned char* _data;
 	int _bytes;
+    std::vector<unsigned char> _partial_frame_data;
 
 public:
 
@@ -172,6 +173,8 @@ public:
 
         int samples = (msec * WAVE_RATE) / 1000;
         float *buf = (float *)XCALLOC(samples, sizeof(float));
+
+        memset(buf, 0, samples * sizeof(float));
 
         debug_print("LameTone with mixmode=%s msec=%d hz=%u\n",
                     mixmode == MM_STEREO ? "MM_STEREO" : "MM_MONO",
@@ -242,10 +245,30 @@ public:
 		if (!_data || _bytes<=0)
 			return 1;
 
-		if (fwrite(_data, 1, _bytes, f) != (unsigned int)_bytes) {
-			log(LOG_WARNING, "LameTone: failed to write %d bytes\n", _bytes);
-			return -1;
-		}
+        if (!_partial_frame_data.empty()) {
+            std::vector<unsigned char> complete_data;
+            complete_data.reserve(_partial_frame_data.size() + _bytes);
+            complete_data.insert(complete_data.end(), _partial_frame_data.begin(), _partial_frame_data.end());
+            complete_data.insert(complete_data.end(), _data, _data + _bytes);
+
+            if (fwrite(complete_data.data(), 1, complete_data.size(), f) != complete_data.size()) {
+                log(LOG_WARNING, "LameTone: failed to write %d bytes\n", complete_data.size());
+                return -1;
+            }
+
+            _partial_frame_data.clear(); // Clear the partial frame data as it has been written to the file
+        } else {
+            if (fwrite(_data, 1, _bytes, f) != (unsigned int)_bytes) {
+                log(LOG_WARNING, "LameTone: failed to write %d bytes\n", _bytes);
+                return -1;
+            }
+        }
+
+        int _bytes_per_frame = (32 * 1000 * 1152) / (8 * MP3_RATE);
+        int partial_frame_bytes = _bytes % _bytes_per_frame;
+        if (partial_frame_bytes > 0) {
+            _partial_frame_data.insert(_partial_frame_data.end(), _data + _bytes - partial_frame_bytes, _data + _bytes);
+        }
 
 		return 0;
 	}
@@ -344,9 +367,9 @@ static void close_file(channel_t *channel, file_data *fdata) {
 		return;
 	}
 
-	if(fdata->type == O_FILE && fdata->f && channel->lame) {
-        int encoded = lame_encode_flush_nogap(channel->lame, channel->lamebuf, LAMEBUF_SIZE);
-		debug_print("closing file %s flushed %d\n", fdata->file_path, encoded);
+    if(fdata->type == O_FILE && fdata->f && channel->lame) {
+        int encoded = lame_encode_flush(channel->lame, channel->lamebuf, LAMEBUF_SIZE);
+        debug_print("closing file %s flushed %d\n", fdata->file_path, encoded);
 
         if (encoded > 0) {
             size_t written = fwrite(channel->lamebuf, 1, static_cast<size_t>(encoded), fdata->f);
@@ -355,7 +378,7 @@ static void close_file(channel_t *channel, file_data *fdata) {
                 // Maybe add some recovery or cleanup code here
             }
         }
-	}
+    }
 
 	if (fdata->f) {
 		fclose(fdata->f);

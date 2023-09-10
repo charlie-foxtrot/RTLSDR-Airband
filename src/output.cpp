@@ -173,9 +173,10 @@ public:
 			const float period = 1.0 / (float)hz;
 			const float sample_time = 1.0 / (float)WAVE_RATE;
 			float t = 0;
-			for (int i = 0; i < samples; ++i, t+= sample_time) {
-				buf[i] = 0.9 * sinf(t * 2.0 * M_PI / period);
-			}
+            for (int i = 0; i < samples; ++i, t += sample_time) {
+                float window = 0.5 * (1 - cos(2*M_PI*i/(samples-1)));  // Hann window function
+                buf[i] = 0.9 * window * sinf(t * 2.0 * M_PI / period);
+            }
 		} else
 			memset(buf, 0, samples * sizeof(float));
 		lame_t lame = airlame_init(mixmode, 0, 0);
@@ -303,14 +304,16 @@ static void close_file(channel_t *channel, file_data *fdata) {
 	}
 
 	if(fdata->type == O_FILE && fdata->f && channel->lame) {
-		int encoded = lame_encode_flush_nogap(channel->lame, channel->lamebuf, LAMEBUF_SIZE);
+        int encoded = lame_encode_flush_nogap(channel->lame, channel->lamebuf, LAMEBUF_SIZE);
 		debug_print("closing file %s flushed %d\n", fdata->file_path, encoded);
 
-		if (encoded > 0) {
-			size_t written = fwrite(channel->lamebuf, 1, static_cast<size_t>(encoded), fdata->f);
-			if (written == 0 || written < static_cast<size_t>(encoded))
-				log(LOG_WARNING, "Problem writing %s (%s)\n", fdata->file_path, strerror(errno));
-		}
+        if (encoded > 0) {
+            size_t written = fwrite(channel->lamebuf, 1, static_cast<size_t>(encoded), fdata->f);
+            if (written == 0 || written < static_cast<size_t>(encoded)) {
+                log(LOG_WARNING, "Problem writing %s (%s)\n", fdata->file_path, strerror(errno));
+                // Maybe add some recovery or cleanup code here
+            }
+        }
 	}
 
 	if (fdata->f) {

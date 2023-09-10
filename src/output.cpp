@@ -295,7 +295,7 @@ static int open_file(file_data *fdata, mix_modes mixmode, int is_audio) {
 	}
 
     if (is_audio) {
-        int r = 0;
+        int r;
 
         // Create an initial segment of silence (120ms, with 100ms fade-in and 20ms pure silence)
         LameTone lt_silence_start(mixmode, 120, 0, 100, 20);

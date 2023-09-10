@@ -163,7 +163,7 @@ class LameTone
 {
 	unsigned char* _data;
 	int _bytes;
-    std::vector<unsigned char> _partial_frame_data;
+    static std::vector<unsigned char> _partial_frame_data;
 
 public:
 
@@ -241,37 +241,47 @@ public:
 			free(_data);
 	}
 
-	int write(FILE *f) {
-		if (!_data || _bytes<=0)
-			return 1;
+    static const std::vector<unsigned char>& getPartialFrameData() {
+        return _partial_frame_data;
+    }
+
+    static void clearPartialFrameData() {
+        _partial_frame_data.clear();
+    }
+
+    int write(FILE *f) {
+        if (!_data || _bytes <= 0)
+            return 1;
+
+        int _bytes_per_frame = (32 * 1000 * 1152) / (8 * MP3_RATE);
+        int partial_frame_bytes = _bytes % _bytes_per_frame;
 
         if (!_partial_frame_data.empty()) {
             std::vector<unsigned char> complete_data;
-            complete_data.reserve(_partial_frame_data.size() + _bytes);
+            complete_data.reserve(_partial_frame_data.size() + _bytes - partial_frame_bytes);
             complete_data.insert(complete_data.end(), _partial_frame_data.begin(), _partial_frame_data.end());
-            complete_data.insert(complete_data.end(), _data, _data + _bytes);
+            complete_data.insert(complete_data.end(), _data, _data + _bytes - partial_frame_bytes);
 
             if (fwrite(complete_data.data(), 1, complete_data.size(), f) != complete_data.size()) {
                 log(LOG_WARNING, "LameTone: failed to write %d bytes\n", complete_data.size());
                 return -1;
             }
 
-            _partial_frame_data.clear(); // Clear the partial frame data as it has been written to the file
+            _partial_frame_data.clear();
         } else {
-            if (fwrite(_data, 1, _bytes, f) != (unsigned int)_bytes) {
-                log(LOG_WARNING, "LameTone: failed to write %d bytes\n", _bytes);
+            if (fwrite(_data, 1, _bytes - partial_frame_bytes, f) != (unsigned int)(_bytes - partial_frame_bytes)) {
+                log(LOG_WARNING, "LameTone: failed to write %d bytes\n", _bytes - partial_frame_bytes);
                 return -1;
             }
         }
 
-        int _bytes_per_frame = (32 * 1000 * 1152) / (8 * MP3_RATE);
-        int partial_frame_bytes = _bytes % _bytes_per_frame;
         if (partial_frame_bytes > 0) {
             _partial_frame_data.insert(_partial_frame_data.end(), _data + _bytes - partial_frame_bytes, _data + _bytes);
         }
 
-		return 0;
-	}
+        return 0;
+    }
+
 };
 
 int rename_if_exists(char const *oldpath, char const *newpath) {
@@ -362,6 +372,8 @@ static int open_file(file_data *fdata, mix_modes mixmode, int is_audio) {
 	return 0;
 }
 
+std::vector<unsigned char> LameTone::_partial_frame_data;
+
 static void close_file(channel_t *channel, file_data *fdata) {
 	if (!fdata) {
 		return;
@@ -378,6 +390,25 @@ static void close_file(channel_t *channel, file_data *fdata) {
                 // Maybe add some recovery or cleanup code here
             }
         }
+    }
+
+    // Check if there are any partial frames and write them to the file
+    const auto& partial_frame_data = LameTone::getPartialFrameData();
+
+    if (!partial_frame_data.empty()) {
+        int _bytes_per_frame = (32 * 1000 * 1152) / (8 * MP3_RATE);
+        int partial_frame_bytes = partial_frame_data.size();
+        int padding_size = _bytes_per_frame - partial_frame_bytes % _bytes_per_frame;
+
+        std::vector<unsigned char> final_frame_data = partial_frame_data;
+
+        if (padding_size < _bytes_per_frame) {
+            std::vector<unsigned char> padding(padding_size, 0);
+            final_frame_data.insert(final_frame_data.end(), padding.begin(), padding.end());
+        }
+
+        fwrite(final_frame_data.data(), 1, final_frame_data.size(), fdata->f);
+        LameTone::clearPartialFrameData();  // Clear the partial frame data after writing it to the file
     }
 
 	if (fdata->f) {

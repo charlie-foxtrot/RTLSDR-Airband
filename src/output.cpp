@@ -164,25 +164,46 @@ class LameTone
 	int _bytes;
 
 public:
-	LameTone(mix_modes mixmode, int msec, unsigned int hz = 0) : _data(NULL), _bytes(0) {
-		_data = (unsigned char *)XCALLOC(1, LAMEBUF_SIZE);
 
-		int samples = (msec * WAVE_RATE) / 1000;
-		float *buf = (float *)XCALLOC(samples, sizeof(float));
+    LameTone(mix_modes mixmode, int msec, unsigned int hz = 0, int fade_in_msec = 100, int fade_out_msec = 100)
+            : _data(NULL), _bytes(0) {
+        _data = (unsigned char *)XCALLOC(1, LAMEBUF_SIZE);
 
-		debug_print("LameTone with mixmode=%s msec=%d hz=%u\n",
-					mixmode == MM_STEREO ? "MM_STEREO" : "MM_MONO",
-					msec, hz);
-		if (hz > 0) {
-			const float period = 1.0 / (float)hz;
-			const float sample_time = 1.0 / (float)WAVE_RATE;
-			float t = 0;
+        int samples = (msec * WAVE_RATE) / 1000;
+        float *buf = (float *)XCALLOC(samples, sizeof(float));
+
+        debug_print("LameTone with mixmode=%s msec=%d hz=%u\n",
+                    mixmode == MM_STEREO ? "MM_STEREO" : "MM_MONO",
+                    msec, hz);
+
+        if (hz > 0) {
+            const float period = 1.0 / (float)hz;
+            const float sample_time = 1.0 / (float)WAVE_RATE;
+            float t = 0;
             for (int i = 0; i < samples; ++i, t += sample_time) {
                 float window = 0.5 * (1 - cos(2*M_PI*i/(samples-1)));  // Hann window function
                 buf[i] = 0.9 * window * sinf(t * 2.0 * M_PI / period);
             }
-		} else
-			memset(buf, 0, samples * sizeof(float));
+        } else {
+            // Create a buffer of silent samples (instead of using memset)
+            for (int i = 0; i < samples; ++i) {
+                buf[i] = 0.0;
+            }
+
+            // Apply fade-in at the beginning of the buffer
+            int fade_in_samples = (fade_in_msec * WAVE_RATE) / 1000;
+            for (int i = 0; i < fade_in_samples; ++i) {
+                float fade_in_factor = i / static_cast<float>(fade_in_samples);
+                buf[i] *= fade_in_factor;
+            }
+
+            // Apply fade-out at the end of the buffer
+            int fade_out_samples = (fade_out_msec * WAVE_RATE) / 1000;
+            for (int i = 0; i < fade_out_samples; ++i) {
+                float fade_out_factor = (fade_out_samples - i) / static_cast<float>(fade_out_samples);
+                buf[samples - i - 1] *= fade_out_factor;
+            }
+        }
 		lame_t lame = airlame_init(mixmode, 0, 0);
 		if (lame) {
 			_bytes = lame_encode_buffer_ieee_float(lame, buf, (mixmode == MM_STEREO ? buf : NULL), samples, _data, LAMEBUF_SIZE);
@@ -273,52 +294,47 @@ static int open_file(file_data *fdata, mix_modes mixmode, int is_audio) {
 			(unsigned long long)st.st_size, fdata->file_path_tmp);
 	}
 
-	if (is_audio) {
-		// fill missing space with marker tones
-		LameTone lt_a(mixmode, 120, 2222);
-		LameTone lt_b(mixmode, 120, 1111);
-		LameTone lt_c(mixmode, 120, 555);
+    if (is_audio) {
+        int r = 0;
 
-		int r = lt_a.write(fdata->f);
-		if (r==0) r = lt_b.write(fdata->f);
-		if (r==0) r = lt_c.write(fdata->f);
+        // Create an initial segment of silence (120ms, with 100ms fade-in and 20ms pure silence)
+        LameTone lt_silence_start(mixmode, 120, 0, 100, 20);
+        r = lt_silence_start.write(fdata->f);
 
-        // If appending to an existing file, add silence for the idle time since the last write
-        if (fdata->append && st.st_size > 0) {
+        if (r == 0 && fdata->continuous) {
+            time_t now = time(NULL);
+            if (now > st.st_mtime) {
+                time_t delta = now - st.st_mtime;
+                if (delta > 3600) {
+                    log(LOG_WARNING, "Too big time difference: %llu sec, limiting to one hour\n",
+                        (unsigned long long)delta);
+                    delta = 3600;
+                }
+                int silence_duration_msec = delta * 1000 - 200; // Convert seconds to milliseconds, subtracting 200ms for fade-in and fade-out
+                LameTone lt_silence(mixmode, silence_duration_msec, 0, 100, 100);
+                r = lt_silence.write(fdata->f);
+            }
+        } else if (r == 0) {
             timeval current_time;
             gettimeofday(&current_time, NULL);
 
             double idle_sec = delta_sec(&fdata->last_write_time, &current_time);
+            int silence_duration_msec = (fdata->max_idle_sec - idle_sec) * 1000 - 200; // Convert seconds to milliseconds, subtracting 200ms for fade-in and fade-out
 
-            if (idle_sec > fdata->max_idle_sec) {
-                int silence_duration_msec = idle_sec * 1000; // Convert seconds to milliseconds
-                LameTone lt_silence(mixmode, silence_duration_msec, 0); // Create a silence tone with the calculated duration
-                lt_silence.write(fdata->f); // Write the silence tone to the file
+            if (silence_duration_msec > 0) {
+                LameTone lt_silence(mixmode, silence_duration_msec, 0, 100, 100);
+                r = lt_silence.write(fdata->f);
             }
         }
 
-		// fill in time delta with silence if continuous output mode
-		if (fdata->continuous) {
-			time_t now = time(NULL);
-			if (now > st.st_mtime ) {
-				time_t delta = now - st.st_mtime;
-				if (delta > 3600) {
-					log(LOG_WARNING, "Too big time difference: %llu sec, limiting to one hour\n",
-						(unsigned long long)delta);
-					delta = 3600;
-				}
-				LameTone lt_silence(mixmode, 1000);
-				for (; (r==0 && delta > 1); --delta)
-					r = lt_silence.write(fdata->f);
-			}
-		}
+        if (r == 0) {
+            // Create an ending segment of silence (120ms, with 100ms fade-out and 20ms pure silence)
+            LameTone lt_silence_end(mixmode, 120, 0, 20, 100);
+            r = lt_silence_end.write(fdata->f);
+        }
 
-		if (r==0) r = lt_c.write(fdata->f);
-		if (r==0) r = lt_b.write(fdata->f);
-		if (r==0) r = lt_a.write(fdata->f);
-
-		if (r<0) fseek(fdata->f, st.st_size, SEEK_SET);
-	}
+        if (r < 0) fseek(fdata->f, st.st_size, SEEK_SET);
+    }
 	return 0;
 }
 

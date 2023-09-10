@@ -59,10 +59,8 @@
 #define DEFAULT_SAMPLE_RATE 2560000
 #ifdef NFM
 #define WAVE_RATE 22050
-#define MP3_RATE 22050
 #else
 #define WAVE_RATE 8000
-#define MP3_RATE 8000
 #endif
 #define WAVE_BATCH (WAVE_RATE / 8)
 #define AGC_EXTRA 100
@@ -70,6 +68,7 @@
 #define MAX_SHOUT_QUEUELEN 32768
 #define TAG_QUEUE_LEN 16
 #define MAX_MIXINPUTS 32
+#define MP3_RATE 8000
 
 #define MIN_FFT_SIZE_LOG 8
 #define DEFAULT_FFT_SIZE_LOG 9

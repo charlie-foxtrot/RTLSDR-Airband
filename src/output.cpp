@@ -137,7 +137,8 @@ lame_t airlame_init(mix_modes mixmode, int highpass, int lowpass) {
 
 	lame_set_in_samplerate(lame, WAVE_RATE);
 	lame_set_VBR(lame, vbr_mtrh);
-	lame_set_brate(lame, 64);
+	lame_set_brate(lame, 32);
+    lame_set_VBR_mean_bitrate_kbps(lame, 32);
 	lame_set_quality(lame, 5);
 	lame_set_lowpassfreq(lame, lowpass);
 	lame_set_highpassfreq(lame, highpass);

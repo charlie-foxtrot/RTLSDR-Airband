@@ -29,4 +29,7 @@
 #cmakedefine WITH_BCM_VC
 #cmakedefine LIBSHOUT_HAS_TLS
 #define SINCOSF @SINCOSF@
+
+#define SHOUT_SET_METADATA @SHOUT_SET_METADATA@
+
 #endif // !_CONFIG_H

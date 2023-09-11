@@ -25,9 +25,9 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <math.h>
-#include <cstdlib> // For std::system
 #include <ogg/ogg.h>
 #include <vorbis/vorbisenc.h>
+#include <thread>
 #include <shout/shout.h>
 // SHOUTERR_RETRY is available since libshout 2.4.0.
 // Set it to an impossible value if it's not there.
@@ -135,14 +135,13 @@ lame_t airlame_init(mix_modes mixmode, int highpass, int lowpass) {
 		return NULL;
 	}
 
-	lame_set_in_samplerate(lame, WAVE_RATE);
-	lame_set_VBR(lame, vbr_mtrh);
-	lame_set_brate(lame, 32);
-    lame_set_VBR_mean_bitrate_kbps(lame, 32);
-	lame_set_quality(lame, 5);
+    lame_set_in_samplerate(lame, WAVE_RATE);
+    lame_set_VBR(lame, vbr_off);
+    lame_set_brate(lame, 16);
+    lame_set_quality(lame, 4);
 	lame_set_lowpassfreq(lame, lowpass);
 	lame_set_highpassfreq(lame, highpass);
-	lame_set_out_samplerate(lame, MP3_RATE);
+    lame_set_out_samplerate(lame, MP3_RATE);
 	if(mixmode == MM_STEREO) {
 		lame_set_num_channels(lame, 2);
 		lame_set_mode(lame, JOINT_STEREO);
@@ -155,82 +154,47 @@ lame_t airlame_init(mix_modes mixmode, int highpass, int lowpass) {
 	return lame;
 }
 
-int min(int a, int b) {
-    return (a < b) ? a : b;
-}
-
 class LameTone
 {
 	unsigned char* _data;
 	int _bytes;
-    static std::vector<unsigned char> _partial_frame_data;
 
 public:
+	LameTone(mix_modes mixmode, int msec, unsigned int hz = 0) : _data(NULL), _bytes(0) {
+		_data = (unsigned char *)XCALLOC(1, LAMEBUF_SIZE);
 
-    LameTone(mix_modes mixmode, int msec, unsigned int hz = 0, int fade_in_msec = 100, int fade_out_msec = 100)
-            : _data(NULL), _bytes(0) {
-        _data = (unsigned char *)XCALLOC(1, LAMEBUF_SIZE);
+		int samples = (msec * WAVE_RATE) / 1000;
+		float *buf = (float *)XCALLOC(samples, sizeof(float));
 
-        int samples = (msec * WAVE_RATE) / 1000;
-        float *buf = (float *)XCALLOC(samples, sizeof(float));
-
-        memset(buf, 0, samples * sizeof(float));
-
-        debug_print("LameTone with mixmode=%s msec=%d hz=%u\n",
-                    mixmode == MM_STEREO ? "MM_STEREO" : "MM_MONO",
-                    msec, hz);
-
-        if (hz > 0) {
-            const float period = 1.0 / (float)hz;
-            const float sample_time = 1.0 / (float)WAVE_RATE;
-            float t = 0;
-            for (int i = 0; i < samples; ++i, t += sample_time) {
-                float window = 0.5 * (1 - cos(2*M_PI*i/(samples-1)));  // Hann window function
-                buf[i] = 0.9 * window * sinf(t * 2.0 * M_PI / period);
-            }
-        } else {
-            // Create a buffer of silent samples (instead of using memset)
-            for (int i = 0; i < samples; ++i) {
-                buf[i] = 0.0;
-            }
-
-            // Apply fade-in at the beginning of the buffer
-            int fade_in_samples = (fade_in_msec * WAVE_RATE) / 1000;
-            for (int i = 0; i < fade_in_samples; ++i) {
-                float fade_in_factor = i / static_cast<float>(fade_in_samples);
-                buf[i] *= fade_in_factor;
-            }
-
-            // Apply fade-out at the end of the buffer
-            int fade_out_samples = (fade_out_msec * WAVE_RATE) / 1000;
-            for (int i = 0; i < fade_out_samples; ++i) {
-                float fade_out_factor = (fade_out_samples - i) / static_cast<float>(fade_out_samples);
-                buf[samples - i - 1] *= fade_out_factor;
-            }
-        }
+		debug_print("LameTone with mixmode=%s msec=%d hz=%u\n",
+					mixmode == MM_STEREO ? "MM_STEREO" : "MM_MONO",
+					msec, hz);
+		if (hz > 0) {
+			const float period = 1.0 / (float)hz;
+			const float sample_time = 1.0 / (float)WAVE_RATE;
+			float t = 0;
+			for (int i = 0; i < samples; ++i, t+= sample_time) {
+				buf[i] = 0.9 * sinf(t * 2.0 * M_PI / period);
+			}
+		} else
+			memset(buf, 0, samples * sizeof(float));
 		lame_t lame = airlame_init(mixmode, 0, 0);
 		if (lame) {
 			_bytes = lame_encode_buffer_ieee_float(lame, buf, (mixmode == MM_STEREO ? buf : NULL), samples, _data, LAMEBUF_SIZE);
-            if (_bytes > 0) {
-                int flush_ofs = _bytes;
-
-                int flush_bytes = lame_encode_flush(lame, _data + flush_ofs, LAMEBUF_SIZE - flush_ofs);
-                if (flush_bytes > 0) {
-                    // Implement a short fade-out to the last few samples before flushing
-                    int fade_out_samples = min(100, flush_bytes /
-                                                    static_cast<int>(sizeof(float))); // Use the min function defined above
-                    for (int i = 0; i < fade_out_samples; ++i) {
-                        float fade_out_factor = (fade_out_samples - i) / static_cast<float>(fade_out_samples);
-                        reinterpret_cast<float *>(_data + flush_ofs)[flush_bytes / static_cast<int>(sizeof(float)) - i -
-                                                                     1] *= fade_out_factor;
-                    }
-
-                    memmove(_data + _bytes, _data + flush_ofs, flush_bytes);
-                    _bytes += flush_bytes;
-                }
-            } else {
-                log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n", _bytes);
-            }
+			if (_bytes > 0) {
+				int flush_ofs = _bytes;
+				if (flush_ofs&0x1f)
+					flush_ofs+= 0x20 - (flush_ofs&0x1f);
+				if (flush_ofs < LAMEBUF_SIZE) {
+					int flush_bytes = lame_encode_flush(lame, _data + flush_ofs, LAMEBUF_SIZE - flush_ofs);
+					if (flush_bytes > 0) {
+						memmove(_data + _bytes, _data + flush_ofs, flush_bytes);
+						_bytes+= flush_bytes;
+					}
+				}
+			}
+			else
+				log(LOG_WARNING, "lame_encode_buffer_ieee_float: %d\n", _bytes);
 			lame_close(lame);
 		}
 		free(buf);
@@ -241,47 +205,17 @@ public:
 			free(_data);
 	}
 
-    static const std::vector<unsigned char>& getPartialFrameData() {
-        return _partial_frame_data;
-    }
+	int write(FILE *f) {
+		if (!_data || _bytes<=0)
+			return 1;
 
-    static void clearPartialFrameData() {
-        _partial_frame_data.clear();
-    }
+		if (fwrite(_data, 1, _bytes, f) != (unsigned int)_bytes) {
+			log(LOG_WARNING, "LameTone: failed to write %d bytes\n", _bytes);
+			return -1;
+		}
 
-    int write(FILE *f) {
-        if (!_data || _bytes <= 0)
-            return 1;
-
-        int _bytes_per_frame = (32 * 1000 * 1152) / (8 * MP3_RATE);
-        int partial_frame_bytes = _bytes % _bytes_per_frame;
-
-        if (!_partial_frame_data.empty()) {
-            std::vector<unsigned char> complete_data;
-            complete_data.reserve(_partial_frame_data.size() + _bytes - partial_frame_bytes);
-            complete_data.insert(complete_data.end(), _partial_frame_data.begin(), _partial_frame_data.end());
-            complete_data.insert(complete_data.end(), _data, _data + _bytes - partial_frame_bytes);
-
-            if (fwrite(complete_data.data(), 1, complete_data.size(), f) != complete_data.size()) {
-                log(LOG_WARNING, "LameTone: failed to write %d bytes\n", complete_data.size());
-                return -1;
-            }
-
-            _partial_frame_data.clear();
-        } else {
-            if (fwrite(_data, 1, _bytes - partial_frame_bytes, f) != (unsigned int)(_bytes - partial_frame_bytes)) {
-                log(LOG_WARNING, "LameTone: failed to write %d bytes\n", _bytes - partial_frame_bytes);
-                return -1;
-            }
-        }
-
-        if (partial_frame_bytes > 0) {
-            _partial_frame_data.insert(_partial_frame_data.end(), _data + _bytes - partial_frame_bytes, _data + _bytes);
-        }
-
-        return 0;
-    }
-
+		return 0;
+	}
 };
 
 int rename_if_exists(char const *oldpath, char const *newpath) {
@@ -294,6 +228,19 @@ int rename_if_exists(char const *oldpath, char const *newpath) {
 		}
 	}
 	return ret;
+}
+
+void run_script(const std::string& command, const std::string& file_path) {
+    std::string full_command = command + " " + file_path + " > /dev/null 2>&1";
+    int result = std::system(full_command.c_str());
+    if (result != -1 && WIFEXITED(result)) {
+        int exit_code = WEXITSTATUS(result);
+        if (exit_code != 0) {
+            log(LOG_WARNING, "system command failed with exit code: %d (%s)\n", exit_code, std::strerror(errno));
+        }
+    } else {
+        log(LOG_WARNING, "system command execution failed: %s\n", std::strerror(errno));
+    }
 }
 
 /*
@@ -328,88 +275,56 @@ static int open_file(file_data *fdata, mix_modes mixmode, int is_audio) {
 			(unsigned long long)st.st_size, fdata->file_path_tmp);
 	}
 
-    if (is_audio) {
-        int r;
+	if (is_audio) {
+		// fill missing space with marker tones
+		LameTone lt_a(mixmode, 120, 2222);
+		LameTone lt_b(mixmode, 120, 1111);
+		LameTone lt_c(mixmode, 120, 555);
 
-        // Create an initial segment of silence (120ms, with 100ms fade-in and 20ms pure silence)
-        LameTone lt_silence_start(mixmode, 120, 0, 100, 20);
-        r = lt_silence_start.write(fdata->f);
+		int r = lt_a.write(fdata->f);
+		if (r==0) r = lt_b.write(fdata->f);
+		if (r==0) r = lt_c.write(fdata->f);
 
-        if (r == 0 && fdata->continuous) {
-            time_t now = time(NULL);
-            if (now > st.st_mtime) {
-                time_t delta = now - st.st_mtime;
-                if (delta > 3600) {
-                    log(LOG_WARNING, "Too big time difference: %llu sec, limiting to one hour\n",
-                        (unsigned long long)delta);
-                    delta = 3600;
-                }
-                int silence_duration_msec = delta * 1000 - 200; // Convert seconds to milliseconds, subtracting 200ms for fade-in and fade-out
-                LameTone lt_silence(mixmode, silence_duration_msec, 0, 100, 100);
-                r = lt_silence.write(fdata->f);
-            }
-        } else if (r == 0) {
-            timeval current_time;
-            gettimeofday(&current_time, NULL);
+		// fill in time delta with silence if continuous output mode
+		if (fdata->continuous) {
+			time_t now = time(NULL);
+			if (now > st.st_mtime ) {
+				time_t delta = now - st.st_mtime;
+				if (delta > 3600) {
+					log(LOG_WARNING, "Too big time difference: %llu sec, limiting to one hour\n",
+						(unsigned long long)delta);
+					delta = 3600;
+				}
+				LameTone lt_silence(mixmode, 1000);
+				for (; (r==0 && delta > 1); --delta)
+					r = lt_silence.write(fdata->f);
+			}
+		}
 
-            double idle_sec = delta_sec(&fdata->last_write_time, &current_time);
-            int silence_duration_msec = (fdata->max_idle_sec - idle_sec) * 1000 - 200; // Convert seconds to milliseconds, subtracting 200ms for fade-in and fade-out
+		if (r==0) r = lt_c.write(fdata->f);
+		if (r==0) r = lt_b.write(fdata->f);
+		if (r==0) r = lt_a.write(fdata->f);
 
-            if (silence_duration_msec > 0) {
-                LameTone lt_silence(mixmode, silence_duration_msec, 0, 100, 100);
-                r = lt_silence.write(fdata->f);
-            }
-        }
-
-        if (r == 0) {
-            // Create an ending segment of silence (120ms, with 100ms fade-out and 20ms pure silence)
-            LameTone lt_silence_end(mixmode, 120, 0, 20, 100);
-            r = lt_silence_end.write(fdata->f);
-        }
-
-        if (r < 0) fseek(fdata->f, st.st_size, SEEK_SET);
-    }
+		if (r<0) fseek(fdata->f, st.st_size, SEEK_SET);
+	}
 	return 0;
 }
-
-std::vector<unsigned char> LameTone::_partial_frame_data;
 
 static void close_file(channel_t *channel, file_data *fdata) {
 	if (!fdata) {
 		return;
 	}
 
-    if(fdata->type == O_FILE && fdata->f && channel->lame) {
-        int encoded = lame_encode_flush(channel->lame, channel->lamebuf, LAMEBUF_SIZE);
-        debug_print("closing file %s flushed %d\n", fdata->file_path, encoded);
+	if(fdata->type == O_FILE && fdata->f && channel->lame) {
+		int encoded = lame_encode_flush_nogap(channel->lame, channel->lamebuf, LAMEBUF_SIZE);
+		debug_print("closing file %s flushed %d\n", fdata->file_path, encoded);
 
-        if (encoded > 0) {
-            size_t written = fwrite(channel->lamebuf, 1, static_cast<size_t>(encoded), fdata->f);
-            if (written == 0 || written < static_cast<size_t>(encoded)) {
-                log(LOG_WARNING, "Problem writing %s (%s)\n", fdata->file_path, strerror(errno));
-                // Maybe add some recovery or cleanup code here
-            }
-        }
-    }
-
-    // Check if there are any partial frames and write them to the file
-    const auto& partial_frame_data = LameTone::getPartialFrameData();
-
-    if (!partial_frame_data.empty()) {
-        int _bytes_per_frame = (32 * 1000 * 1152) / (8 * MP3_RATE);
-        int partial_frame_bytes = partial_frame_data.size();
-        int padding_size = _bytes_per_frame - partial_frame_bytes % _bytes_per_frame;
-
-        std::vector<unsigned char> final_frame_data = partial_frame_data;
-
-        if (padding_size < _bytes_per_frame) {
-            std::vector<unsigned char> padding(padding_size, 0);
-            final_frame_data.insert(final_frame_data.end(), padding.begin(), padding.end());
-        }
-
-        fwrite(final_frame_data.data(), 1, final_frame_data.size(), fdata->f);
-        LameTone::clearPartialFrameData();  // Clear the partial frame data after writing it to the file
-    }
+		if (encoded > 0) {
+			size_t written = fwrite((void *)channel->lamebuf, 1, (size_t)encoded, fdata->f);
+			if (written == 0 || written < (size_t)encoded)
+				log(LOG_WARNING, "Problem writing %s (%s)\n", fdata->file_path, strerror(errno));
+		}
+	}
 
 	if (fdata->f) {
 		fclose(fdata->f);
@@ -417,31 +332,18 @@ static void close_file(channel_t *channel, file_data *fdata) {
 		rename_if_exists(fdata->file_path_tmp, fdata->file_path);
 	}
 
-    // run your shell script here
     std::string command = fdata->external_script;
-    if (!command.empty()) {
-        if(fdata->file_path != NULL) {
-            command += " " + std::string(fdata->file_path) + " > /dev/null 2>&1";
-            int result = std::system(command.c_str());  // run the command
-            if (result != -1 && WIFEXITED(result)) {
-                int exit_code = WEXITSTATUS(result);
-                if (exit_code != 0) {
-                    log(LOG_WARNING, "system command failed with exit code: %d (%s)\n", exit_code, std::strerror(errno));
-                }
-            } else {
-                log(LOG_WARNING, "system command execution failed: %s\n", std::strerror(errno));
-            }
-        }
+    if (!command.empty() && fdata->file_path != NULL) {
+        std::string file_path(fdata->file_path);
+        std::thread script_thread(run_script, command, file_path);
+        script_thread.detach();
     }
 
-    if (fdata->file_path != NULL) {
-        free(fdata->file_path);
-        fdata->file_path = NULL;
-    }
-    if (fdata->file_path_tmp != NULL) {
-        free(fdata->file_path_tmp);
-        fdata->file_path_tmp = NULL;
-    }
+	free(fdata->file_path);
+	fdata->file_path = NULL;
+	free(fdata->file_path_tmp);
+	fdata->file_path_tmp = NULL;
+
 }
 
 /*
@@ -452,7 +354,6 @@ static void close_file(channel_t *channel, file_data *fdata) {
  *   if hour is different.
  */
 static void close_if_necessary(channel_t *channel, file_data *fdata) {
-	static const double MAX_TRANSMISSION_TIME_SEC = 60.0 * 60.0;
 
 	if (!fdata || !fdata->f) {
 		return;
@@ -465,8 +366,8 @@ static void close_if_necessary(channel_t *channel, file_data *fdata) {
 		double duration_sec = delta_sec(&fdata->open_time,       &current_time);
 		double idle_sec     = delta_sec(&fdata->last_write_time, &current_time);
 
-		if (duration_sec > MAX_TRANSMISSION_TIME_SEC ||
-			(duration_sec > fdata->min_transmission_sec && idle_sec > fdata->max_idle_sec)) {
+		if (duration_sec > fdata->max_transmission_time_sec ||
+			(duration_sec > fdata->min_transmission_time_sec && idle_sec > fdata->max_transmission_idle_sec)) {
 			debug_print("closing file %s, duration %f sec, idle %f sec\n",
 						fdata->file_path, duration_sec, idle_sec);
 			close_file(channel, fdata);
@@ -501,44 +402,61 @@ static void close_if_necessary(channel_t *channel, file_data *fdata) {
  * open that new file.  If that file open succeeded, return true.
  */
 static bool output_file_ready(channel_t *channel, file_data *fdata, mix_modes mixmode, int is_audio) {
-    if (!fdata) {
-        return false;
-    }
+	if (!fdata) {
+		return false;
+	}
 
-    close_if_necessary(channel, fdata);
+	close_if_necessary(channel, fdata);
 
-    if (fdata->f) {     // still open
-        return true;
-    }
+	if (fdata->f) {     // still open
+		return true;
+	}
 
     timeval current_time;
     gettimeofday(&current_time, NULL);
 
     char timestamp[32];
-    snprintf(timestamp, sizeof(timestamp), "_%ld.%02ld", current_time.tv_sec, current_time.tv_usec / 10000);
-
-    size_t file_path_len = strlen(fdata->basename) + strlen(timestamp) + strlen(fdata->suffix) + 11; // include space for '\0' and possible freq in Hz
-    fdata->file_path = (char *)XCALLOC(1, file_path_len);
-    if (fdata->include_freq) {
-        sprintf(fdata->file_path, "%s%s_%d%s", fdata->basename, timestamp, channel->freqlist[channel->freq_idx].frequency, fdata->suffix);
+    if (fdata->split_on_transmission) {
+        // Calculate the epoch timestamp with milliseconds precision
+        long long epoch_time_ms = (long long)current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+        double epoch_time_with_ms = epoch_time_ms / 1000.0; // Convert to seconds and add milliseconds as decimal
+        snprintf(timestamp, sizeof(timestamp), "_%.2f", epoch_time_with_ms); // Format with 2 decimal places
     } else {
-        sprintf(fdata->file_path, "%s%s%s", fdata->basename, timestamp, fdata->suffix);
+        struct tm *time;
+        if (use_localtime) {
+            time = localtime(&current_time.tv_sec);
+        } else {
+            time = gmtime(&current_time.tv_sec);
+        }
+
+        // Create the YYYYMMDD_H format string
+        if (strftime(timestamp, sizeof(timestamp), "_%Y%m%d_%H", time) == 0) {
+            log(LOG_NOTICE, "strftime returned 0\n");
+            return false;
+        }
     }
 
-    static char const *tmp_suffix = ".tmp";
-    fdata->file_path_tmp = (char *)XCALLOC(1, file_path_len + strlen(tmp_suffix));
-    sprintf(fdata->file_path_tmp, "%s%s", fdata->file_path, tmp_suffix);
+    size_t file_path_len = strlen(fdata->basename) + 15 + strlen(fdata->suffix) + 11; // include space for '\0' and possible freq in Hz
+	fdata->file_path = (char *)XCALLOC(1, file_path_len);
+	if (fdata->include_freq) {
+		sprintf(fdata->file_path, "%s%s_%d%s", fdata->basename, timestamp, channel->freqlist[channel->freq_idx].frequency, fdata->suffix);
+	} else {
+		sprintf(fdata->file_path, "%s%s%s", fdata->basename, timestamp, fdata->suffix);
+	}
 
-    fdata->open_time = fdata->last_write_time = current_time;
+	static char const *tmp_suffix = ".tmp";
+	fdata->file_path_tmp = (char *)XCALLOC(1, file_path_len + strlen(tmp_suffix));
+	sprintf(fdata->file_path_tmp, "%s%s", fdata->file_path, tmp_suffix);
 
-    if (open_file(fdata, mixmode, is_audio) < 0) {
-        log(LOG_WARNING, "Cannot open output file %s (%s)\n", fdata->file_path_tmp, strerror(errno));
-        return false;
-    }
+	fdata->open_time = fdata->last_write_time = current_time;
 
-    return true;
+	if (open_file(fdata, mixmode, is_audio) < 0) {
+		log(LOG_WARNING, "Cannot open output file %s (%s)\n", fdata->file_path_tmp, strerror(errno));
+		return false;
+	}
+
+	return true;
 }
-
 
 // Create all the output for a particular channel.
 void process_outputs(channel_t *channel, int cur_scan_freq) {

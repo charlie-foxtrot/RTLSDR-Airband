@@ -18,7 +18,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RTL_AIRBAND_H
+#ifndef _RTL_AIRBAND_H
+#define _RTL_AIRBAND_H 1
 #include <cstdio>
 #include <complex>
 #include <stdint.h>		// uint32_t
@@ -55,13 +56,16 @@
 #define PIDFILE "/run/rtl_airband.pid"
 
 #define MIN_BUF_SIZE 2560000
-
-#define WAVE_RATE 22050
-#define MP3_RATE 22050
-
-#define WAVE_BATCH (WAVE_RATE / 8)
+#define DEFAULT_SAMPLE_RATE 2560000
+#ifdef NFM
+#define WAVE_RATE 16000
+#else
+#define WAVE_RATE 8000
+#endif
+#define WAVE_BATCH WAVE_RATE / 8
 #define AGC_EXTRA 100
-#define WAVE_LEN (2 * WAVE_BATCH + AGC_EXTRA)
+#define WAVE_LEN 2 * WAVE_BATCH + AGC_EXTRA
+#define MP3_RATE 22050
 #define MAX_SHOUT_QUEUELEN 32768
 #define TAG_QUEUE_LEN 16
 #define MAX_MIXINPUTS 32
@@ -128,7 +132,6 @@ struct file_data {
 	char *suffix;
 	char *file_path;
 	char *file_path_tmp;
-    char *external_script;
 	bool continuous;
 	bool append;
 	bool split_on_transmission;
@@ -137,8 +140,10 @@ struct file_data {
 	timeval last_write_time;
 	FILE *f;
 	enum output_type type;
-    float min_transmission_sec;
-    float max_idle_sec;
+    char *external_script;
+    float min_transmission_time_sec;
+    float max_transmission_time_sec;
+    float max_transmission_idle_sec;
 
 };
 

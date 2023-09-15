@@ -36,6 +36,7 @@ Squelch::Squelch(void)
 {
 	noise_floor_ = 5.0f;
 	set_squelch_snr_threshold(9.54f); // depends on noise_floor_, sets using_manual_level_, normal_signal_ratio_, flappy_signal_ratio_, and moving_avg_cap_
+	manual_signal_level_ = -1.0;
 
 	pre_filter_ = {0.001f, 0.001f};
 	post_filter_ = {0.001f, 0.001f};
@@ -76,7 +77,8 @@ Squelch::Squelch(void)
 
 	assert(open_delay_ > buffer_size_);
 
-	debug_print("Created Squelch, open_delay_: %d, close_delay_: %d, low_signal_abort: %d, manual: %f\n", open_delay_, close_delay_, low_signal_abort_, manual_signal_level_);
+	debug_print("Created Squelch, open_delay_: %d, close_delay_: %d, low_signal_abort: %d, using_manual_level_: %s\n",
+				 open_delay_, close_delay_, low_signal_abort_, using_manual_level_ ? "true" : "false");
 }
 
 void Squelch::set_squelch_level_threshold(const float &level) {

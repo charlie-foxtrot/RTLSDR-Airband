@@ -227,8 +227,8 @@ void *mixer_thread(void *param) {
 				char *inputs_todo_char = (char*)XCALLOC(mixer->input_count+1, sizeof(char));
 				char *input_mask_char = (char*)XCALLOC(mixer->input_count+1, sizeof(char));
 				for(int k = 0; k < mixer->input_count; k++) {
-					inputs_todo_char[k] = mixer->inputs_todo[k] ? 'T' : 'F';
-					input_mask_char[k] = mixer->input_mask[k] ? 'T' : 'F';
+					inputs_todo_char[k] = mixer->inputs_todo[k] ? '+' : '-';
+					input_mask_char[k] = mixer->input_mask[k] ? '+' : '-';
 				}
 				inputs_todo_char[mixer->input_count] = '\0';
 				input_mask_char[mixer->input_count] ='\0';

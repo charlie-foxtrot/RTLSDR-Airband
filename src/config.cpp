@@ -111,14 +111,50 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			sprintf(fdata->basename, "%s/%s", (const char *)outs[o]["directory"], (const char *)outs[o]["filename_template"]);
 			fdata->suffix = strdup(".mp3");
 
-			fdata->continuous = outs[o].exists("continuous") ?
-				(bool)(outs[o]["continuous"]) : false;
-			fdata->append = (!outs[o].exists("append")) || (bool)(outs[o]["append"]);
-			fdata->split_on_transmission = outs[o].exists("split_on_transmission") ?
-				(bool)(outs[o]["split_on_transmission"]) : false;
-			fdata->include_freq = outs[o].exists("include_freq") ?
-				(bool)(outs[o]["include_freq"]) : false;
-			channel->need_mp3 = 1;
+            fdata->continuous = outs[o].exists("continuous") ?
+                                (bool)(outs[o]["continuous"]) : false;
+            fdata->append = (!outs[o].exists("append")) || (bool)(outs[o]["append"]);
+            fdata->split_on_transmission = outs[o].exists("split_on_transmission") ?
+                                           (bool)(outs[o]["split_on_transmission"]) : false;
+            fdata->include_freq = outs[o].exists("include_freq") ?
+                                  (bool)(outs[o]["include_freq"]) : false;
+            channel->need_mp3 = 1;
+
+            if(outs[o].exists("external_script"))
+            {
+                fdata->external_script = strdup(outs[o]["external_script"].c_str());
+            }
+            else
+            {
+                fdata->external_script = strdup("");
+            }
+
+            if(outs[o].exists("transmission_delay_sec"))
+            {
+                fdata->max_transmission_idle_sec = outs[o]["transmission_delay_sec"];
+            }
+            else
+            {
+                fdata->max_transmission_idle_sec = 0.5;
+            }
+
+            if(outs[o].exists("minimum_transmission_sec"))
+            {
+                fdata->min_transmission_time_sec = outs[o]["minimum_transmission_sec"];
+            }
+            else
+            {
+                fdata->min_transmission_time_sec = 1.0;
+            }
+
+            if(outs[o].exists("max_transmission_sec") && fdata->split_on_transmission)
+            {
+                fdata->max_transmission_time_sec = outs[o]["max_transmission_sec"];
+            }
+            else
+            {
+                fdata->max_transmission_time_sec = 3600;
+            }
 
 			if(fdata->split_on_transmission) {
 				if (parsing_mixers) {
@@ -158,6 +194,42 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			fdata->include_freq = outs[o].exists("include_freq") ?
 				(bool)(outs[o]["include_freq"]) : false;
 			channel->needs_raw_iq = channel->has_iq_outputs = 1;
+
+            if(outs[o].exists("external_script"))
+            {
+                fdata->external_script = strdup(outs[o]["external_script"].c_str());
+            }
+            else
+            {
+                fdata->external_script = strdup("");
+            }
+
+            if(outs[o].exists("transmission_delay_sec"))
+            {
+                fdata->max_transmission_idle_sec = outs[o]["transmission_delay_sec"];
+            }
+            else
+            {
+                fdata->max_transmission_idle_sec = 0.5;
+            }
+
+            if(outs[o].exists("minimum_transmission_sec"))
+            {
+                fdata->min_transmission_time_sec = outs[o]["minimum_transmission_sec"];
+            }
+            else
+            {
+                fdata->min_transmission_time_sec = 1.0;
+            }
+
+            if(outs[o].exists("max_transmission_sec") && fdata->split_on_transmission)
+            {
+                fdata->max_transmission_time_sec = outs[o]["max_transmission_sec"];
+            }
+            else
+            {
+                fdata->max_transmission_time_sec = 3600;
+            }
 
 			if(fdata->continuous && fdata->split_on_transmission) {
 				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"] outputs.["<<o<<"]: can't have both continuous and split_on_transmission\n";

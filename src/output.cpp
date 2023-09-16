@@ -27,6 +27,12 @@
 #include <math.h>
 #include <ogg/ogg.h>
 #include <vorbis/vorbisenc.h>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <queue>
+#include <functional>
+#include <chrono>
 #include <shout/shout.h>
 // SHOUTERR_RETRY is available since libshout 2.4.0.
 // Set it to an impossible value if it's not there.
@@ -43,9 +49,71 @@
 #include <ctime>
 #include <cerrno>
 #include <cassert>
+#include <sys/wait.h>
 #include "rtl_airband.h"
 #include "input-common.h"
 #include "config.h"
+
+class ThreadPool {
+public:
+    ThreadPool(size_t num_threads);
+    ~ThreadPool();
+
+    void enqueue(std::function<void()> task);
+
+private:
+    std::vector<std::thread> workers;
+    std::queue<std::function<void()>> tasks;
+
+    std::mutex queue_mutex;
+    std::condition_variable condition;
+    bool stop;
+};
+
+ThreadPool::ThreadPool(size_t num_threads) : stop(false) {
+    for(size_t i = 0; i < num_threads; ++i) {
+        workers.emplace_back([this] {
+            for(;;) {
+                std::function<void()> task;
+
+                {
+                    std::unique_lock<std::mutex> lock(this->queue_mutex);
+                    this->condition.wait(lock, [this] {
+                        return this->stop || !this->tasks.empty();
+                    });
+                    if(this->stop && this->tasks.empty())
+                        return;
+                    task = std::move(this->tasks.front());
+                    this->tasks.pop();
+                }
+
+                task();
+            }
+        });
+    }
+}
+
+ThreadPool::~ThreadPool() {
+    {
+        std::unique_lock<std::mutex> lock(queue_mutex);
+        stop = true;
+    }
+    condition.notify_all();
+    for(std::thread &worker: workers)
+        worker.join();
+}
+
+void ThreadPool::enqueue(std::function<void()> task) {
+    {
+        std::unique_lock<std::mutex> lock(queue_mutex);
+        if(stop)
+            throw std::runtime_error("enqueue on stopped ThreadPool");
+        tasks.emplace(task);
+    }
+    condition.notify_one();
+}
+
+ThreadPool pool(4);
 
 void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 	int ret;
@@ -134,13 +202,13 @@ lame_t airlame_init(mix_modes mixmode, int highpass, int lowpass) {
 		return NULL;
 	}
 
-	lame_set_in_samplerate(lame, WAVE_RATE);
-	lame_set_VBR(lame, vbr_mtrh);
-	lame_set_brate(lame, 16);
-	lame_set_quality(lame, 7);
+    lame_set_in_samplerate(lame, WAVE_RATE);
+    lame_set_VBR(lame, vbr_off);
+    lame_set_brate(lame, 16);
+    lame_set_quality(lame, 4);
 	lame_set_lowpassfreq(lame, lowpass);
 	lame_set_highpassfreq(lame, highpass);
-	lame_set_out_samplerate(lame, MP3_RATE);
+    lame_set_out_samplerate(lame, MP3_RATE);
 	if(mixmode == MM_STEREO) {
 		lame_set_num_channels(lame, 2);
 		lame_set_mode(lame, JOINT_STEREO);
@@ -227,6 +295,64 @@ int rename_if_exists(char const *oldpath, char const *newpath) {
 		}
 	}
 	return ret;
+}
+
+void run_script_with_timeout(const std::string& command, const std::string& file_path) {
+    std::mutex mtx;
+    std::condition_variable cv;
+    bool finished = false;
+    pid_t script_pid;
+
+    std::thread script_thread([&]() {
+        script_pid = fork();
+        if (script_pid == -1) {
+            // Fork failed
+            log(LOG_WARNING, "Fork failed: %s\n", std::strerror(errno));
+            return;
+        }
+
+        if (script_pid == 0) {
+            // Child process
+            std::string full_command = command + " " + file_path + " > /dev/null 2>&1";
+            execl("/bin/sh", "sh", "-c", full_command.c_str(), (char*) nullptr);
+            // If execl returns, it means it failed
+            log(LOG_WARNING, "execl failed: %s\n", std::strerror(errno));
+            exit(EXIT_FAILURE);
+        } else {
+            // Parent process
+            int status;
+            if (waitpid(script_pid, &status, 0) == -1) {
+                // waitpid failed
+                log(LOG_WARNING, "waitpid failed: %s\n", std::strerror(errno));
+            } else {
+                if (WIFEXITED(status)) {
+                    int exit_code = WEXITSTATUS(status);
+                    if (exit_code != 0) {
+                        log(LOG_WARNING, "Script exited with non-zero exit code: %d\n", exit_code);
+                    }
+                } else if (WIFSIGNALED(status)) {
+                    log(LOG_WARNING, "Script was terminated by signal: %d\n", WTERMSIG(status));
+                }
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(mtx);
+                finished = true;
+            }
+            cv.notify_one();
+        }
+    });
+
+    script_thread.detach();
+
+    {
+        std::unique_lock<std::mutex> lock(mtx);
+        if(!cv.wait_for(lock, std::chrono::seconds(32), [&] { return finished; })) {
+            // The script did not finish in 32 seconds, log the timeout and kill the script process
+            log(LOG_WARNING, "External script timed out");
+            kill(script_pid, SIGKILL);
+        }
+    }
 }
 
 /*
@@ -317,10 +443,19 @@ static void close_file(channel_t *channel, file_data *fdata) {
 		fdata->f = NULL;
 		rename_if_exists(fdata->file_path_tmp, fdata->file_path);
 	}
+
+    std::string command = fdata->external_script;
+    if (!command.empty() && fdata->file_path != NULL) {
+        std::string file_path(fdata->file_path);
+        pool.enqueue(std::bind(run_script_with_timeout, command, file_path));
+
+    }
+
 	free(fdata->file_path);
 	fdata->file_path = NULL;
 	free(fdata->file_path_tmp);
 	fdata->file_path_tmp = NULL;
+
 }
 
 /*
@@ -331,9 +466,6 @@ static void close_file(channel_t *channel, file_data *fdata) {
  *   if hour is different.
  */
 static void close_if_necessary(channel_t *channel, file_data *fdata) {
-	static const double MIN_TRANSMISSION_TIME_SEC = 1.0;
-	static const double MAX_TRANSMISSION_TIME_SEC = 60.0 * 60.0;
-	static const double MAX_TRANSMISSION_IDLE_SEC = 0.5;
 
 	if (!fdata || !fdata->f) {
 		return;
@@ -346,8 +478,8 @@ static void close_if_necessary(channel_t *channel, file_data *fdata) {
 		double duration_sec = delta_sec(&fdata->open_time,       &current_time);
 		double idle_sec     = delta_sec(&fdata->last_write_time, &current_time);
 
-		if (duration_sec > MAX_TRANSMISSION_TIME_SEC ||
-			(duration_sec > MIN_TRANSMISSION_TIME_SEC && idle_sec > MAX_TRANSMISSION_IDLE_SEC)) {
+		if (duration_sec > fdata->max_transmission_time_sec ||
+			(duration_sec > fdata->min_transmission_time_sec && idle_sec > fdata->max_transmission_idle_sec)) {
 			debug_print("closing file %s, duration %f sec, idle %f sec\n",
 						fdata->file_path, duration_sec, idle_sec);
 			close_file(channel, fdata);
@@ -392,24 +524,31 @@ static bool output_file_ready(channel_t *channel, file_data *fdata, mix_modes mi
 		return true;
 	}
 
-	timeval current_time;
-	gettimeofday(&current_time, NULL);
-	struct tm *time;
-	if (use_localtime) {
-		time = localtime(&current_time.tv_sec);
-	} else {
-		time = gmtime(&current_time.tv_sec);
-	}
+    timeval current_time;
+    gettimeofday(&current_time, NULL);
 
-	char timestamp[32];
-	if (strftime(timestamp, sizeof(timestamp),
-				 fdata->split_on_transmission ? "_%Y%m%d_%H%M%S" : "_%Y%m%d_%H",
-				 time) == 0) {
-		log(LOG_NOTICE, "strftime returned 0\n");
-		return false;
-	}
+    char timestamp[32];
+    if (fdata->split_on_transmission) {
+        // Calculate the epoch timestamp with milliseconds precision
+        long long epoch_time_ms = (long long)current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+        double epoch_time_with_ms = epoch_time_ms / 1000.0; // Convert to seconds and add milliseconds as decimal
+        snprintf(timestamp, sizeof(timestamp), "_%.2f", epoch_time_with_ms); // Format with 2 decimal places
+    } else {
+        struct tm *time;
+        if (use_localtime) {
+            time = localtime(&current_time.tv_sec);
+        } else {
+            time = gmtime(&current_time.tv_sec);
+        }
 
-	size_t file_path_len = strlen(fdata->basename) + strlen(timestamp) + strlen(fdata->suffix) + 11; // include space for '\0' and possible freq in Hz
+        // Create the YYYYMMDD_H format string
+        if (strftime(timestamp, sizeof(timestamp), "_%Y%m%d_%H", time) == 0) {
+            log(LOG_NOTICE, "strftime returned 0\n");
+            return false;
+        }
+    }
+
+    size_t file_path_len = strlen(fdata->basename) + 15 + strlen(fdata->suffix) + 11; // include space for '\0' and possible freq in Hz
 	fdata->file_path = (char *)XCALLOC(1, file_path_len);
 	if (fdata->include_freq) {
 		sprintf(fdata->file_path, "%s%s_%d%s", fdata->basename, timestamp, channel->freqlist[channel->freq_idx].frequency, fdata->suffix);

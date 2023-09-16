@@ -299,7 +299,7 @@ static void close_file(channel_t *channel, file_data *fdata) {
 		if (encoded > 0) {
 			size_t written = fwrite((void *)channel->lamebuf, 1, (size_t)encoded, fdata->f);
 			if (written == 0 || written < (size_t)encoded)
-				log(LOG_WARNING, "Problem writing %s (%s)\n", fdata->file_path, strerror(errno));
+				log(LOG_WARNING, "Problem writing %s (%s)\n", fdata->file_path.c_str(), strerror(errno));
 		}
 	}
 
@@ -423,7 +423,7 @@ static bool output_file_ready(channel_t *channel, file_data *fdata, mix_modes mi
 	fdata->open_time = fdata->last_write_time = current_time;
 
 	if (open_file(fdata, mixmode, is_audio) < 0) {
-		log(LOG_WARNING, "Cannot open output file %s (%s)\n", fdata->file_path_tmp, strerror(errno));
+		log(LOG_WARNING, "Cannot open output file %s (%s)\n", fdata->file_path_tmp.c_str(), strerror(errno));
 		return false;
 	}
 
@@ -510,10 +510,10 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 			if(written < buflen) {
 				if(ferror(fdata->f))
 					log(LOG_WARNING, "Cannot write to %s (%s), output disabled\n",
-						fdata->file_path, strerror(errno));
+						fdata->file_path.c_str(), strerror(errno));
 				else
 					log(LOG_WARNING, "Short write on %s, output disabled\n",
-						fdata->file_path);
+						fdata->file_path.c_str());
 				close_file(channel, fdata);
 				channel->outputs[k].enabled = false;
 			}

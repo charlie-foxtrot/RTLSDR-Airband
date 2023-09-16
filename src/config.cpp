@@ -340,7 +340,9 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		channel->alpha = dev->alpha;
 #endif
 
-		if (channel->lowpass <= channel->highpass) {
+		// Make sure lowpass / highpass aren't flipped.
+		// If lowpass is enabled (greater than zero) it must be larger than highpass
+		if (channel->lowpass > 0 && channel->lowpass < channel->highpass) {
 			cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"]: lowpass (" << channel->lowpass << ") must be greater than or equal to highpass (" << channel->highpass << ")\n";
 			error();
 		}
@@ -876,7 +878,9 @@ int parse_mixers(libconfig::Setting &mx) {
 		channel->lowpass = mx[i].exists("lowpass") ? (int)mx[i]["lowpass"] : 2500;
 		channel->mode = MM_MONO;
 
-		if (channel->lowpass <= channel->highpass) {
+		// Make sure lowpass / highpass aren't flipped.
+		// If lowpass is enabled (greater than zero) it must be larger than highpass
+		if (channel->lowpass > 0 && channel->lowpass < channel->highpass) {
 			cerr << "Configuration error: mixers.[" << i <<"]: lowpass (" << channel->lowpass << ") must be greater than or equal to highpass (" << channel->highpass << ")\n";
 			error();
 		}

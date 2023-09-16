@@ -44,6 +44,7 @@
 #include <string>
 #include <cerrno>
 #include <cassert>
+#include <sstream>
 #include "rtl_airband.h"
 #include "input-common.h"
 #include "config.h"
@@ -408,11 +409,14 @@ static bool output_file_ready(channel_t *channel, file_data *fdata, mix_modes mi
 		output_dir = fdata->basedir;
 	}
 
-	fdata->file_path = output_dir + '/' + fdata->basename + timestamp;
+	// use a string stream to build the output filepath
+	std::stringstream ss;
+	ss << output_dir << '/' << fdata->basename << timestamp;
 	if (fdata->include_freq) {
-		fdata->file_path += channel->freqlist[channel->freq_idx].frequency;
+		ss << channel->freqlist[channel->freq_idx].frequency;
 	}
-	fdata->file_path += fdata->suffix;
+	ss << fdata->suffix;
+	fdata->file_path = ss.str();
 
 	fdata->file_path_tmp = fdata->file_path + ".tmp";
 

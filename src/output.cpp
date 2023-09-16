@@ -41,11 +41,13 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <string>
 #include <cerrno>
 #include <cassert>
 #include "rtl_airband.h"
 #include "input-common.h"
 #include "config.h"
+#include "helper_functions.h"
 
 void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 	int ret;
@@ -217,26 +219,14 @@ public:
 	}
 };
 
-int rename_if_exists(char const *oldpath, char const *newpath) {
-	int ret = rename(oldpath, newpath);
-	if(ret < 0) {
-		if(errno == ENOENT) {
-			return 0;
-		} else {
-			log(LOG_ERR, "Could not rename %s to %s: %s\n", oldpath, newpath, strerror(errno));
-		}
-	}
-	return ret;
-}
-
 /*
  * Open output file (mp3 or raw IQ) for append or initial write.
  * If appending to an audio file, insert discontinuity indictor tones
  * as well as the appropriate amount of silence when in continuous mode.
  */
 static int open_file(file_data *fdata, mix_modes mixmode, int is_audio) {
-	int rename_result = rename_if_exists(fdata->file_path, fdata->file_path_tmp);
-	fdata->f = fopen(fdata->file_path_tmp, fdata->append ? "a+" : "w");
+	int rename_result = rename_file_if_exists(fdata->file_path, fdata->file_path_tmp);
+	fdata->f = fopen(fdata->file_path_tmp.c_str(), fdata->append ? "a+" : "w");
 	if (fdata->f == NULL) {
 		return -1;
 	}
@@ -245,20 +235,20 @@ static int open_file(file_data *fdata, mix_modes mixmode, int is_audio) {
 	if (!fdata->append ||
 		fstat(fileno(fdata->f), &st) != 0 || st.st_size == 0) {
 		if(!fdata->split_on_transmission) {
-			log(LOG_INFO, "Writing to %s\n", fdata->file_path);
+			log(LOG_INFO, "Writing to %s\n", fdata->file_path.c_str());
 		} else {
-			debug_print("Writing to %s\n", fdata->file_path_tmp);
+			debug_print("Writing to %s\n", fdata->file_path_tmp.c_str());
 		}
 		return 0;
 	}
 	if(rename_result < 0) {
-		log(LOG_INFO, "Writing to %s\n", fdata->file_path);
-		debug_print("Writing to %s\n", fdata->file_path_tmp);
+		log(LOG_INFO, "Writing to %s\n", fdata->file_path.c_str());
+		debug_print("Writing to %s\n", fdata->file_path_tmp.c_str());
 	} else {
 		log(LOG_INFO, "Appending from pos %llu to %s\n",
-			(unsigned long long)st.st_size, fdata->file_path);
+			(unsigned long long)st.st_size, fdata->file_path.c_str());
 		debug_print("Appending from pos %llu to %s\n",
-			(unsigned long long)st.st_size, fdata->file_path_tmp);
+			(unsigned long long)st.st_size, fdata->file_path_tmp.c_str());
 	}
 
 	if (is_audio) {
@@ -303,7 +293,7 @@ static void close_file(channel_t *channel, file_data *fdata) {
 
 	if(fdata->type == O_FILE && fdata->f && channel->lame) {
 		int encoded = lame_encode_flush_nogap(channel->lame, channel->lamebuf, LAMEBUF_SIZE);
-		debug_print("closing file %s flushed %d\n", fdata->file_path, encoded);
+		debug_print("closing file %s flushed %d\n", fdata->file_path.c_str(), encoded);
 
 		if (encoded > 0) {
 			size_t written = fwrite((void *)channel->lamebuf, 1, (size_t)encoded, fdata->f);
@@ -315,69 +305,10 @@ static void close_file(channel_t *channel, file_data *fdata) {
 	if (fdata->f) {
 		fclose(fdata->f);
 		fdata->f = NULL;
-		rename_if_exists(fdata->file_path_tmp, fdata->file_path);
+		rename_file_if_exists(fdata->file_path_tmp, fdata->file_path);
 	}
-	free(fdata->file_path);
-	fdata->file_path = NULL;
-	free(fdata->file_path_tmp);
-	fdata->file_path_tmp = NULL;
-	free(fdata->dir);
-	fdata->dir = NULL;
-}
-
-char* make_dated_subdirectory(const char* basedir, const struct tm *time) {
-	size_t subdir_max_len = strlen(basedir) + 1 + 5 + 3 + 3 + 1;
-	char* subdir = (char*)XCALLOC(1, subdir_max_len);
-
-	// Most likely the subdirectory already exists.
-	// Let's try stat() first.
-	snprintf(subdir, subdir_max_len, "%s/%04d/%02d/%02d", basedir, time->tm_year+1900, time->tm_mon+1, time->tm_mday);
-	struct stat st;
-	if (stat(subdir, &st) == 0 && S_ISDIR(st.st_mode)) {
-		return subdir;
-	}
-
-	// It doesn't exist, let's create it, starting from the top.
-
-	// Year
-	snprintf(subdir, subdir_max_len, "%s/%04d", basedir, time->tm_year+1900);
-	if (mkdir(subdir, 0755) < 0 && errno != EEXIST) {
-		log(LOG_ERR, "Could not create directory %s: %s\n", subdir, strerror(errno));
-		free(subdir);
-		return NULL;
-	}
-
-	// Month
-	snprintf(subdir, subdir_max_len, "%s/%04d/%02d", basedir, time->tm_year+1900, time->tm_mon+1);
-	if (mkdir(subdir, 0755) < 0 && errno != EEXIST) {
-		log(LOG_ERR, "Could not create directory %s: %s\n", subdir, strerror(errno));
-		free(subdir);
-		return NULL;
-	}
-
-	// Day
-	snprintf(subdir, subdir_max_len, "%s/%04d/%02d/%02d", basedir, time->tm_year+1900, time->tm_mon+1, time->tm_mday);
-	if (mkdir(subdir, 0755) < 0 && errno != EEXIST) {
-		log(LOG_ERR, "Could not create directory %s: %s\n", subdir, strerror(errno));
-		free(subdir);
-		return NULL;
-	}
-
-	// It may not be a directory (mkdir would return EEXIST).
-	// Check that it is a directory.
-
-	if (stat(subdir, &st) == 0) {
-		if (!S_ISDIR(st.st_mode)) {
-			log(LOG_ERR, "%s exists but is not a directory\n", subdir);
-			free(subdir);
-			return NULL;
-		}
-	} else {
-		log(LOG_ERR, "Created directory %s, but it doesn't exist?: %s\n", subdir, strerror(errno));
-		free(subdir);
-		return NULL;
-	}
-	return subdir;
+	fdata->file_path.clear();
+	fdata->file_path_tmp.clear();
 }
 
 /*
@@ -406,7 +337,7 @@ static void close_if_necessary(channel_t *channel, file_data *fdata) {
 		if (duration_sec > MAX_TRANSMISSION_TIME_SEC ||
 			(duration_sec > MIN_TRANSMISSION_TIME_SEC && idle_sec > MAX_TRANSMISSION_IDLE_SEC)) {
 			debug_print("closing file %s, duration %f sec, idle %f sec\n",
-						fdata->file_path, duration_sec, idle_sec);
+						fdata->file_path.c_str(), duration_sec, idle_sec);
 			close_file(channel, fdata);
 		}
 		return;
@@ -425,7 +356,7 @@ static void close_if_necessary(channel_t *channel, file_data *fdata) {
 	}
 
 	if (start_hour != current_hour) {
-		debug_print("closing file %s after crossing hour boundary\n", fdata->file_path);
+		debug_print("closing file %s after crossing hour boundary\n", fdata->file_path.c_str());
 		close_file(channel, fdata);
 	}
 }
@@ -466,27 +397,24 @@ static bool output_file_ready(channel_t *channel, file_data *fdata, mix_modes mi
 		return false;
 	}
 
+	std::string output_dir;
 	if (fdata->dated_subdirectories) {
-		fdata->dir = make_dated_subdirectory(fdata->basedir, time);
-		if (fdata->dir == NULL) {
+		output_dir = make_dated_subdirs(fdata->basedir, time);
+		if (output_dir.empty()) {
 			log(LOG_ERR, "Failed to create dated subdirectory\n");
 			return false;
 		}
 	} else {
-		fdata->dir = strdup(fdata->basedir);
+		output_dir = fdata->basedir;
 	}
 
-	size_t file_path_len = strlen(fdata->dir) + 1 + strlen(fdata->basename) + strlen(timestamp) + strlen(fdata->suffix) + 11; // include space for '\0' and possible freq in Hz
-	fdata->file_path = (char *)XCALLOC(1, file_path_len);
+	fdata->file_path = output_dir + '/' + fdata->basename + timestamp;
 	if (fdata->include_freq) {
-		sprintf(fdata->file_path, "%s/%s%s_%d%s", fdata->dir, fdata->basename, timestamp, channel->freqlist[channel->freq_idx].frequency, fdata->suffix);
-	} else {
-		sprintf(fdata->file_path, "%s/%s%s%s", fdata->dir, fdata->basename, timestamp, fdata->suffix);
+		fdata->file_path += channel->freqlist[channel->freq_idx].frequency;
 	}
+	fdata->file_path += fdata->suffix;
 
-	static char const *tmp_suffix = ".tmp";
-	fdata->file_path_tmp = (char *)XCALLOC(1, file_path_len + strlen(tmp_suffix));
-	sprintf(fdata->file_path_tmp, "%s%s", fdata->file_path, tmp_suffix);
+	fdata->file_path_tmp = fdata->file_path + ".tmp";
 
 	fdata->open_time = fdata->last_write_time = current_time;
 

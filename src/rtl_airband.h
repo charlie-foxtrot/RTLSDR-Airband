@@ -20,6 +20,7 @@
 
 #ifndef _RTL_AIRBAND_H
 #define _RTL_AIRBAND_H 1
+#include <string>
 #include <cstdio>
 #include <complex>
 #include <stdint.h>		// uint32_t
@@ -122,12 +123,11 @@ struct icecast_data {
 };
 
 struct file_data {
-	char *basedir;
-	char *dir;
-	char *basename;
-	char *suffix;
-	char *file_path;
-	char *file_path_tmp;
+	std::string basedir;
+	std::string basename;
+	std::string suffix;
+	std::string file_path;
+	std::string file_path_tmp;
 	bool dated_subdirectories;
 	bool continuous;
 	bool append;

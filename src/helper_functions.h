@@ -23,7 +23,7 @@
 #include <ctime> // struct tm
 #include <string>
 
-int rename_file_if_exists(const std::string &oldpath, const std::string &newpath);
+int rename_if_exists(const std::string &oldpath, const std::string &newpath);
 bool dir_exists(const std::string &dir_path);
 bool file_exists(const std::string &file_path);
 bool make_subdirs(const std::string &basedir, const char *subdirs);

@@ -26,7 +26,7 @@
 
 using namespace std;
 
-int rename_file_if_exists(const string &oldpath, const string &newpath) {
+int rename_if_exists(const string &oldpath, const string &newpath) {
 	int ret = rename(oldpath.c_str(), newpath.c_str());
 	if(ret < 0) {
 		if(errno == ENOENT) {

@@ -226,7 +226,7 @@ public:
  * as well as the appropriate amount of silence when in continuous mode.
  */
 static int open_file(file_data *fdata, mix_modes mixmode, int is_audio) {
-	int rename_result = rename_file_if_exists(fdata->file_path, fdata->file_path_tmp);
+	int rename_result = rename_if_exists(fdata->file_path, fdata->file_path_tmp);
 	fdata->f = fopen(fdata->file_path_tmp.c_str(), fdata->append ? "a+" : "w");
 	if (fdata->f == NULL) {
 		return -1;
@@ -306,7 +306,7 @@ static void close_file(channel_t *channel, file_data *fdata) {
 	if (fdata->f) {
 		fclose(fdata->f);
 		fdata->f = NULL;
-		rename_file_if_exists(fdata->file_path_tmp, fdata->file_path);
+		rename_if_exists(fdata->file_path_tmp, fdata->file_path);
 	}
 	fdata->file_path.clear();
 	fdata->file_path_tmp.clear();

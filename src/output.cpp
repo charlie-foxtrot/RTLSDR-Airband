@@ -413,10 +413,10 @@ static bool output_file_ready(channel_t *channel, file_data *fdata, mix_modes mi
 	std::stringstream ss;
 	ss << output_dir << '/' << fdata->basename << timestamp;
 	if (fdata->include_freq) {
-		ss << channel->freqlist[channel->freq_idx].frequency;
+		ss << '_' << channel->freqlist[channel->freq_idx].frequency;
 	}
 	ss << fdata->suffix;
-	fdata->file_path = ss.str();
+	fdata->file_path = ss.str();	
 
 	fdata->file_path_tmp = fdata->file_path + ".tmp";
 

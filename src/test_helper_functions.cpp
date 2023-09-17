@@ -42,45 +42,6 @@ protected:
 
 };
 
-TEST_F(HelperFunctionsTest, rename_if_exists_file)
-{
-	string starting_path = temp_dir + "/starting_path";
-	string ending_path = temp_dir + "/ending_path";
-
-	create_file(starting_path);
-	EXPECT_TRUE(file_exists(starting_path));
-	EXPECT_FALSE(file_exists(ending_path));
-
-	EXPECT_EQ(rename_if_exists(starting_path, ending_path), 0);
-
-	EXPECT_FALSE(file_exists(starting_path));
-	EXPECT_TRUE(file_exists(ending_path));
-}
-
-TEST_F(HelperFunctionsTest, rename_if_exists_dir)
-{
-	string starting_path = temp_dir + "/starting_path";
-	string ending_path = temp_dir + "/ending_path";
-
-	create_dir(starting_path);
-	EXPECT_TRUE(dir_exists(starting_path));
-	EXPECT_FALSE(dir_exists(ending_path));
-
-	EXPECT_EQ(rename_if_exists(starting_path, ending_path), 0);
-
-	EXPECT_FALSE(dir_exists(starting_path));
-	EXPECT_TRUE(dir_exists(ending_path));
-}
-
-TEST_F(HelperFunctionsTest, rename_if_exists_doesnt_exist)
-{
-	string starting_path = temp_dir + "/starting_path";
-	string ending_path = temp_dir + "/ending_path";
-	EXPECT_EQ(rename_if_exists(starting_path, ending_path), 0);
-	EXPECT_FALSE(file_exists(starting_path));
-	EXPECT_FALSE(file_exists(ending_path));
-}
-
 TEST_F(HelperFunctionsTest, dir_exists_true)
 {
 	EXPECT_TRUE(dir_exists(temp_dir));

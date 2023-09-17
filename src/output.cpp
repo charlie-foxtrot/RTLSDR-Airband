@@ -220,13 +220,25 @@ public:
 	}
 };
 
+int rename_if_exists(char const *oldpath, char const *newpath) {
+	int ret = rename(oldpath, newpath);
+	if(ret < 0) {
+		if(errno == ENOENT) {
+			return 0;
+		} else {
+			log(LOG_ERR, "Could not rename %s to %s: %s\n", oldpath, newpath, strerror(errno));
+		}
+	}
+	return ret;
+}
+
 /*
  * Open output file (mp3 or raw IQ) for append or initial write.
  * If appending to an audio file, insert discontinuity indictor tones
  * as well as the appropriate amount of silence when in continuous mode.
  */
 static int open_file(file_data *fdata, mix_modes mixmode, int is_audio) {
-	int rename_result = rename_if_exists(fdata->file_path, fdata->file_path_tmp);
+	int rename_result = rename_if_exists(fdata->file_path.c_str(), fdata->file_path_tmp.c_str());
 	fdata->f = fopen(fdata->file_path_tmp.c_str(), fdata->append ? "a+" : "w");
 	if (fdata->f == NULL) {
 		return -1;
@@ -306,7 +318,7 @@ static void close_file(channel_t *channel, file_data *fdata) {
 	if (fdata->f) {
 		fclose(fdata->f);
 		fdata->f = NULL;
-		rename_if_exists(fdata->file_path_tmp, fdata->file_path);
+		rename_if_exists(fdata->file_path_tmp.c_str(), fdata->file_path.c_str());
 	}
 	fdata->file_path.clear();
 	fdata->file_path_tmp.clear();

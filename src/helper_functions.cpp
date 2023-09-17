@@ -26,18 +26,6 @@
 
 using namespace std;
 
-int rename_if_exists(const string &oldpath, const string &newpath) {
-	int ret = rename(oldpath.c_str(), newpath.c_str());
-	if(ret < 0) {
-		if(errno == ENOENT) {
-			return 0;
-		} else {
-			log(LOG_ERR, "Could not rename %s to %s: %s\n", oldpath.c_str(), newpath.c_str(), strerror(errno));
-		}
-	}
-	return ret;
-}
-
 bool dir_exists(const string &dir_path) {
 	struct stat st;
 	return (stat(dir_path.c_str(), &st) == 0 && S_ISDIR(st.st_mode));

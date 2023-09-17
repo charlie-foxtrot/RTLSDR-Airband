@@ -25,7 +25,8 @@
 
 bool dir_exists(const std::string &dir_path);
 bool file_exists(const std::string &file_path);
-bool make_subdirs(const std::string &basedir, const char *subdirs);
+bool make_dir(const std::string &dir_path);
+bool make_subdirs(const std::string &basedir, const std::string &subdirs);
 std::string make_dated_subdirs(const std::string &basedir, const struct tm *time);
 
 #endif /* _HELPER_FUNCTIONS_H */

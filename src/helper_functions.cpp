@@ -36,33 +36,34 @@ bool file_exists(const string &file_path) {
 	return (stat(file_path.c_str(), &st) == 0 && S_ISREG(st.st_mode));
 }
 
-bool make_subdirs(const string &basedir, const char *subdirs) {
+bool make_dir(const string &dir_path) {
+    if (mkdir(dir_path.c_str(), 0755) < 0 && errno != EEXIST) {
+        log(LOG_ERR, "Could not create directory %s: %s\n", dir_path.c_str(), strerror(errno));
+        return false;
+    }
+    return true;
+}
+
+bool make_subdirs(const string &basedir, const string &subdirs) {
 
     // if final directory exists then nothing to do
-    string final_path = basedir + "/" + string(subdirs);
+    const string delim = "/";
+    const string final_path = basedir + delim + subdirs;
     if (dir_exists(final_path)) {
         return true;
     }
 
-    // otherwise make a copy of the subdirs and tokenize by slash
-    char *subdirs_copy =  strdup(subdirs);
-    const char * delimiter = "/";
-
-    // loop through making directories one at a time
-    string dir_path = basedir;
-    char *dirname = strtok(subdirs_copy, delimiter);
-    while (dirname)
-    {
-        dir_path += "/" + string(dirname);
-
-        if (mkdir(dir_path.c_str(), 0755) < 0 && errno != EEXIST) {
-            log(LOG_ERR, "Could not create directory %s: %s\n", dir_path.c_str(), strerror(errno));
+    // otherwise scan through subdirs for each slash and make each directory.  start with index of 0
+    // to create basedir incase that doesn't exist
+    size_t index = 0;
+    while (index != string::npos) {
+        if (!make_dir(basedir + delim + subdirs.substr(0, index))) {
             return false;
         }
-
-        dirname = strtok(nullptr, delimiter);
+        index = subdirs.find_first_of(delim, index+1);
     }
 
+    make_dir(final_path);
     return dir_exists(final_path);
 }
 
@@ -71,10 +72,11 @@ string make_dated_subdirs(const string &basedir, const struct tm *time) {
     // use the time to build the date subdirectories
     char date_path[11];
     strftime(date_path, sizeof(date_path), "%Y/%m/%d", time);
+    string date_path_str = string(date_path);
 
     // make all the subdirectories, and return the full path if successful
-    if (make_subdirs(basedir, date_path)) {
-        return basedir + "/" + date_path;
+    if (make_subdirs(basedir, date_path_str)) {
+        return basedir + "/" + date_path_str;
     }
 
     // on any error return empty string

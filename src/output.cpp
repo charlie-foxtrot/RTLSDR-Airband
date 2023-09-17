@@ -419,6 +419,7 @@ static bool output_file_ready(channel_t *channel, file_data *fdata, mix_modes mi
 		}
 	} else {
 		output_dir = fdata->basedir;
+		make_dir(output_dir);
 	}
 
 	// use a string stream to build the output filepath

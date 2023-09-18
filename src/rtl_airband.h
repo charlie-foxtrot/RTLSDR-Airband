@@ -65,7 +65,7 @@
 #define WAVE_BATCH WAVE_RATE / 8
 #define AGC_EXTRA 100
 #define WAVE_LEN 2 * WAVE_BATCH + AGC_EXTRA
-#define MP3_RATE 8000
+#define MP3_RATE 22050
 #define MAX_SHOUT_QUEUELEN 32768
 #define TAG_QUEUE_LEN 16
 #define MAX_MIXINPUTS 32
@@ -74,7 +74,7 @@
 #define DEFAULT_FFT_SIZE_LOG 9
 #define MAX_FFT_SIZE_LOG 13
 
-#define LAMEBUF_SIZE 22000 //todo: calculate
+#define LAMEBUF_SIZE 34762 //todo: calculate
 #define MIX_DIVISOR 2
 
 #define ONES(x) ~(~0U << (x))

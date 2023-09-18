@@ -134,13 +134,13 @@ lame_t airlame_init(mix_modes mixmode, int highpass, int lowpass) {
 		return NULL;
 	}
 
-	lame_set_in_samplerate(lame, WAVE_RATE);
-	lame_set_VBR(lame, vbr_mtrh);
-	lame_set_brate(lame, 16);
-	lame_set_quality(lame, 7);
-	lame_set_lowpassfreq(lame, lowpass);
-	lame_set_highpassfreq(lame, highpass);
-	lame_set_out_samplerate(lame, MP3_RATE);
+    lame_set_in_samplerate(lame, WAVE_RATE);
+    lame_set_VBR(lame, vbr_off);
+    lame_set_brate(lame, 16);
+    lame_set_quality(lame, 4);
+    lame_set_lowpassfreq(lame, lowpass);
+    lame_set_highpassfreq(lame, highpass);
+    lame_set_out_samplerate(lame, MP3_RATE);
 	if(mixmode == MM_STEREO) {
 		lame_set_num_channels(lame, 2);
 		lame_set_mode(lame, JOINT_STEREO);

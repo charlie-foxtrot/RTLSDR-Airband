@@ -331,9 +331,6 @@ static void close_file(channel_t *channel, file_data *fdata) {
  *   if hour is different.
  */
 static void close_if_necessary(channel_t *channel, file_data *fdata) {
-	static const double MIN_TRANSMISSION_TIME_SEC = 1.0;
-	static const double MAX_TRANSMISSION_TIME_SEC = 60.0 * 60.0;
-	static const double MAX_TRANSMISSION_IDLE_SEC = 0.5;
 
 	if (!fdata || !fdata->f) {
 		return;
@@ -342,18 +339,19 @@ static void close_if_necessary(channel_t *channel, file_data *fdata) {
 	timeval current_time;
 	gettimeofday(&current_time, NULL);
 
-	if (fdata->split_on_transmission) {
-		double duration_sec = delta_sec(&fdata->open_time,       &current_time);
-		double idle_sec     = delta_sec(&fdata->last_write_time, &current_time);
+    if (fdata->split_on_transmission) {
+        double duration_sec = delta_sec(&fdata->open_time, &current_time);
+        double idle_sec = delta_sec(&fdata->last_write_time, &current_time);
 
-		if (duration_sec > MAX_TRANSMISSION_TIME_SEC ||
-			(duration_sec > MIN_TRANSMISSION_TIME_SEC && idle_sec > MAX_TRANSMISSION_IDLE_SEC)) {
-			debug_print("closing file %s, duration %f sec, idle %f sec\n",
-						fdata->file_path, duration_sec, idle_sec);
-			close_file(channel, fdata);
-		}
-		return;
-	}
+        if (duration_sec > fdata->max_transmission_time_sec ||
+            (duration_sec > fdata->min_transmission_time_sec && idle_sec > fdata->max_transmission_idle_sec)) {
+            debug_print("closing file %s, duration %f sec, idle %f sec\n",
+                        fdata->file_path, duration_sec, idle_sec);
+            close_file(channel, fdata);
+        }
+
+        return;
+    }
 
 	// Check if the hour boundary was just crossed.  NOTE: Actual hour number doesn't matter but still
 	// need to use localtime if enabled (some timezones have partial hour offsets)
@@ -394,22 +392,29 @@ static bool output_file_ready(channel_t *channel, file_data *fdata, mix_modes mi
 
 	timeval current_time;
 	gettimeofday(&current_time, NULL);
-	struct tm *time;
-	if (use_localtime) {
-		time = localtime(&current_time.tv_sec);
-	} else {
-		time = gmtime(&current_time.tv_sec);
-	}
 
-	char timestamp[32];
-	if (strftime(timestamp, sizeof(timestamp),
-				 fdata->split_on_transmission ? "_%Y%m%d_%H%M%S" : "_%Y%m%d_%H",
-				 time) == 0) {
-		log(LOG_NOTICE, "strftime returned 0\n");
-		return false;
-	}
+    char timestamp[32];
+    if (fdata->split_on_transmission) {
+        // Calculate the epoch timestamp with milliseconds precision
+        long long epoch_time_ms = (long long)current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+        double epoch_time_with_ms = epoch_time_ms / 1000.0; // Convert to seconds and add milliseconds as decimal
+        snprintf(timestamp, sizeof(timestamp), "_%.2f", epoch_time_with_ms); // Format with 2 decimal places
+    } else {
+        struct tm *time;
+        if (use_localtime) {
+            time = localtime(&current_time.tv_sec);
+        } else {
+            time = gmtime(&current_time.tv_sec);
+        }
 
-	size_t file_path_len = strlen(fdata->basename) + strlen(timestamp) + strlen(fdata->suffix) + 11; // include space for '\0' and possible freq in Hz
+        // Create the YYYYMMDD_H format string
+        if (strftime(timestamp, sizeof(timestamp), "_%Y%m%d_%H", time) == 0) {
+            log(LOG_NOTICE, "strftime returned 0\n");
+            return false;
+        }
+    }
+
+    size_t file_path_len = strlen(fdata->basename) + 15 + strlen(fdata->suffix) + 11; // include space for '\0' and possible freq in Hz
 	fdata->file_path = (char *)XCALLOC(1, file_path_len);
 	if (fdata->include_freq) {
 		sprintf(fdata->file_path, "%s%s_%d%s", fdata->basename, timestamp, channel->freqlist[channel->freq_idx].frequency, fdata->suffix);

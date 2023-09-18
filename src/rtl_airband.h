@@ -140,6 +140,7 @@ struct file_data {
 	timeval last_write_time;
 	FILE *f;
 	enum output_type type;
+    char *external_script;
 };
 
 struct udp_stream_data {

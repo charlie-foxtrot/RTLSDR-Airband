@@ -140,6 +140,9 @@ struct file_data {
 	timeval last_write_time;
 	FILE *f;
 	enum output_type type;
+    float min_transmission_time_sec;
+    float max_transmission_time_sec;
+    float max_transmission_idle_sec;
 };
 
 struct udp_stream_data {

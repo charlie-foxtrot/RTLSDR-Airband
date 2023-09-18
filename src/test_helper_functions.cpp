@@ -74,12 +74,15 @@ TEST_F(HelperFunctionsTest, file_exists_not_file)
 
 TEST_F(HelperFunctionsTest, make_dir_normal)
 {
-	EXPECT_TRUE(make_dir(temp_dir + "/a"));
-	EXPECT_TRUE(dir_exists(temp_dir + "/a"));
+	const string dir_path = temp_dir + "/a";
+	EXPECT_FALSE(dir_exists(dir_path));
+	EXPECT_TRUE(make_dir(dir_path));
+	EXPECT_TRUE(dir_exists(dir_path));
 }
 
 TEST_F(HelperFunctionsTest, make_dir_exists)
 {
+	EXPECT_TRUE(dir_exists(temp_dir));
 	EXPECT_TRUE(make_dir(temp_dir));
 	EXPECT_TRUE(dir_exists(temp_dir));
 }
@@ -94,28 +97,41 @@ TEST_F(HelperFunctionsTest, make_dir_fail)
 	EXPECT_FALSE(make_dir("/this/path/does/not/exist"));
 }
 
+TEST_F(HelperFunctionsTest, make_dir_file_in_the_way)
+{
+	const string file_path = temp_dir + "/some_file";
+	create_file(file_path);
+	EXPECT_FALSE(make_dir(file_path));
+}
+
 TEST_F(HelperFunctionsTest, make_subdirs_exists)
 {
+	EXPECT_TRUE(dir_exists(temp_dir));
 	EXPECT_TRUE(make_subdirs(temp_dir, ""));
 	EXPECT_TRUE(dir_exists(temp_dir));
 }
 
 TEST_F(HelperFunctionsTest, make_subdirs_one_subdir)
 {
-	EXPECT_TRUE(make_subdirs(temp_dir, "bob"));
-	EXPECT_TRUE(dir_exists(temp_dir + "/bob"));
+	const string path = "bob";
+	EXPECT_FALSE(dir_exists(temp_dir + "/" + path));
+	EXPECT_TRUE(make_subdirs(temp_dir, path));
+	EXPECT_TRUE(dir_exists(temp_dir + "/" + path));
 }
 
 TEST_F(HelperFunctionsTest, make_subdirs_multiple_subdir)
 {
-	EXPECT_TRUE(make_subdirs(temp_dir, "bob/joe/sam"));
-	EXPECT_TRUE(dir_exists(temp_dir + "/bob/joe/sam"));
+	const string path = "bob/joe/sam";
+	EXPECT_FALSE(dir_exists(temp_dir + "/" + path));
+	EXPECT_TRUE(make_subdirs(temp_dir, path));
+	EXPECT_TRUE(dir_exists(temp_dir + "/" + path));
 }
 
 TEST_F(HelperFunctionsTest, make_subdirs_file_in_the_way)
 {
-	string file_in_dir = temp_dir + "/some_file";
+	const string file_in_dir = temp_dir + "/some_file";
 	create_file(file_in_dir);
+	EXPECT_TRUE(file_exists(file_in_dir));
 	EXPECT_FALSE(make_subdirs(temp_dir, "some_file/some_dir"));
 	EXPECT_FALSE(dir_exists(file_in_dir));
 	EXPECT_TRUE(file_exists(file_in_dir));
@@ -123,12 +139,14 @@ TEST_F(HelperFunctionsTest, make_subdirs_file_in_the_way)
 
 TEST_F(HelperFunctionsTest, make_subdirs_create_base)
 {
+	EXPECT_FALSE(dir_exists(temp_dir + "/base_dir/a"));
 	EXPECT_TRUE(make_subdirs(temp_dir + "/base_dir", "a"));
 	EXPECT_TRUE(dir_exists(temp_dir + "/base_dir/a"));
 }
 
 TEST_F(HelperFunctionsTest, make_subdirs_extra_slashes)
 {
+	EXPECT_FALSE(dir_exists(temp_dir + "/a/b/c/d"));
 	EXPECT_TRUE(make_subdirs(temp_dir, "///a/b////c///d"));
 	EXPECT_TRUE(dir_exists(temp_dir + "/a/b/c/d"));
 }
@@ -139,7 +157,11 @@ TEST_F(HelperFunctionsTest, make_dated_subdirs_normal)
 
 	strptime("2010-3-7", "%Y-%m-%d", &time_struct);
 
-	EXPECT_EQ(make_dated_subdirs(temp_dir, &time_struct), temp_dir + "/2010/03/07");
+	const string dir_path = temp_dir + "/2010/03/07";
+
+	EXPECT_FALSE(dir_exists(dir_path));
+	EXPECT_EQ(make_dated_subdirs(temp_dir, &time_struct), dir_path);
+	EXPECT_TRUE(dir_exists(dir_path));
 }
 
 TEST_F(HelperFunctionsTest, make_dated_subdirs_fail)
@@ -155,9 +177,15 @@ TEST_F(HelperFunctionsTest, make_dated_subdirs_some_exist)
 {
 	struct tm time_struct;
 
+	const string dir_through_month = temp_dir + "/2010/03/";
+
 	strptime("2010-3-7", "%Y-%m-%d", &time_struct);
-	EXPECT_EQ(make_dated_subdirs(temp_dir, &time_struct), temp_dir + "/2010/03/07");
+	EXPECT_EQ(make_dated_subdirs(temp_dir, &time_struct), dir_through_month + "07");
+
+	EXPECT_TRUE(dir_exists(dir_through_month));
+	EXPECT_FALSE(dir_exists(dir_through_month + "08"));
 
 	strptime("2010-3-8", "%Y-%m-%d", &time_struct);
-	EXPECT_EQ(make_dated_subdirs(temp_dir, &time_struct), temp_dir + "/2010/03/08");
+	EXPECT_EQ(make_dated_subdirs(temp_dir, &time_struct), dir_through_month + "08");
+	EXPECT_TRUE(dir_exists(dir_through_month + "08"));
 }

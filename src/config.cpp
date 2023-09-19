@@ -107,9 +107,11 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				cerr << "both directory and filename_template required for file\n";
 				error();
 			}
-			fdata->basename = (char *)XCALLOC(1, strlen(outs[o]["directory"]) + strlen(outs[o]["filename_template"]) + 2);
-			sprintf(fdata->basename, "%s/%s", (const char *)outs[o]["directory"], (const char *)outs[o]["filename_template"]);
-			fdata->suffix = strdup(".mp3");
+			fdata->basedir = outs[o]["directory"].c_str();
+			fdata->basename = outs[o]["filename_template"].c_str();
+			fdata->dated_subdirectories = outs[o].exists("dated_subdirectories") ?
+				(bool)(outs[o]["dated_subdirectories"]) : false;
+			fdata->suffix = ".mp3";
 
 			fdata->continuous = outs[o].exists("continuous") ?
 				(bool)(outs[o]["continuous"]) : false;
@@ -146,9 +148,11 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				error();
 			}
 
-			fdata->basename = (char *)XCALLOC(1, strlen(outs[o]["directory"]) + strlen(outs[o]["filename_template"]) + 2);
-			sprintf(fdata->basename, "%s/%s", (const char *)outs[o]["directory"], (const char *)outs[o]["filename_template"]);
-			fdata->suffix = strdup(".cf32");
+			fdata->basedir = outs[o]["directory"].c_str();
+			fdata->basename = outs[o]["filename_template"].c_str();
+			fdata->dated_subdirectories = outs[o].exists("dated_subdirectories") ?
+				(bool)(outs[o]["dated_subdirectories"]) : false;
+			fdata->suffix = ".cf32";
 
 			fdata->continuous = outs[o].exists("continuous") ?
 				(bool)(outs[o]["continuous"]) : false;

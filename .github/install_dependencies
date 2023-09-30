@@ -25,7 +25,7 @@ case "${unameOut}" in
         brew update
 
         # brew upgrade is taking 45+ min on macos-11 images, so skip it
-        if [[ $(sw_vers -productversion) -lt 12.0 ]] ; then 
+        if [[ $(sw_vers -productVersion) -lt 12.0 ]] ; then 
             echo 'skipping brew upgrade'
         else
             brew upgrade

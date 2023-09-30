@@ -21,7 +21,8 @@
 				"ms-vscode.cpptools-extension-pack",
 				"twxs.cmake",
 				"streetsidesoftware.code-spell-checker",
-				"ms-azuretools.vscode-docker"		
+				"ms-azuretools.vscode-docker",
+				"GitHub.vscode-github-actions"		
 			]
 		}
 	},

@@ -271,6 +271,10 @@ message(STATUS "  - PulseAudio:\t\trequested: ${PULSEAUDIO}, enabled: ${WITH_PUL
 message(STATUS "  - Profiling:\t\trequested: ${PROFILING}, enabled: ${WITH_PROFILING}")
 message(STATUS "  - Icecast TLS support:\t${LIBSHOUT_HAS_TLS}")
 
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/config.h)
+	message(FATAL_ERROR "${CMAKE_CURRENT_SOURCE_DIR}/config.h nolonger used, delete before continuing")
+endif()
+
 configure_file(
 	"${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
 	"${CMAKE_CURRENT_BINARY_DIR}/config.h"

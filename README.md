@@ -2,7 +2,7 @@
 
 **NOTE: Repo URL has moved to https://github.com/charlie-foxtrot/RTLSDR-Airband see [#342](https://github.com/charlie-foxtrot/RTLSDR-Airband/discussions/342) for info**
 
-**Current stable release: [4.1.1](https://github.com/charlie-foxtrot/RTLSDR-Airband/releases/latest)** (released May 1, 2023)
+**Current stable release: [4.2.0](https://github.com/charlie-foxtrot/RTLSDR-Airband/releases/latest)** (released Oct 13, 2023)
 
 |`main`|`unstable`|
 |:---:|:---:|

@@ -28,6 +28,7 @@
 #cmakedefine NFM
 #cmakedefine WITH_BCM_VC
 #cmakedefine LIBSHOUT_HAS_TLS
+#cmakedefine LIBSHOUT_HAS_CONTENT_FORMAT
 #define SINCOSF @SINCOSF@
 
 #define SHOUT_SET_METADATA @SHOUT_SET_METADATA@

@@ -81,7 +81,11 @@ void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 	if (shout_set_password(shouttemp, icecast->password) != SHOUTERR_SUCCESS) {
 		shout_free(shouttemp); return;
 	}
+#ifdef LIBSHOUT_HAS_CONTENT_FORMAT
 	if (shout_set_content_format(shouttemp, SHOUT_FORMAT_MP3, SHOUT_USAGE_AUDIO, NULL) != SHOUTERR_SUCCESS){
+#else
+	if (shout_set_format(shouttemp, SHOUT_FORMAT_MP3) != SHOUTERR_SUCCESS){
+#endif
 		shout_free(shouttemp); return;
 	}
 	if(icecast->name && shout_set_meta(shouttemp, SHOUT_META_NAME, icecast->name) != SHOUTERR_SUCCESS) {

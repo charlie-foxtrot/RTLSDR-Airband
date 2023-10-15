@@ -202,6 +202,8 @@ elseif(PLATFORM STREQUAL "rpiv2")
 	add_compile_options(-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard)
 	enable_language(ASM)
 	list(APPEND rtl_airband_extra_sources rtl_airband_neon.s)
+elseif(PLATFORM STREQUAL "rpiv4")
+	add_compile_options(-mcpu=cortex-a72 -mtune=cortex-a72 -mfpu=neon-fp-armv8 -mfloat-abi=hard)
 elseif(PLATFORM STREQUAL "armv7-generic")
 	add_compile_options(-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard)
 elseif(PLATFORM STREQUAL "armv8-generic")
@@ -223,7 +225,7 @@ elseif(PLATFORM STREQUAL "default")
 	# NOOP
 else()
 	message(FATAL_ERROR "Unknown platform '${PLATFORM}'. Valid options are:
-	rpiv1, rpiv2, armv7-generic, armv8-generic, native, default")
+	rpiv1, rpiv2, rpiv4, armv7-generic, armv8-generic, native, default")
 endif()
 
 # Try using VC GPU if enabled. Fallback to fftw3f if disabled or if VC lib not found

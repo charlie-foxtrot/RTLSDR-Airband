@@ -39,9 +39,6 @@ case "${unameOut}" in
             fi
         fi
 
-        exit -1
-
-
         echo "running brew install"
         brew install \
             lame \

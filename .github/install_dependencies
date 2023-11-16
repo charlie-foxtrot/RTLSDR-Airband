@@ -24,10 +24,13 @@ case "${unameOut}" in
         echo "Installing MacOS dependencies"
         brew update
 
+        printenv
+
         # brew upgrade is taking 45+ min on macos-11 images, so skip it
         if [[ $(sw_vers -productVersion | cut -d '.' -f 1) -le 11 ]] ; then 
             echo 'skipping brew upgrade'
         else
+            echo 'running brew upgrade'
             brew upgrade
         fi
 

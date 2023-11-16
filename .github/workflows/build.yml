@@ -13,7 +13,7 @@ jobs:
       matrix:
         os: [ ubuntu-22.04, macos-12, rpi3b, macos-11, macos-13, ubuntu-20.04 ]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45 # runtime across all OSs, runs can get queued
+    timeout-minutes: 35 # runtime across all OSs, runs can get queued
     steps:
     - name: Checkout repository
       uses: actions/checkout@main

@@ -23,14 +23,6 @@ case "${unameOut}" in
     Darwin*)
         echo "Installing MacOS dependencies"
         brew update
-
-        # brew upgrade is taking 45+ min on macos-11 images, so skip it
-        if [[ $(sw_vers -productVersion | cut -d '.' -f 1) -le 11 ]] ; then 
-            echo 'skipping brew upgrade'
-        else
-            brew upgrade
-        fi
-
         brew install \
             lame \
             libshout \

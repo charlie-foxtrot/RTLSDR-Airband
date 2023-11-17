@@ -22,24 +22,7 @@ case "${unameOut}" in
 
     Darwin*)
         echo "Installing MacOS dependencies"
-        echo "running brew update"
         brew update
-
-        if [ -n "${GITHUB_ACTION}" ] ; then
-            echo "running in GitHub Workflow"
-            echo "running ${ImageOS} vsersion ${ImageVersion}"
-
-            # brew upgrade is taking 45+ min on macos-11 images, so skip it
-            if [[ "${ImageOS}" == "macos11" ]] ; then
-                echo "skipping brew upgrade"
-    
-            else
-                echo "running brew upgrade"
-                brew upgrade
-            fi
-        fi
-
-        echo "running brew install"
         brew install \
             lame \
             libshout \

@@ -11,7 +11,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ ubuntu-22.04, macos-12, rpi3b, macos-11, macos-13, ubuntu-20.04 ]
+        os: [ ubuntu-22.04, macos-12, rpi3b, macos-13, ubuntu-20.04 ]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35 # runtime across all OSs, runs can get queued
     steps:
@@ -19,9 +19,7 @@ jobs:
       uses: actions/checkout@main
 
     - name: Install packaged dependencies
-      run: |
-        printenv
-        .github/install_dependencies
+      run: .github/install_dependencies
 
     - name: Configure
       run: |

@@ -22,7 +22,7 @@ case "${unameOut}" in
 
     Darwin*)
         echo "Installing MacOS dependencies"
-        brew update
+        #brew update
         brew install \
             lame \
             libshout \

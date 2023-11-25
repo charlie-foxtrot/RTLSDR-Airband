@@ -15,6 +15,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35 # runtime across all OSs, runs can get queued
     steps:
+    - name: Runner Info
+      run: printenv | sort
+
     - name: Checkout repository
       uses: actions/checkout@main
 

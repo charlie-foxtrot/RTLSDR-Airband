@@ -22,7 +22,15 @@ case "${unameOut}" in
 
     Darwin*)
         echo "Installing MacOS dependencies"
-        brew update
+
+        # detect when running in github workflow and skip `brew update` (relay on fresh OS image)
+        if [ -n "${GITHUB_ACTION}" ] ; then
+            echo "running in GitHub Workflow, skipping brew update"
+            echo "running ${ImageOS} vsersion ${ImageVersion}"
+        else
+            brew update
+        fi
+
         brew install \
             lame \
             libshout \

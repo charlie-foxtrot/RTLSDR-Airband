@@ -26,6 +26,7 @@ case "${unameOut}" in
         # detect when running in github workflow and skip `brew update` (relay on fresh OS image)
         if [ -n "${GITHUB_ACTION}" ] ; then
             echo "running in GitHub Workflow, skipping brew update"
+            export HOMEBREW_NO_AUTO_UPDATE=1
             echo "running ${ImageOS} vsersion ${ImageVersion}"
         else
             brew update

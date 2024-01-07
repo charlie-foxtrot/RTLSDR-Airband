@@ -41,7 +41,8 @@ RUN git clone https://github.com/rtlsdrblog/rtl-sdr-blog && \
 COPY CMakeLists.txt src /app/
 
 # configure and build
-RUN cmake -B build_dir -DCMAKE_BUILD_TYPE=Release -DNFM=TRUE -DBUILD_UNITTESTS=TRUE && \
+# TODO: detect platforms
+RUN cmake -B build_dir -DPLATFORM=native -DCMAKE_BUILD_TYPE=Release -DNFM=TRUE -DBUILD_UNITTESTS=TRUE && \
   VERBOSE=1 cmake --build build_dir -j4
 
 # make sure unit tests pass

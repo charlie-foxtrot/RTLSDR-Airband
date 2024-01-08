@@ -36,15 +36,15 @@ jobs:
       uses: docker/login-action@v3
       with:
         registry: ghcr.io
-        username: ${{ github.repository_owner }}
+        username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Build and push
       uses: docker/build-push-action@v5
       with:
         platforms: linux/amd64, linux/386, linux/arm64, linux/arm/v6, linux/arm/v7
-        cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
-        cache-to: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache,mode=max
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
         push: true
         tags: ${{ steps.metadata.outputs.tags }}
         labels: ${{ steps.metadata.outputs.labels }}

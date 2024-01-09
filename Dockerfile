@@ -21,6 +21,7 @@ RUN apt-get update && \
       ca-certificates \
       libusb-1.0-0-dev \
       debhelper \
+      pkg-config \
       && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
@@ -42,7 +43,7 @@ COPY CMakeLists.txt src /app/
 
 # configure and build
 # TODO: detect platforms
-RUN cmake -B build_dir -DPLATFORM=native -DCMAKE_BUILD_TYPE=Release -DNFM=TRUE -DBUILD_UNITTESTS=TRUE && \
+RUN cmake -B build_dir -DCMAKE_BUILD_TYPE=Release -DNFM=TRUE -DBUILD_UNITTESTS=TRUE && \
   VERBOSE=1 cmake --build build_dir -j4
 
 # make sure unit tests pass

@@ -43,8 +43,9 @@ COPY CMakeLists.txt src /app/
 
 # configure and build
 # TODO: detect platforms
-RUN cmake -B build_dir -DCMAKE_BUILD_TYPE=Release -DNFM=TRUE -DBUILD_UNITTESTS=TRUE && \
-  VERBOSE=1 cmake --build build_dir -j4
+RUN echo | gcc -### -v -E - -march=native | tee /app/compiler_native_info.txt && \
+    cmake -B build_dir -DCMAKE_BUILD_TYPE=Release -DNFM=TRUE -DBUILD_UNITTESTS=TRUE && \
+    VERBOSE=1 cmake --build build_dir -j4
 
 # make sure unit tests pass
 RUN ./build_dir/unittests

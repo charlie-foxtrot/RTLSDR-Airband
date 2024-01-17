@@ -165,7 +165,7 @@ void *mixer_thread(void *param) {
 #ifdef DEBUG
 	struct timeval ts, te;
 	gettimeofday(&ts, NULL);
-#endif // DEBUG
+#endif /* DEBUG */
 	while(!do_exit) {
 		usleep(interval_usec);
 		if(do_exit) return 0;
@@ -242,7 +242,7 @@ void *mixer_thread(void *param) {
 
 				ts.tv_sec = te.tv_sec;
 				ts.tv_usec = te.tv_usec;
-#endif // DEBUG
+#endif /* DEBUG */
 
 				channel->state = CH_READY;
 				signal->send();

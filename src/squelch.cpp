@@ -21,7 +21,7 @@
 
 #ifdef DEBUG_SQUELCH
 #include <string.h>  // strerror()
-#endif
+#endif /* DEBUG_SQUELCH _*/
 
 #include <cmath>     // pow()
 #include <cassert>   // assert()
@@ -73,7 +73,7 @@ Squelch::Squelch(void)
 	debug_file_ = NULL;
 	raw_input_ = 0.0;
 	filtered_input_ = 0.0;
-#endif
+#endif /* DEBUG_SQUELCH */
 
 	assert(open_delay_ > buffer_size_);
 
@@ -203,7 +203,7 @@ void Squelch::process_raw_sample(const float &sample) {
 
 #ifdef DEBUG_SQUELCH
 	raw_input_ = sample;
-#endif // DEBUG_SQUELCH
+#endif /* DEBUG_SQUELCH */
 
 	sample_count_++;
 
@@ -253,7 +253,7 @@ void Squelch::process_raw_sample(const float &sample) {
 void Squelch::process_filtered_sample(const float &sample) {
 #ifdef DEBUG_SQUELCH
 	filtered_input_ = sample;
-#endif // DEBUG_SQUELCH
+#endif /* DEBUG_SQUELCH */
 
 	if (!should_filter_sample()) {
 		return;
@@ -284,7 +284,7 @@ void Squelch::process_filtered_sample(const float &sample) {
 void Squelch::process_audio_sample(const float &sample) {
 #ifdef DEBUG_SQUELCH
 	audio_input_ = sample;
-#endif // DEBUG_SQUELCH
+#endif /* DEBUG_SQUELCH */
 	
 	if (!ctcss_slow_.is_enabled()) {
 		return;
@@ -464,7 +464,7 @@ void Squelch::update_current_state(void) {
 
 #ifdef DEBUG_SQUELCH
 	debug_state();
-#endif // DEBUG_SQUELCH
+#endif /* DEBUG_SQUELCH */
 }
 
 bool Squelch::has_pre_filter_signal(void) {
@@ -638,4 +638,4 @@ void Squelch::debug_state(void) {
 	debug_value((int)ctcss_slow_.has_tone());
 }
 
-#endif // DEBUG_SQUELCH
+#endif /* DEBUG_SQUELCH */

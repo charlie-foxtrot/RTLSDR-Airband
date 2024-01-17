@@ -29,11 +29,11 @@
 #ifdef WITH_BCM_VC
 #include "hello_fft/mailbox.h"
 #include "hello_fft/gpu_fft.h"
-#endif // WITH_BCM_VC
+#endif /* WITH_BCM_VC */
 
 #ifdef WITH_SSE
 #include <xmmintrin.h>
-#endif // WITH_SSE
+#endif /* WITH_SSE */
 
 #include <unistd.h>
 #include <pthread.h>
@@ -67,7 +67,7 @@
 
 #ifdef WITH_PROFILING
 #include "gperftools/profiler.h"
-#endif // WITH_PROFILING
+#endif /* WITH_PROFILING */
 
 using namespace std;
 using namespace libconfig;
@@ -94,11 +94,11 @@ enum fm_demod_algo {
 	FM_QUADRI_DEMOD
 };
 enum fm_demod_algo fm_demod = FM_FAST_ATAN2;
-#endif // NFM
+#endif /* NFM */
 
 #ifdef DEBUG
 char *debug_path;
-#endif // DEBUG
+#endif /* DEBUG */
 
 void sighandler(int sig) {
 	log(LOG_NOTICE, "Got signal %d, exiting\n", sig);
@@ -184,7 +184,7 @@ float fm_quadri_demod(float ar, float aj, float br, float bj) {
 	return (float)((br*aj - ar*bj)/(ar*ar + aj*aj + 1.0f) * M_1_PI);
 }
 
-#endif // NFM
+#endif /* NFM */
 
 class AFC
 {
@@ -200,7 +200,7 @@ class AFC
 	{
 		return fft_results[index][0] * fft_results[index][0] + fft_results[index][1] * fft_results[index][1];
 	}
-#endif // WITH_BCM_VC
+#endif /* WITH_BCM_VC */
 
 	template <class FFT_RESULTS, int STEP>
 		size_t check(const FFT_RESULTS* fft_results, const size_t base, const float base_value, unsigned char afc)
@@ -254,7 +254,7 @@ public:
 			if (dev->bins[index] != bin) {
 #ifdef AFC_LOGGING
 				log(LOG_INFO, "AFC device=%d channel=%d: base=%zu prev=%zu now=%zu\n", dev->device, index, base, dev->bins[index], bin);
-#endif // AFC_LOGGING
+#endif /* AFC_LOGGING */
 				dev->bins[index] = bin;
 				if ( bin > base )
 					channel->axcindicate = AFC_UP;
@@ -279,7 +279,7 @@ void init_demod(demod_params_t *params, Signal *signal, int device_start, int de
 	params->fftin = fftwf_alloc_complex(fft_size);
 	params->fftout = fftwf_alloc_complex(fft_size);
 	params->fft = fftwf_plan_dft_1d(fft_size, params->fftin, params->fftout, FFTW_FORWARD, FFTW_MEASURE);
-#endif // WITH_BCM_VC
+#endif /* WITH_BCM_VC */
 }
 
 void init_output(output_params_t *params, int device_start, int device_end, int mixer_start, int mixer_end) {
@@ -328,7 +328,7 @@ void *demodulate(void *params) {
 #else
 	fftwf_complex* fftin = demod_params->fftin;
 	fftwf_complex* fftout = demod_params->fftout;
-#endif // WITH_BCM_VC
+#endif /* WITH_BCM_VC */
 
 	float ALIGNED32 levels_u8[256], levels_s8[256];
 	float *levels_ptr = NULL;
@@ -347,7 +347,7 @@ void *demodulate(void *params) {
 	float ALIGNED32 window[fft_size * 2];
 #else
 	float ALIGNED32 window[fft_size];
-#endif // WITH_BCM_VC
+#endif /* WITH_BCM_VC */
 
 	const double a0 = 0.27105140069342f;
 	const double a1 = 0.43329793923448f;	const double a2 = 0.21812299954311f;
@@ -365,13 +365,13 @@ void *demodulate(void *params) {
 		window[i * 2] = window[i * 2 + 1] = (float)x;
 #else
 		window[i] = (float)x;
-#endif // WITH_BCM_VC
+#endif /* WITH_BCM_VC */
 	}
 
 #ifdef DEBUG
 	struct timeval ts, te;
 	gettimeofday(&ts, NULL);
-#endif // DEBUG
+#endif /* DEBUG */
 	size_t available;
 	int device_num = demod_params->device_start;
 	while (true) {
@@ -380,7 +380,7 @@ void *demodulate(void *params) {
 #ifdef WITH_BCM_VC
 			log(LOG_INFO, "Freeing GPU memory\n");
 			gpu_fft_release(fft);
-#endif // WITH_BCM_VC
+#endif /* WITH_BCM_VC */
 			return NULL;
 		}
 
@@ -435,7 +435,7 @@ void *demodulate(void *params) {
 				 fftin[i][0] = scale * (float)buf2[0] * window[i];
 				 fftin[i][1] = scale * (float)buf2[1] * window[i];
 			}
-#endif // WITH_BCM_VC
+#endif /* WITH_BCM_VC */
 		} else if(dev->input->sfmt == SFMT_F32) {
 			float const scale = 1.0f / dev->input->fullscale;
 #ifdef WITH_BCM_VC
@@ -453,7 +453,7 @@ void *demodulate(void *params) {
 				fftin[i][0] = scale * buf2[0] * window[i];
 				fftin[i][1] = scale * buf2[1] * window[i];
 			}
-#endif // WITH_BCM_VC
+#endif /* WITH_BCM_VC */
 
 		} else {	// S8 or U8
 			levels_ptr = (dev->input->sfmt == SFMT_U8 ? levels_u8 : levels_s8);
@@ -478,14 +478,14 @@ void *demodulate(void *params) {
 				fftin[i][0] = levels_ptr[buf2[0]] * window[i];
 				fftin[i][1] = levels_ptr[buf2[1]] * window[i];
 			}
-#endif // WITH_BCM_VC
+#endif /* WITH_BCM_VC */
 		}
 
 #ifdef WITH_BCM_VC
 		gpu_fft_execute(fft);
 #else
 		fftwf_execute(demod_params->fft);
-#endif // WITH_BCM_VC
+#endif /* WITH_BCM_VC */
 
 #ifdef WITH_BCM_VC
 		for (int i = 0; i < dev->channel_count; i++) {
@@ -515,7 +515,7 @@ void *demodulate(void *params) {
 				dev->channels[j].iq_in[2*dev->waveend+1] = fftout[dev->bins[j]][1];
 			}
 		}
-#endif // WITH_BCM_VC
+#endif /* WITH_BCM_VC */
 
 		dev->waveend += FFT_BATCH;
 
@@ -610,7 +610,7 @@ void *demodulate(void *params) {
 							// save off waveout before notch and ampfactor
 							channel->prev_waveout = waveout;
 						}
-#endif // NFM
+#endif /* NFM */
 						
 						// process audio sample for CTCSS, will be no-op if not configured
 						fparms->squelch.process_audio_sample(waveout);
@@ -660,7 +660,7 @@ void *demodulate(void *params) {
 				afc.finalize(dev, i, fft->out);
 #else
 				afc.finalize(dev, i, demod_params->fftout);
-#endif // WITH_BCM_VC
+#endif /* WITH_BCM_VC */
 
 				if (tui) {
 					char symbol = fparms->squelch.signal_outside_filter() ? '~' : (char)channel->axcindicate;
@@ -697,7 +697,7 @@ void *demodulate(void *params) {
 			debug_bulk_print("waveavail %lu.%lu %lu\n", te.tv_sec, (unsigned long) te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec);
 			ts.tv_sec = te.tv_sec;
 			ts.tv_usec = te.tv_usec;
-#endif // DEBUG
+#endif /* DEBUG */
 			demod_params->mp3_signal->send();
 			dev->row++;
 			if (dev->row == 12) {
@@ -717,10 +717,10 @@ void usage() {
 \t-F\t\t\tRun in foreground, do not display waterfalls (for running as a systemd service)\n";
 #ifdef NFM
 	cout<<"\t-Q\t\t\tUse quadri correlator for FM demodulation (default is atan2)\n";
-#endif // NFM
+#endif /* NFM */
 #ifdef DEBUG
 	cout<<"\t-d <file>\t\tLog debugging information to <file> (default is "<<DEBUG_PATH<<")\n";
-#endif // DEBUG
+#endif /* DEBUG */
 	cout<<"\t-e\t\t\tPrint messages to standard error (disables syslog logging)\n";
 	cout<<"\t-c <config_file_path>\tUse non-default configuration file\n\t\t\t\t(default: "<<CFGFILE<<")\n\
 \t-v\t\t\tDisplay version and exit\n";
@@ -740,7 +740,7 @@ static int count_devices_running() {
 int main(int argc, char* argv[]) {
 #ifdef WITH_PROFILING
 	ProfilerStart("rtl_airband.prof");
-#endif // WITH_PROFILING
+#endif /* WITH_PROFILING */
 
 #pragma GCC diagnostic ignored "-Wwrite-strings"
 	char *cfgfile = CFGFILE;
@@ -752,11 +752,11 @@ int main(int argc, char* argv[]) {
 
 #ifdef NFM
 	strcat(optstring, "Q");
-#endif // NFM
+#endif /* NFM */
 
 #ifdef DEBUG
 	strcat(optstring, "d:");
-#endif // DEBUG
+#endif /* DEBUG */
 
 	int foreground = 0;			// daemonize
 	int do_syslog = 1;
@@ -767,13 +767,13 @@ int main(int argc, char* argv[]) {
 			case 'Q':
 				fm_demod = FM_QUADRI_DEMOD;
 				break;
-#endif // NFM
+#endif /* NFM */
 
 #ifdef DEBUG
 			case 'd':
 				debug_path = strdup(optarg);
 				break;
-#endif // DEBUG
+#endif /* DEBUG */
 
 			case 'e':
 				do_syslog = 0;
@@ -801,7 +801,7 @@ int main(int argc, char* argv[]) {
 #ifdef DEBUG
 	if(!debug_path) debug_path = strdup(DEBUG_PATH);
 	init_debug(debug_path);
-#endif // DEBUG
+#endif /* DEBUG */
 
 #if WITH_SSE
 // check EDx of the CPU id to ensure Streaming SIMD Extensions (SSE) are supported
@@ -817,7 +817,7 @@ int main(int argc, char* argv[]) {
 		printf("Unsupported CPU.\n");
 		error();
 	}
-#endif // WITH_SSE
+#endif /* WITH_SSE */
 
 	// If executing other than as root, GPU memory gets alloc'd and the
 	// 'permission denied' message on /dev/mem kills rtl_airband without
@@ -828,7 +828,7 @@ int main(int argc, char* argv[]) {
 		cerr<<"FFT library requires that rtl_airband be executed as root\n";
 		exit(1);
 	}
-#endif // WITH_BCM_VC
+#endif /* WITH_BCM_VC */
 
 	// read config
 	try {
@@ -863,7 +863,7 @@ int main(int argc, char* argv[]) {
 #ifdef WITH_BCM_VC
 			cerr<<"Using multiple_demod_threads not supported with BCM VideoCore for FFT\n";
 			exit(1);
-#endif // WITH_BCM_VC
+#endif /* WITH_BCM_VC */
 
 			multiple_demod_threads = true;
 		}
@@ -877,7 +877,7 @@ int main(int argc, char* argv[]) {
 #ifdef NFM
 		if(root.exists("tau"))
 			alpha = ((int)root["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)root["tau"])));
-#endif // NFM
+#endif /* NFM */
 
 		Setting &devs = config.lookup("devices");
 		device_count = devs.getLength();
@@ -934,7 +934,7 @@ int main(int argc, char* argv[]) {
 			mixer_t *m = &mixers[z];
 			debug_print("mixer[%d]: name=%s, input_count=%d, output_count=%d\n", z, m->name, m->input_count, m->channel.output_count);
 		}
-#endif // DEBUG
+#endif /* DEBUG */
 	} catch(const FileIOException &e) {
 			cerr<<"Cannot read configuration file "<<cfgfile<<"\n";
 			error();
@@ -1017,7 +1017,7 @@ int main(int argc, char* argv[]) {
 			} else if(output->type == O_PULSE) {
 				pulse_init();
 				pulse_setup((pulse_data *)(output->data), channel->mode);
-#endif // WITH_PULSEAUDIO
+#endif /* WITH_PULSEAUDIO */
 			}
 		}
 	}
@@ -1046,7 +1046,7 @@ int main(int argc, char* argv[]) {
 				} else if(output->type == O_PULSE) {
 					pulse_init();
 					pulse_setup((pulse_data *)(output->data), channel->mode);
-#endif // WITH_PULSEAUDIO
+#endif /* WITH_PULSEAUDIO */
 				}
 			}
 		}
@@ -1156,7 +1156,7 @@ int main(int argc, char* argv[]) {
 
 #ifdef WITH_PULSEAUDIO
 	pulse_start();
-#endif // WITH_PULSEAUDIO
+#endif /* WITH_PULSEAUDIO */
 
 	sincosf_lut_init();
 
@@ -1213,7 +1213,7 @@ int main(int argc, char* argv[]) {
 	close_debug();
 #ifdef WITH_PROFILING
 	ProfilerStop();
-#endif // WITH_PROFILING
+#endif /* WITH_PROFILING */
 	return 0;
 }
 

@@ -33,4 +33,4 @@
 
 #define SHOUT_SET_METADATA @SHOUT_SET_METADATA@
 
-#endif // _CONFIG_H
+#endif /* _CONFIG_H */

@@ -37,12 +37,12 @@
 #include "hello_fft/gpu_fft.h"
 #else
 #include <fftw3.h>
-#endif // WITH_BCM_VC
+#endif /* WITH_BCM_VC */
 
 #ifdef WITH_PULSEAUDIO
 #include <pulse/context.h>
 #include <pulse/stream.h>
-#endif // WITH_PULSEAUDIO
+#endif /* WITH_PULSEAUDIO */
 
 #include "input-common.h"	// input_t
 #include "squelch.h"
@@ -56,7 +56,7 @@
 
 #ifndef SYSCONFDIR
 #define SYSCONFDIR "/usr/local/etc"
-#endif // SYSCONFDIR
+#endif /* SYSCONFDIR */
 
 #define CFGFILE SYSCONFDIR "/rtl_airband.conf"
 #define PIDFILE "/run/rtl_airband.pid"
@@ -68,7 +68,7 @@
 #define WAVE_RATE 16000
 #else
 #define WAVE_RATE 8000
-#endif // NFM
+#endif /* NFM */
 
 #define WAVE_BATCH WAVE_RATE / 8
 #define AGC_EXTRA 100
@@ -95,7 +95,7 @@ extern "C" void samplefft(sample_fft_arg *a, unsigned char* buffer, float* windo
 # define FFT_BATCH 250
 #else
 # define FFT_BATCH 1
-#endif // WITH_BCM_VC
+#endif /* WITH_BCM_VC */
 
 //#define AFC_LOGGING
 
@@ -110,7 +110,7 @@ enum output_type {
 	O_UDP_STREAM
 #ifdef WITH_PULSEAUDIO
 	, O_PULSE
-#endif // WITH_PULSEAUDIO
+#endif /* WITH_PULSEAUDIO */
 };
 
 struct icecast_data {
@@ -118,7 +118,7 @@ struct icecast_data {
 	int port;
 #ifdef LIBSHOUT_HAS_TLS
 	int tls_mode;
-#endif // LIBSHOUT_HAS_TLS
+#endif /* LIBSHOUT_HAS_TLS */
 	const char *username;
 	const char *password;
 	const char *mountpoint;
@@ -171,7 +171,7 @@ struct pulse_data {
 	mix_modes mode;
 	bool continuous;
 };
-#endif // WITH_PULSEAUDIO
+#endif /* WITH_PULSEAUDIO */
 
 struct mixer_data {
 	struct mixer_t *mixer;
@@ -194,7 +194,7 @@ enum modulations {
 	MOD_AM
 #ifdef NFM
 	, MOD_NFM
-#endif // NFM
+#endif /* NFM */
 };
 
 class Signal {
@@ -240,7 +240,7 @@ struct channel_t {
 	float pj;					// previous sample - imaginary part
 	float prev_waveout;         // previous sample - waveout before notch / ampfactor
 	float alpha;
-#endif // NFM
+#endif /* NFM */
 	uint32_t dm_dphi, dm_phi;	// derotation frequency and current phase value
 	enum mix_modes mode;		// mono or stereo
 	status axcindicate;
@@ -265,7 +265,7 @@ struct device_t {
 	input_t *input;
 #ifdef NFM
 	float alpha;
-#endif // NFM
+#endif /* NFM */
 	int channel_count;
 	size_t *base_bins, *bins;
 	channel_t *channels;
@@ -314,7 +314,7 @@ struct demod_params_t {
 	fftwf_plan fft;
 	fftwf_complex* fftin;
 	fftwf_complex* fftout;
-#endif // WITH_BCM_VC
+#endif /* WITH_BCM_VC */
 };
 
 struct output_params_t {
@@ -394,7 +394,7 @@ int pulse_setup(pulse_data *pdata, mix_modes mixmode);
 void pulse_start();
 void pulse_shutdown(pulse_data *pdata);
 void pulse_write_stream(pulse_data *pdata, mix_modes mode, const float *data_left, const float *data_right, size_t len);
-#endif // WITH_PULSEAUDIO
+#endif /* WITH_PULSEAUDIO */
 
 #endif /* _RTL_AIRBAND_H */
 

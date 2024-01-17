@@ -26,7 +26,7 @@
 #define MODULE_EXPORT extern "C" __attribute__((visibility("default")))
 #else
 #define MODULE_EXPORT extern "C"
-#endif // __GNUC__
+#endif /* __GNUC__ */
 
 typedef enum {
 	SFMT_UNDEF = 0,
@@ -76,4 +76,4 @@ int input_start(input_t * const input);
 int input_set_centerfreq(input_t * const input, int const centerfreq);
 int input_stop(input_t * const input);
 
-#endif // _INPUT_COMMON_H
+#endif /* _INPUT_COMMON_H */

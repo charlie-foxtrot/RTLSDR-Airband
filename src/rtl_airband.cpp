@@ -31,9 +31,9 @@
 #include "hello_fft/gpu_fft.h"
 #endif /* WITH_BCM_VC */
 
-#ifdef WITH_SSE
+#ifdef __SSE__
 #include <xmmintrin.h>
-#endif /* WITH_SSE */
+#endif /* __SSE__ */
 
 #include <unistd.h>
 #include <pthread.h>
@@ -464,7 +464,7 @@ void *demodulate(void *params) {
 				samplefft(&sfa, dev->input->buffer + dev->input->bufs + i * bps, window, levels_ptr);
 				sfa.dest+= fft->step;
 			}
-#elif WITH_SSE
+#elif __SSE__
 			unsigned char* buf2 = dev->input->buffer + dev->input->bufs;
 			for (size_t i = 0; i < fft_size; i += 2, buf2 += 4) {
 				__m128 a = _mm_set_ps(levels_ptr[buf2[3]], levels_ptr[buf2[2]], levels_ptr[buf2[1]], levels_ptr[buf2[0]]);
@@ -803,7 +803,7 @@ int main(int argc, char* argv[]) {
 	init_debug(debug_path);
 #endif /* DEBUG */
 
-#if WITH_SSE
+#if __SSE__
 // check EDx of the CPU id to ensure Streaming SIMD Extensions (SSE) are supported
 // https://en.wikipedia.org/wiki/CPUID#EAX=1:_Processor_Info_and_Feature_Bits
 #define cpuid(func,ax,bx,cx,dx)\
@@ -817,7 +817,7 @@ int main(int argc, char* argv[]) {
 		printf("Unsupported CPU.\n");
 		error();
 	}
-#endif /* WITH_SSE */
+#endif /* __SSE__ */
 
 	// If executing other than as root, GPU memory gets alloc'd and the
 	// 'permission denied' message on /dev/mem kills rtl_airband without

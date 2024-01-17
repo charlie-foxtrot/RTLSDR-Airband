@@ -18,9 +18,6 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifdef __MINGW32__
-#define _GNU_SOURCE 1		// asprintf
-#endif
 
 #include <iostream>
 #include <assert.h>

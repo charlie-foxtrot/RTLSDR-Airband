@@ -203,7 +203,7 @@ void Squelch::process_raw_sample(const float &sample) {
 
 #ifdef DEBUG_SQUELCH
 	raw_input_ = sample;
-#endif
+#endif // DEBUG_SQUELCH
 
 	sample_count_++;
 
@@ -253,7 +253,7 @@ void Squelch::process_raw_sample(const float &sample) {
 void Squelch::process_filtered_sample(const float &sample) {
 #ifdef DEBUG_SQUELCH
 	filtered_input_ = sample;
-#endif
+#endif // DEBUG_SQUELCH
 
 	if (!should_filter_sample()) {
 		return;
@@ -284,7 +284,7 @@ void Squelch::process_filtered_sample(const float &sample) {
 void Squelch::process_audio_sample(const float &sample) {
 #ifdef DEBUG_SQUELCH
 	audio_input_ = sample;
-#endif
+#endif // DEBUG_SQUELCH
 	
 	if (!ctcss_slow_.is_enabled()) {
 		return;
@@ -464,7 +464,7 @@ void Squelch::update_current_state(void) {
 
 #ifdef DEBUG_SQUELCH
 	debug_state();
-#endif
+#endif // DEBUG_SQUELCH
 }
 
 bool Squelch::has_pre_filter_signal(void) {

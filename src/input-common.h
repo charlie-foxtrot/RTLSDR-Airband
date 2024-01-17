@@ -22,15 +22,11 @@
 #include <pthread.h>
 #include <libconfig.h++>
 
-#ifdef __MINGW32__
-  #define MODULE_EXPORT extern "C" __declspec(dllexport)
+#if __GNUC__ >= 4
+#define MODULE_EXPORT extern "C" __attribute__((visibility("default")))
 #else
-  #if __GNUC__ >= 4
-    #define MODULE_EXPORT extern "C" __attribute__((visibility("default")))
-  #else
-    #define MODULE_EXPORT extern "C"
-  #endif
-#endif
+#define MODULE_EXPORT extern "C"
+#endif // __GNUC__
 
 typedef enum {
 	SFMT_UNDEF = 0,

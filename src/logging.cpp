@@ -43,14 +43,14 @@ void init_debug (const char *file) {
 	}
 #else
 	UNUSED(file);
-#endif
+#endif // DEBUG
 }
 
 void close_debug() {
 #ifdef DEBUG
 	if(!debugf) return;
 	fclose(debugf);
-#endif
+#endif // DEBUG
 }
 
 void log(int priority, const char *format, ...) {

@@ -26,16 +26,14 @@
 
 // From this point we may safely assume that WITH_BCM_VC implies __arm__
 
-#if defined (__arm__) || defined (__aarch64__)
-
 #ifdef WITH_BCM_VC
 #include "hello_fft/mailbox.h"
 #include "hello_fft/gpu_fft.h"
-#endif
+#endif // WITH_BCM_VC
 
-#else	/* x86 */
+#ifdef WITH_SSE
 #include <xmmintrin.h>
-#endif	/* x86 */
+#endif // WITH_SSE
 
 #include <unistd.h>
 #include <pthread.h>
@@ -44,13 +42,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <fcntl.h>
-
-#ifndef __MINGW32__
 #include <sys/wait.h>
-#else
-#include <windows.h>
-#endif
-
 #include <algorithm>
 #include <csignal>
 #include <cstdarg>
@@ -75,7 +67,7 @@
 
 #ifdef WITH_PROFILING
 #include "gperftools/profiler.h"
-#endif
+#endif // WITH_PROFILING
 
 using namespace std;
 using namespace libconfig;
@@ -94,6 +86,7 @@ bool log_scan_activity = false;
 char *stats_filepath = NULL;
 size_t fft_size_log = DEFAULT_FFT_SIZE_LOG;
 size_t fft_size = 1 << fft_size_log;
+
 #ifdef NFM
 float alpha = exp(-1.0f/(WAVE_RATE * 2e-4));
 enum fm_demod_algo {
@@ -101,27 +94,16 @@ enum fm_demod_algo {
 	FM_QUADRI_DEMOD
 };
 enum fm_demod_algo fm_demod = FM_FAST_ATAN2;
-#endif
+#endif // NFM
 
 #ifdef DEBUG
 char *debug_path;
-#endif
+#endif // DEBUG
 
-#ifndef __MINGW32__
 void sighandler(int sig) {
 	log(LOG_NOTICE, "Got signal %d, exiting\n", sig);
 	do_exit = 1;
 }
-#else
-BOOL WINAPI sighandler(int signum) {
-	if (CTRL_C_EVENT == signum) {
-		fprintf(stderr, "Signal caught, exiting!\n");
-		do_exit = 1;
-		return TRUE;
-	}
-	return FALSE;
-}
-#endif
 
 
 void* controller_thread(void* params) {
@@ -202,7 +184,7 @@ float fm_quadri_demod(float ar, float aj, float br, float bj) {
 	return (float)((br*aj - ar*bj)/(ar*ar + aj*aj + 1.0f) * M_1_PI);
 }
 
-#endif
+#endif // NFM
 
 class AFC
 {
@@ -218,7 +200,8 @@ class AFC
 	{
 		return fft_results[index][0] * fft_results[index][0] + fft_results[index][1] * fft_results[index][1];
 	}
-#endif
+#endif // WITH_BCM_VC
+
 	template <class FFT_RESULTS, int STEP>
 		size_t check(const FFT_RESULTS* fft_results, const size_t base, const float base_value, unsigned char afc)
 	{
@@ -271,7 +254,7 @@ public:
 			if (dev->bins[index] != bin) {
 #ifdef AFC_LOGGING
 				log(LOG_INFO, "AFC device=%d channel=%d: base=%zu prev=%zu now=%zu\n", dev->device, index, base, dev->bins[index], bin);
-#endif
+#endif // AFC_LOGGING
 				dev->bins[index] = bin;
 				if ( bin > base )
 					channel->axcindicate = AFC_UP;
@@ -296,7 +279,7 @@ void init_demod(demod_params_t *params, Signal *signal, int device_start, int de
 	params->fftin = fftwf_alloc_complex(fft_size);
 	params->fftout = fftwf_alloc_complex(fft_size);
 	params->fft = fftwf_plan_dft_1d(fft_size, params->fftin, params->fftout, FFTW_FORWARD, FFTW_MEASURE);
-#endif
+#endif // WITH_BCM_VC
 }
 
 void init_output(output_params_t *params, int device_start, int device_end, int mixer_start, int mixer_end) {
@@ -345,7 +328,8 @@ void *demodulate(void *params) {
 #else
 	fftwf_complex* fftin = demod_params->fftin;
 	fftwf_complex* fftout = demod_params->fftout;
-#endif
+#endif // WITH_BCM_VC
+
 	float ALIGNED32 levels_u8[256], levels_s8[256];
 	float *levels_ptr = NULL;
 
@@ -363,7 +347,8 @@ void *demodulate(void *params) {
 	float ALIGNED32 window[fft_size * 2];
 #else
 	float ALIGNED32 window[fft_size];
-#endif
+#endif // WITH_BCM_VC
+
 	const double a0 = 0.27105140069342f;
 	const double a1 = 0.43329793923448f;	const double a2 = 0.21812299954311f;
 	const double a3 = 0.06592544638803f;	const double a4 = 0.01081174209837f;
@@ -380,13 +365,13 @@ void *demodulate(void *params) {
 		window[i * 2] = window[i * 2 + 1] = (float)x;
 #else
 		window[i] = (float)x;
-#endif
+#endif // WITH_BCM_VC
 	}
 
 #ifdef DEBUG
 	struct timeval ts, te;
 	gettimeofday(&ts, NULL);
-#endif
+#endif // DEBUG
 	size_t available;
 	int device_num = demod_params->device_start;
 	while (true) {
@@ -395,7 +380,7 @@ void *demodulate(void *params) {
 #ifdef WITH_BCM_VC
 			log(LOG_INFO, "Freeing GPU memory\n");
 			gpu_fft_release(fft);
-#endif
+#endif // WITH_BCM_VC
 			return NULL;
 		}
 
@@ -450,7 +435,7 @@ void *demodulate(void *params) {
 				 fftin[i][0] = scale * (float)buf2[0] * window[i];
 				 fftin[i][1] = scale * (float)buf2[1] * window[i];
 			}
-#endif
+#endif // WITH_BCM_VC
 		} else if(dev->input->sfmt == SFMT_F32) {
 			float const scale = 1.0f / dev->input->fullscale;
 #ifdef WITH_BCM_VC
@@ -462,28 +447,24 @@ void *demodulate(void *params) {
 					ptr[i].im = scale * buf2[1] * window[i*2];
 				}
 			}
-#else
+#else // WITH_BCM_VC
 			float *buf2 = (float *)(dev->input->buffer + dev->input->bufs);
 			for(size_t i = 0; i < fft_size; i++, buf2 += 2) {
 				fftin[i][0] = scale * buf2[0] * window[i];
 				fftin[i][1] = scale * buf2[1] * window[i];
 			}
-#endif
+#endif // WITH_BCM_VC
+
 		} else {	// S8 or U8
 			levels_ptr = (dev->input->sfmt == SFMT_U8 ? levels_u8 : levels_s8);
+			
 #ifdef WITH_BCM_VC
 			sample_fft_arg sfa = {fft_size / 4, fft->in};
 			for (size_t i = 0; i < FFT_BATCH; i++) {
 				samplefft(&sfa, dev->input->buffer + dev->input->bufs + i * bps, window, levels_ptr);
 				sfa.dest+= fft->step;
 			}
-#elif defined (__arm__) || defined (__aarch64__)
-			unsigned char* buf2 = dev->input->buffer + dev->input->bufs;
-			for (size_t i = 0; i < fft_size; i++, buf2 += 2) {
-				fftin[i][0] = levels_ptr[buf2[0]] * window[i];
-				fftin[i][1] = levels_ptr[buf2[1]] * window[i];
-			}
-#else /* x86 */
+#elif WITH_SSE
 			unsigned char* buf2 = dev->input->buffer + dev->input->bufs;
 			for (size_t i = 0; i < fft_size; i += 2, buf2 += 4) {
 				__m128 a = _mm_set_ps(levels_ptr[buf2[3]], levels_ptr[buf2[2]], levels_ptr[buf2[1]], levels_ptr[buf2[0]]);
@@ -491,13 +472,20 @@ void *demodulate(void *params) {
 				a = _mm_mul_ps(a, b);
 				_mm_store_ps(&fftin[i][0], a);
 			}
-#endif
+#else
+			unsigned char* buf2 = dev->input->buffer + dev->input->bufs;
+			for (size_t i = 0; i < fft_size; i++, buf2 += 2) {
+				fftin[i][0] = levels_ptr[buf2[0]] * window[i];
+				fftin[i][1] = levels_ptr[buf2[1]] * window[i];
+			}
+#endif // WITH_BCM_VC
 		}
+
 #ifdef WITH_BCM_VC
 		gpu_fft_execute(fft);
 #else
 		fftwf_execute(demod_params->fft);
-#endif
+#endif // WITH_BCM_VC
 
 #ifdef WITH_BCM_VC
 		for (int i = 0; i < dev->channel_count; i++) {
@@ -672,7 +660,7 @@ void *demodulate(void *params) {
 				afc.finalize(dev, i, fft->out);
 #else
 				afc.finalize(dev, i, demod_params->fftout);
-#endif
+#endif // WITH_BCM_VC
 
 				if (tui) {
 					char symbol = fparms->squelch.signal_outside_filter() ? '~' : (char)channel->axcindicate;
@@ -709,7 +697,7 @@ void *demodulate(void *params) {
 			debug_bulk_print("waveavail %lu.%lu %lu\n", te.tv_sec, (unsigned long) te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec);
 			ts.tv_sec = te.tv_sec;
 			ts.tv_usec = te.tv_usec;
-#endif
+#endif // DEBUG
 			demod_params->mp3_signal->send();
 			dev->row++;
 			if (dev->row == 12) {
@@ -729,10 +717,10 @@ void usage() {
 \t-F\t\t\tRun in foreground, do not display waterfalls (for running as a systemd service)\n";
 #ifdef NFM
 	cout<<"\t-Q\t\t\tUse quadri correlator for FM demodulation (default is atan2)\n";
-#endif
+#endif // NFM
 #ifdef DEBUG
 	cout<<"\t-d <file>\t\tLog debugging information to <file> (default is "<<DEBUG_PATH<<")\n";
-#endif
+#endif // DEBUG
 	cout<<"\t-e\t\t\tPrint messages to standard error (disables syslog logging)\n";
 	cout<<"\t-c <config_file_path>\tUse non-default configuration file\n\t\t\t\t(default: "<<CFGFILE<<")\n\
 \t-v\t\t\tDisplay version and exit\n";
@@ -752,20 +740,23 @@ static int count_devices_running() {
 int main(int argc, char* argv[]) {
 #ifdef WITH_PROFILING
 	ProfilerStart("rtl_airband.prof");
-#endif
+#endif // WITH_PROFILING
+
 #pragma GCC diagnostic ignored "-Wwrite-strings"
 	char *cfgfile = CFGFILE;
 	char *pidfile = PIDFILE;
 #pragma GCC diagnostic warning "-Wwrite-strings"
+
 	int opt;
 	char optstring[16] = "efFhvc:";
 
 #ifdef NFM
 	strcat(optstring, "Q");
-#endif
+#endif // NFM
+
 #ifdef DEBUG
 	strcat(optstring, "d:");
-#endif
+#endif // DEBUG
 
 	int foreground = 0;			// daemonize
 	int do_syslog = 1;
@@ -776,12 +767,14 @@ int main(int argc, char* argv[]) {
 			case 'Q':
 				fm_demod = FM_QUADRI_DEMOD;
 				break;
-#endif
+#endif // NFM
+
 #ifdef DEBUG
 			case 'd':
 				debug_path = strdup(optarg);
 				break;
-#endif
+#endif // DEBUG
+
 			case 'e':
 				do_syslog = 0;
 				break;
@@ -808,8 +801,11 @@ int main(int argc, char* argv[]) {
 #ifdef DEBUG
 	if(!debug_path) debug_path = strdup(DEBUG_PATH);
 	init_debug(debug_path);
-#endif
-#if !defined (__arm__) && !defined (__aarch64__)
+#endif // DEBUG
+
+#if WITH_SSE
+// check EDx of the CPU id to ensure Streaming SIMD Extensions (SSE) are supported
+// https://en.wikipedia.org/wiki/CPUID#EAX=1:_Processor_Info_and_Feature_Bits
 #define cpuid(func,ax,bx,cx,dx)\
 	__asm__ __volatile__ ("cpuid":\
 		"=a" (ax), "=b" (bx), "=c" (cx), "=d" (dx) : "a" (func));
@@ -821,7 +817,7 @@ int main(int argc, char* argv[]) {
 		printf("Unsupported CPU.\n");
 		error();
 	}
-#endif /* !__arm__ */
+#endif // WITH_SSE
 
 	// If executing other than as root, GPU memory gets alloc'd and the
 	// 'permission denied' message on /dev/mem kills rtl_airband without
@@ -832,7 +828,7 @@ int main(int argc, char* argv[]) {
 		cerr<<"FFT library requires that rtl_airband be executed as root\n";
 		exit(1);
 	}
-#endif
+#endif // WITH_BCM_VC
 
 	// read config
 	try {
@@ -867,7 +863,8 @@ int main(int argc, char* argv[]) {
 #ifdef WITH_BCM_VC
 			cerr<<"Using multiple_demod_threads not supported with BCM VideoCore for FFT\n";
 			exit(1);
-#endif
+#endif // WITH_BCM_VC
+
 			multiple_demod_threads = true;
 		}
 		if(root.exists("multiple_output_threads") && (bool)root["multiple_output_threads"] == true) {
@@ -880,7 +877,8 @@ int main(int argc, char* argv[]) {
 #ifdef NFM
 		if(root.exists("tau"))
 			alpha = ((int)root["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)root["tau"])));
-#endif
+#endif // NFM
+
 		Setting &devs = config.lookup("devices");
 		device_count = devs.getLength();
 		if (device_count < 1) {
@@ -888,7 +886,6 @@ int main(int argc, char* argv[]) {
 			error();
 		}
 
-#ifndef __MINGW32__
 		struct sigaction sigact, pipeact;
 
 		memset(&sigact, 0, sizeof(sigact));
@@ -900,9 +897,6 @@ int main(int argc, char* argv[]) {
 		sigaction(SIGINT, &sigact, NULL);
 		sigaction(SIGQUIT, &sigact, NULL);
 		sigaction(SIGTERM, &sigact, NULL);
-#else
-		SetConsoleCtrlHandler( (PHANDLER_ROUTINE) sighandler, TRUE );
-#endif
 
 		devices = (device_t *)XCALLOC(device_count, sizeof(device_t));
 		shout_init();
@@ -940,7 +934,7 @@ int main(int argc, char* argv[]) {
 			mixer_t *m = &mixers[z];
 			debug_print("mixer[%d]: name=%s, input_count=%d, output_count=%d\n", z, m->name, m->input_count, m->channel.output_count);
 		}
-#endif
+#endif // DEBUG
 	} catch(const FileIOException &e) {
 			cerr<<"Cannot read configuration file "<<cfgfile<<"\n";
 			error();
@@ -960,7 +954,6 @@ int main(int argc, char* argv[]) {
 
 	log(LOG_INFO, "RTLSDR-Airband version %s starting\n", RTL_AIRBAND_VERSION);
 
-#ifndef __MINGW32__ // Fork Were Nowhere Near the Windows
 	if(!foreground) {
 		int pid1, pid2;
 		if((pid1 = fork()) == -1) {
@@ -1000,7 +993,6 @@ int main(int argc, char* argv[]) {
 			}
 		}
 	}
-#endif
 
 	for (int i = 0; i < mixer_count; i++) {
 		if(mixers[i].enabled == false) {
@@ -1025,7 +1017,7 @@ int main(int argc, char* argv[]) {
 			} else if(output->type == O_PULSE) {
 				pulse_init();
 				pulse_setup((pulse_data *)(output->data), channel->mode);
-#endif
+#endif // WITH_PULSEAUDIO
 			}
 		}
 	}
@@ -1054,7 +1046,7 @@ int main(int argc, char* argv[]) {
 				} else if(output->type == O_PULSE) {
 					pulse_init();
 					pulse_setup((pulse_data *)(output->data), channel->mode);
-#endif
+#endif // WITH_PULSEAUDIO
 				}
 			}
 		}
@@ -1164,7 +1156,8 @@ int main(int argc, char* argv[]) {
 
 #ifdef WITH_PULSEAUDIO
 	pulse_start();
-#endif
+#endif // WITH_PULSEAUDIO
+
 	sincosf_lut_init();
 
 	// Startup the demod threads
@@ -1220,7 +1213,7 @@ int main(int argc, char* argv[]) {
 	close_debug();
 #ifdef WITH_PROFILING
 	ProfilerStop();
-#endif
+#endif // WITH_PROFILING
 	return 0;
 }
 

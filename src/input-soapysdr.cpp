@@ -314,7 +314,7 @@ void *soapysdr_rx_thread(void *ctx) {
 #else
 		if((rxStream = SoapySDRDevice_setupStream(sdr, SOAPY_SDR_RX, dev_data->sample_format,
 				&dev_data->channel, 1, NULL)) == NULL) {
-#endif
+#endif // SOAPY_SDR_API_VERSION
 		log(LOG_ERR, "Failed to set up stream for SoapySDR device '%s': %s\n",
 			dev_data->device_string, SoapySDRDevice_lastError());
 		input->state = INPUT_FAILED;

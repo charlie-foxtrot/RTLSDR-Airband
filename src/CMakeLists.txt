@@ -113,7 +113,7 @@ set(CMAKE_REQUIRED_LINK_OPTIONS ${CMAKE_REQUIRED_LINK_OPTIONS_SAVE})
 
 option(NFM "Enable support for narrow FM channels" OFF)
 
-set(PLATFORM "default" CACHE STRING "Optimize the build for the given hardware platform")
+set(PLATFORM "native" CACHE STRING "Optimize the build for the given hardware platform")
 
 option(RTLSDR "Enable RTL-SDR support" ON)
 set(WITH_RTLSDR FALSE)
@@ -219,11 +219,11 @@ elseif(PLATFORM STREQUAL "native")
 	else()
 		message(FATAL_ERROR "Cannot build with PLATFORM=native: the compiler does not support -mtune=native option")
 	endif()
-elseif(PLATFORM STREQUAL "default")
+elseif(PLATFORM STREQUAL "other")
 	# NOOP
 else()
 	message(FATAL_ERROR "Unknown platform '${PLATFORM}'. Valid options are:
-	rpiv1, rpiv2, armv7-generic, armv8-generic, native, default")
+	rpiv1, rpiv2, armv7-generic, armv8-generic, native, other")
 endif()
 
 # Try using VC GPU if enabled. Fallback to fftw3f if disabled or if VC lib not found

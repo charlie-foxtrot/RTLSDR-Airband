@@ -28,15 +28,19 @@
 #include <ogg/ogg.h>
 #include <vorbis/vorbisenc.h>
 #include <shout/shout.h>
+
 // SHOUTERR_RETRY is available since libshout 2.4.0.
 // Set it to an impossible value if it's not there.
 #ifndef SHOUTERR_RETRY
 #define SHOUTERR_RETRY (-255)
-#endif
+#endif // SHOUTERR_RETRY
+
 #include <lame/lame.h>
+
 #ifdef WITH_PULSEAUDIO
 #include <pulse/pulseaudio.h>
-#endif
+#endif // WITH_PULSEAUDIO
+
 #include <syslog.h>
 #include <cstdlib>
 #include <cstring>
@@ -69,7 +73,7 @@ void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 	if (shout_set_tls(shouttemp, icecast->tls_mode) != SHOUTERR_SUCCESS) {
 		shout_free(shouttemp); return;
 	}
-#endif
+#endif // LIBSHOUT_HAS_TLS
 	char mp[100];
 	sprintf(mp, "/%s", icecast->mountpoint);
 	if (shout_set_mount(shouttemp, mp) != SHOUTERR_SUCCESS) {
@@ -85,7 +89,7 @@ void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 	if (shout_set_content_format(shouttemp, SHOUT_FORMAT_MP3, SHOUT_USAGE_AUDIO, NULL) != SHOUTERR_SUCCESS){
 #else
 	if (shout_set_format(shouttemp, SHOUT_FORMAT_MP3) != SHOUTERR_SUCCESS){
-#endif
+#endif // LIBSHOUT_HAS_CONTENT_FORMAT
 		shout_free(shouttemp); return;
 	}
 	if(icecast->name && shout_set_meta(shouttemp, SHOUT_META_NAME, icecast->name) != SHOUTERR_SUCCESS) {
@@ -559,7 +563,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 				continue;
 
 			pulse_write_stream(pdata, channel->mode, channel->waveout, channel->waveout_r, (size_t)WAVE_BATCH * sizeof(float));
-#endif
+#endif // WITH_PULSEAUDIO
 		}
 	}
 }
@@ -589,7 +593,7 @@ void disable_channel_outputs(channel_t *channel) {
 		} else if(output->type == O_PULSE) {
 			pulse_data *pdata = (pulse_data *)(output->data);
 			pulse_shutdown(pdata);
-#endif
+#endif // WITH_PULSEAUDIO
 		}
 	}
 }
@@ -874,7 +878,7 @@ void* output_thread(void *param) {
 #ifdef DEBUG
 	timeval ts, te;
 	gettimeofday(&ts, NULL);
-#endif
+#endif // DEBUG
 	while (!do_exit) {
 		output_param->mp3_signal->wait();
 		for (int i = output_param->mixer_start; i < output_param->mixer_end; i++) {
@@ -890,7 +894,7 @@ void* output_thread(void *param) {
 		debug_bulk_print("mixeroutput: %lu.%lu %lu\n", te.tv_sec, (unsigned long) te.tv_usec, (te.tv_sec - ts.tv_sec) * 1000000UL + te.tv_usec - ts.tv_usec);
 		ts.tv_sec = te.tv_sec;
 		ts.tv_usec = te.tv_usec;
-#endif
+#endif // DEBUG
 		for (int i = output_param->device_start; i < output_param->device_end; i++) {
 			device_t* dev = devices + i;
 			if (dev->input->state == INPUT_RUNNING && dev->waveavail) {
@@ -966,7 +970,7 @@ void* output_check_thread(void*) {
 								pulse_setup(pdata, dev->channels[j].mode);
 							}
 						}
-#endif
+#endif // WITH_PULSEAUDIO
 					}
 				}
 			}
@@ -989,7 +993,7 @@ void* output_check_thread(void*) {
 					if (pdata->context == NULL){
 						pulse_setup(pdata, mixers[i].channel.mode);
 					}
-#endif
+#endif // WITH_PULSEAUDIO
 				}
 			}
 		}

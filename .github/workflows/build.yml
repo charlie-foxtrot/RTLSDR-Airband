@@ -11,10 +11,13 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ ubuntu-22.04, macos-latest, rpi3b, macos-11, macos-12, ubuntu-latest, ubuntu-20.04 ]
+        os: [ ubuntu-22.04, macos-12, rpi3b, macos-13, ubuntu-20.04 ]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 35 # runtime across all OSs, runs can get queued and mac runs take 15-20 min
+    timeout-minutes: 35 # runtime across all OSs, runs can get queued
     steps:
+    - name: Runner Info
+      run: printenv | sort
+
     - name: Checkout repository
       uses: actions/checkout@main
 

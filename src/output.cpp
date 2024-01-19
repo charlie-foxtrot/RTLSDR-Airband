@@ -41,11 +41,14 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <string>
 #include <cerrno>
 #include <cassert>
+#include <sstream>
 #include "rtl_airband.h"
 #include "input-common.h"
 #include "config.h"
+#include "helper_functions.h"
 
 void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 	int ret;
@@ -78,16 +81,20 @@ void shout_setup(icecast_data *icecast, mix_modes mixmode) {
 	if (shout_set_password(shouttemp, icecast->password) != SHOUTERR_SUCCESS) {
 		shout_free(shouttemp); return;
 	}
+#ifdef LIBSHOUT_HAS_CONTENT_FORMAT
+	if (shout_set_content_format(shouttemp, SHOUT_FORMAT_MP3, SHOUT_USAGE_AUDIO, NULL) != SHOUTERR_SUCCESS){
+#else
 	if (shout_set_format(shouttemp, SHOUT_FORMAT_MP3) != SHOUTERR_SUCCESS){
+#endif
 		shout_free(shouttemp); return;
 	}
-	if(icecast->name && shout_set_name(shouttemp, icecast->name) != SHOUTERR_SUCCESS) {
+	if(icecast->name && shout_set_meta(shouttemp, SHOUT_META_NAME, icecast->name) != SHOUTERR_SUCCESS) {
 		shout_free(shouttemp); return;
 	}
-	if(icecast->genre && shout_set_genre(shouttemp, icecast->genre) != SHOUTERR_SUCCESS) {
+	if(icecast->genre && shout_set_meta(shouttemp, SHOUT_META_GENRE, icecast->genre) != SHOUTERR_SUCCESS) {
 		shout_free(shouttemp); return;
 	}
-	if(icecast->description && shout_set_description(shouttemp, icecast->description) != SHOUTERR_SUCCESS) {
+	if(icecast->description && shout_set_meta(shouttemp, SHOUT_META_DESCRIPTION, icecast->description) != SHOUTERR_SUCCESS) {
 		shout_free(shouttemp); return;
 	}
 	char samplerates[20];
@@ -235,8 +242,8 @@ int rename_if_exists(char const *oldpath, char const *newpath) {
  * as well as the appropriate amount of silence when in continuous mode.
  */
 static int open_file(file_data *fdata, mix_modes mixmode, int is_audio) {
-	int rename_result = rename_if_exists(fdata->file_path, fdata->file_path_tmp);
-	fdata->f = fopen(fdata->file_path_tmp, fdata->append ? "a+" : "w");
+	int rename_result = rename_if_exists(fdata->file_path.c_str(), fdata->file_path_tmp.c_str());
+	fdata->f = fopen(fdata->file_path_tmp.c_str(), fdata->append ? "a+" : "w");
 	if (fdata->f == NULL) {
 		return -1;
 	}
@@ -245,20 +252,20 @@ static int open_file(file_data *fdata, mix_modes mixmode, int is_audio) {
 	if (!fdata->append ||
 		fstat(fileno(fdata->f), &st) != 0 || st.st_size == 0) {
 		if(!fdata->split_on_transmission) {
-			log(LOG_INFO, "Writing to %s\n", fdata->file_path);
+			log(LOG_INFO, "Writing to %s\n", fdata->file_path.c_str());
 		} else {
-			debug_print("Writing to %s\n", fdata->file_path_tmp);
+			debug_print("Writing to %s\n", fdata->file_path_tmp.c_str());
 		}
 		return 0;
 	}
 	if(rename_result < 0) {
-		log(LOG_INFO, "Writing to %s\n", fdata->file_path);
-		debug_print("Writing to %s\n", fdata->file_path_tmp);
+		log(LOG_INFO, "Writing to %s\n", fdata->file_path.c_str());
+		debug_print("Writing to %s\n", fdata->file_path_tmp.c_str());
 	} else {
 		log(LOG_INFO, "Appending from pos %llu to %s\n",
-			(unsigned long long)st.st_size, fdata->file_path);
+			(unsigned long long)st.st_size, fdata->file_path.c_str());
 		debug_print("Appending from pos %llu to %s\n",
-			(unsigned long long)st.st_size, fdata->file_path_tmp);
+			(unsigned long long)st.st_size, fdata->file_path_tmp.c_str());
 	}
 
 	if (is_audio) {
@@ -303,24 +310,22 @@ static void close_file(channel_t *channel, file_data *fdata) {
 
 	if(fdata->type == O_FILE && fdata->f && channel->lame) {
 		int encoded = lame_encode_flush_nogap(channel->lame, channel->lamebuf, LAMEBUF_SIZE);
-		debug_print("closing file %s flushed %d\n", fdata->file_path, encoded);
+		debug_print("closing file %s flushed %d\n", fdata->file_path.c_str(), encoded);
 
 		if (encoded > 0) {
 			size_t written = fwrite((void *)channel->lamebuf, 1, (size_t)encoded, fdata->f);
 			if (written == 0 || written < (size_t)encoded)
-				log(LOG_WARNING, "Problem writing %s (%s)\n", fdata->file_path, strerror(errno));
+				log(LOG_WARNING, "Problem writing %s (%s)\n", fdata->file_path.c_str(), strerror(errno));
 		}
 	}
 
 	if (fdata->f) {
 		fclose(fdata->f);
 		fdata->f = NULL;
-		rename_if_exists(fdata->file_path_tmp, fdata->file_path);
+		rename_if_exists(fdata->file_path_tmp.c_str(), fdata->file_path.c_str());
 	}
-	free(fdata->file_path);
-	fdata->file_path = NULL;
-	free(fdata->file_path_tmp);
-	fdata->file_path_tmp = NULL;
+	fdata->file_path.clear();
+	fdata->file_path_tmp.clear();
 }
 
 /*
@@ -349,7 +354,7 @@ static void close_if_necessary(channel_t *channel, file_data *fdata) {
 		if (duration_sec > MAX_TRANSMISSION_TIME_SEC ||
 			(duration_sec > MIN_TRANSMISSION_TIME_SEC && idle_sec > MAX_TRANSMISSION_IDLE_SEC)) {
 			debug_print("closing file %s, duration %f sec, idle %f sec\n",
-						fdata->file_path, duration_sec, idle_sec);
+						fdata->file_path.c_str(), duration_sec, idle_sec);
 			close_file(channel, fdata);
 		}
 		return;
@@ -368,7 +373,7 @@ static void close_if_necessary(channel_t *channel, file_data *fdata) {
 	}
 
 	if (start_hour != current_hour) {
-		debug_print("closing file %s after crossing hour boundary\n", fdata->file_path);
+		debug_print("closing file %s after crossing hour boundary\n", fdata->file_path.c_str());
 		close_file(channel, fdata);
 	}
 }
@@ -409,22 +414,33 @@ static bool output_file_ready(channel_t *channel, file_data *fdata, mix_modes mi
 		return false;
 	}
 
-	size_t file_path_len = strlen(fdata->basename) + strlen(timestamp) + strlen(fdata->suffix) + 11; // include space for '\0' and possible freq in Hz
-	fdata->file_path = (char *)XCALLOC(1, file_path_len);
-	if (fdata->include_freq) {
-		sprintf(fdata->file_path, "%s%s_%d%s", fdata->basename, timestamp, channel->freqlist[channel->freq_idx].frequency, fdata->suffix);
+	std::string output_dir;
+	if (fdata->dated_subdirectories) {
+		output_dir = make_dated_subdirs(fdata->basedir, time);
+		if (output_dir.empty()) {
+			log(LOG_ERR, "Failed to create dated subdirectory\n");
+			return false;
+		}
 	} else {
-		sprintf(fdata->file_path, "%s%s%s", fdata->basename, timestamp, fdata->suffix);
+		output_dir = fdata->basedir;
+		make_dir(output_dir);
 	}
 
-	static char const *tmp_suffix = ".tmp";
-	fdata->file_path_tmp = (char *)XCALLOC(1, file_path_len + strlen(tmp_suffix));
-	sprintf(fdata->file_path_tmp, "%s%s", fdata->file_path, tmp_suffix);
+	// use a string stream to build the output filepath
+	std::stringstream ss;
+	ss << output_dir << '/' << fdata->basename << timestamp;
+	if (fdata->include_freq) {
+		ss << '_' << channel->freqlist[channel->freq_idx].frequency;
+	}
+	ss << fdata->suffix;
+	fdata->file_path = ss.str();	
+
+	fdata->file_path_tmp = fdata->file_path + ".tmp";
 
 	fdata->open_time = fdata->last_write_time = current_time;
 
 	if (open_file(fdata, mixmode, is_audio) < 0) {
-		log(LOG_WARNING, "Cannot open output file %s (%s)\n", fdata->file_path_tmp, strerror(errno));
+		log(LOG_WARNING, "Cannot open output file %s (%s)\n", fdata->file_path_tmp.c_str(), strerror(errno));
 		return false;
 	}
 
@@ -476,7 +492,7 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 						log(LOG_WARNING, "Failed to add shout metadata\n");
 					}
 				}
-				if (shout_set_metadata(icecast->shout, meta) != SHOUTERR_SUCCESS) {
+				if (SHOUT_SET_METADATA(icecast->shout, meta) != SHOUTERR_SUCCESS) {
 					log(LOG_WARNING, "Failed to add shout metadata\n");
 				}
 				shout_metadata_free(meta);
@@ -511,10 +527,10 @@ void process_outputs(channel_t *channel, int cur_scan_freq) {
 			if(written < buflen) {
 				if(ferror(fdata->f))
 					log(LOG_WARNING, "Cannot write to %s (%s), output disabled\n",
-						fdata->file_path, strerror(errno));
+						fdata->file_path.c_str(), strerror(errno));
 				else
 					log(LOG_WARNING, "Short write on %s, output disabled\n",
-						fdata->file_path);
+						fdata->file_path.c_str());
 				close_file(channel, fdata);
 				channel->outputs[k].enabled = false;
 			}

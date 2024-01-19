@@ -107,9 +107,11 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				cerr << "both directory and filename_template required for file\n";
 				error();
 			}
-			fdata->basename = (char *)XCALLOC(1, strlen(outs[o]["directory"]) + strlen(outs[o]["filename_template"]) + 2);
-			sprintf(fdata->basename, "%s/%s", (const char *)outs[o]["directory"], (const char *)outs[o]["filename_template"]);
-			fdata->suffix = strdup(".mp3");
+			fdata->basedir = outs[o]["directory"].c_str();
+			fdata->basename = outs[o]["filename_template"].c_str();
+			fdata->dated_subdirectories = outs[o].exists("dated_subdirectories") ?
+				(bool)(outs[o]["dated_subdirectories"]) : false;
+			fdata->suffix = ".mp3";
 
 			fdata->continuous = outs[o].exists("continuous") ?
 				(bool)(outs[o]["continuous"]) : false;
@@ -146,9 +148,11 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				error();
 			}
 
-			fdata->basename = (char *)XCALLOC(1, strlen(outs[o]["directory"]) + strlen(outs[o]["filename_template"]) + 2);
-			sprintf(fdata->basename, "%s/%s", (const char *)outs[o]["directory"], (const char *)outs[o]["filename_template"]);
-			fdata->suffix = strdup(".cf32");
+			fdata->basedir = outs[o]["directory"].c_str();
+			fdata->basename = outs[o]["filename_template"].c_str();
+			fdata->dated_subdirectories = outs[o].exists("dated_subdirectories") ?
+				(bool)(outs[o]["dated_subdirectories"]) : false;
+			fdata->suffix = ".cf32";
 
 			fdata->continuous = outs[o].exists("continuous") ?
 				(bool)(outs[o]["continuous"]) : false;
@@ -339,6 +343,13 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		channel->prev_waveout = 0.5;
 		channel->alpha = dev->alpha;
 #endif
+
+		// Make sure lowpass / highpass aren't flipped.
+		// If lowpass is enabled (greater than zero) it must be larger than highpass
+		if (channel->lowpass > 0 && channel->lowpass < channel->highpass) {
+			cerr << "Configuration error: devices.["<<i<<"] channels.["<<j<<"]: lowpass (" << channel->lowpass << ") must be greater than or equal to highpass (" << channel->highpass << ")\n";
+			error();
+		}
 
 		modulations channel_modulation = MOD_AM;
 		if(chans[j].exists("modulation")) {
@@ -856,16 +867,28 @@ int parse_mixers(libconfig::Setting &mx) {
 			cerr<<"Configuration error: mixers.["<<i<<"]: undefined mixer name\n";
 			error();
 		}
-		mixer_t *mixer = &mixers[mm];
 		debug_print("mm=%d name=%s\n", mm, name);
-		mixer->enabled = false;
+		mixer_t *mixer = &mixers[mm];
 		mixer->name = strdup(name);
+		mixer->enabled = false;
 		mixer->interval = MIX_DIVISOR;
 		mixer->output_overrun_count = 0;
+		mixer->input_count = 0;
+		mixer->inputs = NULL;
+		mixer->inputs_todo = NULL;
+		mixer->input_mask = NULL;
 		channel_t *channel = &mixer->channel;
 		channel->highpass = mx[i].exists("highpass") ? (int)mx[i]["highpass"] : 100;
 		channel->lowpass = mx[i].exists("lowpass") ? (int)mx[i]["lowpass"] : 2500;
 		channel->mode = MM_MONO;
+
+		// Make sure lowpass / highpass aren't flipped.
+		// If lowpass is enabled (greater than zero) it must be larger than highpass
+		if (channel->lowpass > 0 && channel->lowpass < channel->highpass) {
+			cerr << "Configuration error: mixers.[" << i <<"]: lowpass (" << channel->lowpass << ") must be greater than or equal to highpass (" << channel->highpass << ")\n";
+			error();
+		}
+
 		libconfig::Setting &outputs = mx[i]["outputs"];
 		channel->output_count = outputs.getLength();
 		if(channel->output_count < 1) {

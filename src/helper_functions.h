@@ -1,8 +1,7 @@
 /*
- * config.h.in
- * Template for cmake-generated config.h
+ * helper_functions.h
  *
- * Copyright (c) 2015-2021 Tomasz Lemiech <szpajder@gmail.com>
+ * Copyright (C) 2023 charlie-foxtrot
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,19 +17,16 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _CONFIG_H
-#define _CONFIG_H
-#cmakedefine WITH_RTLSDR
-#cmakedefine WITH_MIRISDR
-#cmakedefine WITH_SOAPYSDR
-#cmakedefine WITH_PROFILING
-#cmakedefine WITH_PULSEAUDIO
-#cmakedefine NFM
-#cmakedefine WITH_BCM_VC
-#cmakedefine LIBSHOUT_HAS_TLS
-#cmakedefine LIBSHOUT_HAS_CONTENT_FORMAT
-#define SINCOSF @SINCOSF@
+#ifndef _HELPER_FUNCTIONS_H
+#define _HELPER_FUNCTIONS_H
 
-#define SHOUT_SET_METADATA @SHOUT_SET_METADATA@
+#include <ctime> // struct tm
+#include <string>
 
-#endif // !_CONFIG_H
+bool dir_exists(const std::string &dir_path);
+bool file_exists(const std::string &file_path);
+bool make_dir(const std::string &dir_path);
+bool make_subdirs(const std::string &basedir, const std::string &subdirs);
+std::string make_dated_subdirs(const std::string &basedir, const struct tm *time);
+
+#endif /* _HELPER_FUNCTIONS_H */

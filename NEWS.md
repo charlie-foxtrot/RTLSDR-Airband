@@ -1,5 +1,13 @@
 # NEWS
 
+Version 4.2.0 (Oct 13, 2023):
+
+* Changes in this release:
+  * Add support for building with libshout v2.4.6, see [#382](https://github.com/charlie-foxtrot/RTLSDR-Airband/pull/382) and [#422](https://github.com/charlie-foxtrot/RTLSDR-Airband/pull/422)
+  * Add error checking for lowpass <= highpass, see [#399](https://github.com/charlie-foxtrot/RTLSDR-Airband/pull/399) and [#412](https://github.com/charlie-foxtrot/RTLSDR-Airband/pull/412)
+  * Remove limit on count of mixer inputs (thanks @cdknox), see [#408](https://github.com/charlie-foxtrot/RTLSDR-Airband/pull/408)
+  * Add `dated_subdirectories` config option for output files (thanks, @marcin-osowski), see [#413](https://github.com/charlie-foxtrot/RTLSDR-Airband/pull/413)
+
 Version 4.1.1 (May 1, 2023):
 
 * Changes in this release:

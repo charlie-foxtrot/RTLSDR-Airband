@@ -20,6 +20,7 @@
 
 #ifndef _RTL_AIRBAND_H
 #define _RTL_AIRBAND_H 1
+#include <string>
 #include <cstdio>
 #include <complex>
 #include <stdint.h>		// uint32_t
@@ -68,7 +69,6 @@
 #define MP3_RATE 22050
 #define MAX_SHOUT_QUEUELEN 32768
 #define TAG_QUEUE_LEN 16
-#define MAX_MIXINPUTS 32
 
 #define MIN_FFT_SIZE_LOG 8
 #define DEFAULT_FFT_SIZE_LOG 9
@@ -76,11 +76,6 @@
 
 #define LAMEBUF_SIZE 34762 //todo: calculate
 #define MIX_DIVISOR 2
-
-#define ONES(x) ~(~0U << (x))
-#define SET_BIT(a, x) (a) |= (1 << (x))
-#define RESET_BIT(a, x) (a) &= ~(1 << (x))
-#define IS_SET(a, x) (a) & (1 << (x))
 
 #if defined WITH_BCM_VC
 struct sample_fft_arg
@@ -128,10 +123,12 @@ struct icecast_data {
 };
 
 struct file_data {
-	char *basename;
-	char *suffix;
-	char *file_path;
-	char *file_path_tmp;
+	std::string basedir;
+	std::string basename;
+	std::string suffix;
+	std::string file_path;
+	std::string file_path_tmp;
+	bool dated_subdirectories;
 	bool continuous;
 	bool append;
 	bool split_on_transmission;
@@ -244,11 +241,11 @@ struct channel_t {
 	struct freq_t *freqlist;
 	int freq_count;
 	int freq_idx;
-	int output_count;
 	int need_mp3;
 	int needs_raw_iq;
 	int has_iq_outputs;
 	enum ch_states state;		// mixer channel state flag
+	int output_count;
 	output_t *outputs;
 	int highpass;               // highpass filter cutoff
 	int lowpass;                // lowpass filter cutoff
@@ -292,13 +289,13 @@ struct mixinput_t {
 struct mixer_t {
 	const char *name;
 	bool enabled;
-	int input_count;
 	int interval;
-	unsigned int inputs_todo;
-	unsigned int input_mask;
-	channel_t channel;
-	mixinput_t inputs[MAX_MIXINPUTS];
 	size_t output_overrun_count;
+	int input_count;
+	mixinput_t *inputs;
+	bool *inputs_todo;
+	bool *input_mask;
+	channel_t channel;
 };
 
 struct demod_params_t {

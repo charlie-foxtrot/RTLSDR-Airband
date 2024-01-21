@@ -31,10 +31,6 @@
 #include "hello_fft/gpu_fft.h"
 #endif /* WITH_BCM_VC */
 
-#ifdef __SSE__
-#include <xmmintrin.h>
-#endif /* __SSE__ */
-
 #include <unistd.h>
 #include <pthread.h>
 #include <syslog.h>
@@ -464,14 +460,6 @@ void *demodulate(void *params) {
 				samplefft(&sfa, dev->input->buffer + dev->input->bufs + i * bps, window, levels_ptr);
 				sfa.dest+= fft->step;
 			}
-#elif __SSE__
-			unsigned char* buf2 = dev->input->buffer + dev->input->bufs;
-			for (size_t i = 0; i < fft_size; i += 2, buf2 += 4) {
-				__m128 a = _mm_set_ps(levels_ptr[buf2[3]], levels_ptr[buf2[2]], levels_ptr[buf2[1]], levels_ptr[buf2[0]]);
-				__m128 b = _mm_set_ps(window[i+1], window[i+1], window[i], window[i]);
-				a = _mm_mul_ps(a, b);
-				_mm_store_ps(&fftin[i][0], a);
-			}
 #else
 			unsigned char* buf2 = dev->input->buffer + dev->input->bufs;
 			for (size_t i = 0; i < fft_size; i++, buf2 += 2) {
@@ -802,22 +790,6 @@ int main(int argc, char* argv[]) {
 	if(!debug_path) debug_path = strdup(DEBUG_PATH);
 	init_debug(debug_path);
 #endif /* DEBUG */
-
-#if __SSE__
-// check EDx of the CPU id to ensure Streaming SIMD Extensions (SSE) are supported
-// https://en.wikipedia.org/wiki/CPUID#EAX=1:_Processor_Info_and_Feature_Bits
-#define cpuid(func,ax,bx,cx,dx)\
-	__asm__ __volatile__ ("cpuid":\
-		"=a" (ax), "=b" (bx), "=c" (cx), "=d" (dx) : "a" (func));
-	int a,b,c,d;
-	cpuid(1,a,b,c,d);
-	if((int)((d >> 25) & 0x1)) {
-		/* NOOP */
-	} else {
-		printf("Unsupported CPU.\n");
-		error();
-	}
-#endif /* __SSE__ */
 
 	// If executing other than as root, GPU memory gets alloc'd and the
 	// 'permission denied' message on /dev/mem kills rtl_airband without

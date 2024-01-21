@@ -1,15 +1,16 @@
-name: Test build
+name: Run CI
 
 on:
   push:
     branches: [main, unstable]
     tags: ['v*']
   pull_request:
+  workflow_dispatch:
   schedule:
     - cron: '39 13 * * *' # run daily 
 
 jobs:
-  build:
+  ci_build:
     strategy:
       matrix:
         os: [ ubuntu-22.04, macos-12, rpi3b, macos-13, ubuntu-20.04 ]

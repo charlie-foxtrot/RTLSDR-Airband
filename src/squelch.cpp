@@ -20,6 +20,7 @@
 #include "squelch.h"
 
 #ifdef DEBUG_SQUELCH
+#include <errno.h>   // errno
 #include <string.h>  // strerror()
 #endif /* DEBUG_SQUELCH _*/
 
@@ -488,6 +489,8 @@ void Squelch::calculate_noise_floor(void) {
 
 	noise_floor_ = noise_floor_ * decay_factor + std::min(pre_filter_.capped_, noise_floor_) * new_factor + 1e-6f;
 
+	debug_print("%zu: noise floor is now %f\n", sample_count_, noise_floor_);
+
 	// Need to update moving_avg_cap_ - depends on noise_floor_
 	calculate_moving_avg_cap();
 
@@ -556,8 +559,8 @@ bool Squelch::currently_flapping(void) const {
 					   ('post_filter_capped', np.single),
 					   ('current_state', np.intc),
 					   ('delay', np.intc),
-					   ('low_signalcount', np.intc)
-					   ('ctcss_fast_has_tone', np.intc)
+					   ('low_signalcount', np.intc),
+					   ('ctcss_fast_has_tone', np.intc),
 					   ('ctcss_slow_has_tone', np.intc)
 					  ])
 

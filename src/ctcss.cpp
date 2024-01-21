@@ -146,17 +146,25 @@ void CTCSS::process_audio_sample(const float &sample) {
     
     enough_samples_ = true;
 
-	// if this is sample fills out the window then check if the strongest tone is
-	// the CTCSS tone we are looking for
+	// if this is sample fills out the window then check if one of the "strongest"
+	// tones is the CTCSS tone we are looking for.  NOTE: there can be multiple "strongest"
+	// tones based on floating point math
 	vector<ToneDetectorSet::PowerIndex> tone_powers;
 	float avg_power = powers_.sorted_powers(tone_powers);
-    if (tone_powers[0].freq == ctcss_freq_ && tone_powers[0].power > avg_power) {
+	float ctcss_tone_power = 0.0;
+	for( const auto i:tone_powers) {
+		if (i.freq == ctcss_freq_) {
+			ctcss_tone_power = i.power;
+			break;
+		}
+	}
+	if (ctcss_tone_power == tone_powers[0].power && ctcss_tone_power > avg_power) {
         debug_print("CTCSS tone of %f Hz detected\n", ctcss_freq_);
         has_tone_ = true;
         found_count_++;
     } else {
-        debug_print("CTCSS tone of %f Hz not detected - highest power was %f Hz at %f\n",
-					ctcss_freq_, tone_powers[0].freq, tone_powers[0].power);
+        debug_print("CTCSS tone of %f Hz not detected - highest power was %f Hz at %f vs %f\n",
+					ctcss_freq_, tone_powers[0].freq, tone_powers[0].power, ctcss_tone_power);
         has_tone_ = false;
         not_found_count_++;
     }

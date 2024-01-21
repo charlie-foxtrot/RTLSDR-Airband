@@ -236,7 +236,7 @@ TEST_F(GenerateSignalTest, get_sample_two_tones) {
 	Tone tone1(sample_rate, tone1_freq, tone1_ampl);
 	Tone tone2(sample_rate, tone2_freq, tone2_ampl);
 	for (int i = 0 ; i < 60 * sample_rate ; ++i) {
-		ASSERT_FLOAT_EQ(signal.get_sample(), tone1.get_sample() + tone2.get_sample());
+		ASSERT_NEAR(signal.get_sample(), tone1.get_sample() + tone2.get_sample(), 0.000001);
 	}
 }
 

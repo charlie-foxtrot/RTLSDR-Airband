@@ -24,7 +24,7 @@
 
 #ifdef DEBUG_SQUELCH
 #include <stdio.h>  // needed for debug file output
-#endif
+#endif /* DEBUG_SQUELCH */
 
 #include "ctcss.h"
 
@@ -98,7 +98,7 @@ public:
 #ifdef DEBUG_SQUELCH
 	~Squelch(void);
 	void set_debug_file(const char *filepath);
-#endif
+#endif /* DEBUG_SQUELCH */
 
 private:
 	enum State {
@@ -175,7 +175,7 @@ private:
 	void debug_value(const float &value);
 	void debug_value(const int &value);
 	void debug_state(void);
-#endif
+#endif /* DEBUG_SQUELCH */
 };
 
-#endif
+#endif /* _SQUELCH_H */

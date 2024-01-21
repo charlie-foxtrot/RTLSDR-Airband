@@ -69,13 +69,12 @@ static bool rtlsdr_nearest_gain(rtlsdr_dev_t *dev, int target_gain, int *nearest
 }
 
 static int rtlsdr_find_device_by_serial(char const * const s) {
-	int device_count;
 	char vendor[256] = {0}, product[256] = {0}, serial[256] = {0};
-	device_count = rtlsdr_get_device_count();
-	if(device_count < 1) {
+	int count = rtlsdr_get_device_count();
+	if(count < 1) {
 		return -1;
 	}
-	for(int i = 0; i < device_count; i++) {
+	for(int i = 0; i < count; i++) {
 		rtlsdr_get_device_usb_strings(i, vendor, product, serial);
 		if (strcmp(s, serial) != 0) {
 			continue;

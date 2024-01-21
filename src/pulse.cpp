@@ -128,7 +128,7 @@ static void pulse_setup_streams(pulse_data *pdata) {
 		.channels = 1
 #else		// for g++ 4.6 (eg. Raspbian Wheezy)
 		PA_SAMPLE_FLOAT32LE, WAVE_RATE, 1
-#endif
+#endif /* __cplusplus */
 	};
 	pa_channel_map_init_mono(&pdata->lmap);
 	pdata->lmap.map[0] = (pdata->mode == MM_STEREO ? PA_CHANNEL_POSITION_LEFT : PA_CHANNEL_POSITION_MONO);

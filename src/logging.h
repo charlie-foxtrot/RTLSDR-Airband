@@ -36,7 +36,7 @@
 #else
 #define debug_print(fmt, ...) nop()
 #define debug_bulk_print(fmt, ...) nop()
-#endif
+#endif /* DEBUG */
 
 enum LogDestination { SYSLOG, STDERR, NONE};
 extern LogDestination log_destination;

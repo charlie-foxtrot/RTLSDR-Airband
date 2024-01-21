@@ -192,17 +192,17 @@ endif()
 option(BCM_VC "Enable Broadcom Videocore 3 support" OFF)
 set(WITH_BCM_VC FALSE)
 
-if(PLATFORM STREQUAL "rpiv1")
-	message(FATAL_ERROR "platform '${PLATFORM}' has been deprecated")
-elseif(PLATFORM STREQUAL "armv7-generic")
-	message(FATAL_ERROR "platform '${PLATFORM}' has been deprecated")
-elseif(PLATFORM STREQUAL "armv8-generic")
-	message(FATAL_ERROR "platform '${PLATFORM}' has been deprecated")
+# error out on depricated PLATFORM values
+if(PLATFORM STREQUAL "rpiv1" OR PLATFORM STREQUAL "armv7-generic" OR PLATFORM STREQUAL "armv8-generic")
+	message(FATAL_ERROR "platform '${PLATFORM}' has been deprecated, see https://github.com/charlie-foxtrot/RTLSDR-Airband/discussions/447")
+# rpiv2 - Raspberry Pi 2 or Raspberry Pi 3 using Broadcom VideoCore IV GPU for FFT
+# NOTE: use 'native' to not use the GPU for FFT
 elseif(PLATFORM STREQUAL "rpiv2")
 	set(BCM_VC ON)
 	add_compile_options(-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard)
 	enable_language(ASM)
 	list(APPEND rtl_airband_extra_sources rtl_airband_neon.s)
+# native - let the complier optimize to run on local hardware (default)
 elseif(PLATFORM STREQUAL "native")
 	CHECK_CXX_COMPILER_FLAG(-march=native CXX_HAS_MARCH_NATIVE)
 	if(CXX_HAS_MARCH_NATIVE)
@@ -210,8 +210,10 @@ elseif(PLATFORM STREQUAL "native")
 	else()
 		message(FATAL_ERROR "Cannot build with PLATFORM=native: the compiler does not support -march=native option")
 	endif()
+# generic - dont add any hardware related flags, used to build a "portable" binary
 elseif(PLATFORM STREQUAL "generic")
 	# NO-OP
+# error out on unrecongnnized PLATFORM value
 else()
 	message(FATAL_ERROR "Unknown platform '${PLATFORM}'. Valid options are: rpiv2, native, and generic")
 endif()

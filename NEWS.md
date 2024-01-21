@@ -1,5 +1,24 @@
 # NEWS
 
+This file will no longer be updated with each release, for changes between releases, see PRs merged to the repo
+
+Version 5.0.0 (Jan 21, 2024):
+
+* NOTE: Going forward a release tag will be automatically created on each merge to `main`, and changes will not be reflected in this file.  For changes between versions see the repo's [release history](https://github.com/charlie-foxtrot/RTLSDR-Airband/releases).
+* NOTE: Going forward PRs will be opened directly against `main` and the `unstable` branch will no longer be used.
+* NOTE: This repo has significantly diverged from the original project [microtony/RTLSDR-Airband](https://github.com/microtony/RTLSDR-Airband) so it has been been detached (ie no longer a fork). 
+
+* Changes in this release, see [#444](https://github.com/charlie-foxtrot/RTLSDR-Airband/pull/444):
+  * build and publish docker containers
+  * changes to supported `cmake` platforms:
+    * depreciate `rpiv1`, `armv7-generic`, and `armv8-generic` and build platforms
+    * change default build platform to `native`
+    * rename `default` to `generic`
+  * enable a series of compile warnings and cleanup code
+  * remove `SSE` specific code - let the compiler "do the right thing"
+  * remove some no longer supported windows `ifdef`'s
+  * fix CTCSS bug that could miss a tone when multiple tones have the same power (happens with less accurate floating point operations, ie i386)
+
 Version 4.2.0 (Oct 13, 2023):
 
 * Changes in this release:

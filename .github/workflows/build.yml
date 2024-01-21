@@ -3,6 +3,7 @@ name: Test build
 on:
   push:
     branches: [main, unstable]
+    tags: ['v*']
   pull_request:
   schedule:
     - cron: '39 13 * * *' # run daily 
@@ -18,8 +19,8 @@ jobs:
     - name: Runner Info
       run: printenv | sort
 
-    - name: Checkout repository
-      uses: actions/checkout@main
+    - name: Checkout
+      uses: actions/checkout@v4
 
     - name: Install packaged dependencies
       run: .github/install_dependencies

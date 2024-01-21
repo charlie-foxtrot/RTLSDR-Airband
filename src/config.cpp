@@ -90,7 +90,7 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 			} else {
 				idata->tls_mode = SHOUT_TLS_DISABLED;
 			}
-#endif // LIBSHOUT_HAS_TLS
+#endif /* LIBSHOUT_HAS_TLS */
 			channel->need_mp3 = 1;
 		} else if(!strncmp(outs[o]["type"], "file", 4)) {
 			channel->outputs[oo].data = XCALLOC(1, sizeof(struct file_data));
@@ -255,7 +255,7 @@ static int parse_outputs(libconfig::Setting &outs, channel_t *channel, int i, in
 				snprintf(buf, sizeof(buf), "%.3f MHz", (float)channel->freqlist[0].frequency  / 1000000.0f);
 				pdata->stream_name = strdup(buf);
 			}
-#endif
+#endif /* WITH_PULSEAUDIO */
 		} else {
 			if(parsing_mixers) {
 				cerr << "Configuration error: mixers.["<<i<<"] outputs.["<<o<<"]: ";
@@ -342,7 +342,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		channel->pj = 0;
 		channel->prev_waveout = 0.5;
 		channel->alpha = dev->alpha;
-#endif
+#endif /* NFM */
 
 		// Make sure lowpass / highpass aren't flipped.
 		// If lowpass is enabled (greater than zero) it must be larger than highpass
@@ -357,7 +357,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			if(strncmp(chans[j]["modulation"], "nfm", 3) == 0) {
 				channel_modulation = MOD_NFM;
 			} else
-#endif
+#endif /* NFM */
 			if(strncmp(chans[j]["modulation"], "am", 2) != 0) {
 				cerr<<"Configuration error: devices.["<<i<<"] channels.["<<j<<"]: unknown modulation\n";
 				error();
@@ -430,7 +430,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 					if(strncmp(chans[j]["modulations"][f], "nfm", 3) == 0) {
 						channel->freqlist[f].modulation = MOD_NFM;
 					} else
-#endif
+#endif /* NFM */
 					if(strncmp(chans[j]["modulations"][f], "am", 2) == 0) {
 						channel->freqlist[f].modulation = MOD_AM;
 					} else {
@@ -668,7 +668,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 		if(chans[j].exists("tau")) {
 			channel->alpha = ((int)chans[j]["tau"] == 0 ? 0.0f : exp(-1.0f/(WAVE_RATE * 1e-6 * (int)chans[j]["tau"])));
 		}
-#endif
+#endif /* NFM */
 		libconfig::Setting &outputs = chans[j]["outputs"];
 		channel->output_count = outputs.getLength();
 		if(channel->output_count < 1) {
@@ -697,7 +697,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 				break;
 			}
 		}
-#endif
+#endif /* NFM */
 
 		if(channel->needs_raw_iq) {
 // Downmixing is done only for NFM and raw IQ outputs. It's not critical to have some residual
@@ -743,7 +743,7 @@ static int parse_channels(libconfig::Setting &chans, device_t *dev, int i) {
 			snprintf(tmp_filepath, sizeof(tmp_filepath), "./squelch_debug-%d-%d.dat", j, f);
 			channel->freqlist[f].squelch.set_debug_file(tmp_filepath);
 		}
-#endif
+#endif /* DEBUG_SQUELCH */
 
 		jj++;
 	}
@@ -768,7 +768,7 @@ int parse_devices(libconfig::Setting &devs) {
 #else
 			cerr<<"Configuration error: devices.["<<i<<"]: mandatory parameter missing: type\n";
 			error();
-#endif
+#endif /* WITH_RTLSDR */
 		}
 		assert(dev->input != NULL);
 		if(devs[i].exists("sample_rate")) {
@@ -800,7 +800,7 @@ int parse_devices(libconfig::Setting &devs) {
 		} else {
 			dev->alpha = alpha;
 		}
-#endif
+#endif /* NFM */
 
 // Parse hardware-dependent configuration parameters
 		if(input_parse_config(dev->input, devs[i]) < 0) {

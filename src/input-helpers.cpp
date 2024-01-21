@@ -18,11 +18,6 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-// avoid "unknown conversion type character `z' in format"
-#ifdef __MINGW32__
-#define __USE_MINGW_ANSI_STDIO 1
-#endif
-
 #include <iostream>			// cerr
 #include <string.h>			// memcpy
 #include <pthread.h>		// pthread_mutex_lock, unlock

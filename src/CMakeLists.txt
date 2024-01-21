@@ -113,7 +113,7 @@ set(CMAKE_REQUIRED_LINK_OPTIONS ${CMAKE_REQUIRED_LINK_OPTIONS_SAVE})
 
 option(NFM "Enable support for narrow FM channels" OFF)
 
-set(PLATFORM "default" CACHE STRING "Optimize the build for the given hardware platform")
+set(PLATFORM "native" CACHE STRING "Optimize the build for the given hardware platform")
 
 option(RTLSDR "Enable RTL-SDR support" ON)
 set(WITH_RTLSDR FALSE)
@@ -192,20 +192,17 @@ endif()
 option(BCM_VC "Enable Broadcom Videocore 3 support" OFF)
 set(WITH_BCM_VC FALSE)
 
-if(PLATFORM STREQUAL "rpiv1")
-	set(BCM_VC ON)
-	add_compile_options(-march=armv6zk -mcpu=arm1176jzf-s -mtune=arm1176jzf-s -mfpu=vfp)
-	enable_language(ASM)
-	list(APPEND rtl_airband_extra_sources rtl_airband_vfp.s)
+# error out on depricated PLATFORM values
+if(PLATFORM STREQUAL "rpiv1" OR PLATFORM STREQUAL "armv7-generic" OR PLATFORM STREQUAL "armv8-generic")
+	message(FATAL_ERROR "platform '${PLATFORM}' has been deprecated, see https://github.com/charlie-foxtrot/RTLSDR-Airband/discussions/447")
+# rpiv2 - Raspberry Pi 2 or Raspberry Pi 3 using Broadcom VideoCore IV GPU for FFT
+# NOTE: use 'native' to not use the GPU for FFT
 elseif(PLATFORM STREQUAL "rpiv2")
 	set(BCM_VC ON)
 	add_compile_options(-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard)
 	enable_language(ASM)
 	list(APPEND rtl_airband_extra_sources rtl_airband_neon.s)
-elseif(PLATFORM STREQUAL "armv7-generic")
-	add_compile_options(-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard)
-elseif(PLATFORM STREQUAL "armv8-generic")
-	add_compile_options(-march=armv8-a+crc -mtune=cortex-a53)
+# native - let the complier optimize to run on local hardware (default)
 elseif(PLATFORM STREQUAL "native")
 	CHECK_CXX_COMPILER_FLAG(-march=native CXX_HAS_MARCH_NATIVE)
 	if(CXX_HAS_MARCH_NATIVE)
@@ -213,17 +210,12 @@ elseif(PLATFORM STREQUAL "native")
 	else()
 		message(FATAL_ERROR "Cannot build with PLATFORM=native: the compiler does not support -march=native option")
 	endif()
-	CHECK_CXX_COMPILER_FLAG(-mtune=native CXX_HAS_MTUNE_NATIVE)
-	if(CXX_HAS_MTUNE_NATIVE)
-		add_compile_options(-mtune=native)
-	else()
-		message(FATAL_ERROR "Cannot build with PLATFORM=native: the compiler does not support -mtune=native option")
-	endif()
-elseif(PLATFORM STREQUAL "default")
-	# NOOP
+# generic - dont add any hardware related flags, used to build a "portable" binary
+elseif(PLATFORM STREQUAL "generic")
+	# NO-OP
+# error out on unrecongnnized PLATFORM value
 else()
-	message(FATAL_ERROR "Unknown platform '${PLATFORM}'. Valid options are:
-	rpiv1, rpiv2, armv7-generic, armv8-generic, native, default")
+	message(FATAL_ERROR "Unknown platform '${PLATFORM}'. Valid options are: rpiv2, native, and generic")
 endif()
 
 # Try using VC GPU if enabled. Fallback to fftw3f if disabled or if VC lib not found

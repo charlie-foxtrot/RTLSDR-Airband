@@ -1,12 +1,17 @@
 # RTLSDR-Airband
 
+![main](https://github.com/charlie-foxtrot/RTLSDR-Airband/actions/workflows/build.yml/badge.svg?branch=main)
+
+**NOTE: Going forward a release tag will be automatically created on each merge to `main`.  For the latest version, see [here](https://github.com/charlie-foxtrot/RTLSDR-Airband/releases/latest).**
+
+**NOTE: Going forward PRs will be opened directly against `main` and the `unstable` branch will no longer be used.**
+
+**NOTE: This repo has significantly diverged from the original project [microtony/RTLSDR-Airband](https://github.com/microtony/RTLSDR-Airband) so it has been been detached (ie no longer a fork).**
+
+**NOTE: As of version `v5.0.0` specific build support for `rpiv1`, `armv7-generic`, and `armv8-generic` have been deprecated for the new default `native`, see [#447](https://github.com/charlie-foxtrot/RTLSDR-Airband/discussions/447)**
+
 **NOTE: Repo URL has moved to https://github.com/charlie-foxtrot/RTLSDR-Airband see [#342](https://github.com/charlie-foxtrot/RTLSDR-Airband/discussions/342) for info**
 
-**Current stable release: [4.2.0](https://github.com/charlie-foxtrot/RTLSDR-Airband/releases/latest)** (released Oct 13, 2023)
-
-|`main`|`unstable`|
-|:---:|:---:|
-|![main](https://github.com/charlie-foxtrot/RTLSDR-Airband/actions/workflows/build.yml/badge.svg?branch=main)|![unstable](https://github.com/charlie-foxtrot/RTLSDR-Airband/actions/workflows/build.yml/badge.svg?branch=unstable)|
 
 RTLSDR-Airband receives analog radio voice channels and produces
 audio streams which can be routed to various outputs, such as online
@@ -32,7 +37,7 @@ of RTLSDR-Airband. Special thanks go to:
 
 ## License
 
-Copyright (C) 2022-2023 charlie-foxtrot
+Copyright (C) 2022-2024 charlie-foxtrot
 
 Copyright (C) 2015-2022 Tomasz Lemiech <szpajder@gmail.com>
 

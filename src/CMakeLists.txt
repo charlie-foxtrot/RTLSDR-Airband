@@ -248,6 +248,7 @@ else()
 endif()
 
 message(STATUS "RTLSDR-Airband configuration summary:\n")
+message(STATUS "- Version string:\t\t${RTL_AIRBAND_VERSION}")
 message(STATUS "- Build type:\t\t${CMAKE_BUILD_TYPE}")
 message(STATUS "- Operating system:\t\t${CMAKE_SYSTEM_NAME}")
 message(STATUS "- SDR drivers:")

@@ -1,9 +1,6 @@
 # build container
 FROM debian:bookworm-slim AS build
 
-# set working dir
-WORKDIR /app
-
 # install build dependencies
 RUN apt-get update && \
     apt-get upgrade -y && \
@@ -26,6 +23,9 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
   
+# set working dir for building rtl-sdr support
+WORKDIR /rtl_sdr_build
+ 
 # compile / install rtl-sdr-blog version of rtl-sdr for v4 support
 RUN git clone https://github.com/rtlsdrblog/rtl-sdr-blog && \
     cd rtl-sdr-blog/ && \
@@ -38,25 +38,30 @@ RUN git clone https://github.com/rtlsdrblog/rtl-sdr-blog && \
 
 # TODO: build anything from source?
 
+# set working dir for project build
+WORKDIR /rtl_airband_build
+
 # copy in the rtl_airband source
-COPY CMakeLists.txt src /app/
+# WARNING: not copying in the whole repo, this may need to be updated if build files are added outside of src/
+COPY .git/ .git/
+COPY src/ src/
+COPY CMakeLists.txt .
+
+RUN find .
 
 # configure and build
 # TODO: detect platforms
 RUN uname -m && \
-    echo | gcc -### -v -E - | tee /app/compiler_native_info.txt && \
+    echo | gcc -### -v -E - | tee compiler_native_info.txt && \
     cmake -B build_dir -DPLATFORM=generic -DCMAKE_BUILD_TYPE=Release -DNFM=TRUE -DBUILD_UNITTESTS=TRUE && \
     VERBOSE=1 cmake --build build_dir -j4
 
 # make sure unit tests pass
-RUN ./build_dir/unittests
+RUN ./build_dir/src/unittests
 
 
 # application container
 FROM debian:bookworm-slim
-
-# set working dir
-WORKDIR /app
 
 # install runtime dependencies
 RUN apt-get update && \
@@ -76,11 +81,11 @@ RUN apt-get update && \
   rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # install (from build container) rtl-sdr-blog version of rtl-sdr for v4 support
-COPY --from=build /app/librtlsdr0_*.deb /app/librtlsdr-dev_*.deb /app/rtl-sdr_*.deb ./
-RUN dpkg -i librtlsdr0_*.deb && \
-    dpkg -i librtlsdr-dev_*.deb && \
-    dpkg -i rtl-sdr_*.deb && \
-    rm -rf *.deb && \
+COPY --from=build /rtl_sdr_build/librtlsdr0_*.deb /rtl_sdr_build/librtlsdr-dev_*.deb /rtl_sdr_build/rtl-sdr_*.deb /tmp/
+RUN dpkg -i /tmp/librtlsdr0_*.deb && \
+    dpkg -i /tmp/librtlsdr-dev_*.deb && \
+    dpkg -i /tmp/rtl-sdr_*.deb && \
+    rm -rf /tmp/*.deb && \
     echo '' | tee --append /etc/modprobe.d/rtl_sdr.conf && \
     echo 'blacklist dvb_usb_rtl28xxun' | tee --append /etc/modprobe.d/rtl_sdr.conf && \
     echo 'blacklist rtl2832' | tee --append /etc/modprobe.d/rtl_sdr.conf && \
@@ -88,8 +93,8 @@ RUN dpkg -i librtlsdr0_*.deb && \
 
 # Copy rtl_airband from the build container
 COPY LICENSE /opt/rtl_airband/
-COPY --from=build /app/build_dir/unittests /opt/rtl_airband/
-COPY --from=build /app/build_dir/rtl_airband /opt/rtl_airband/
+COPY --from=build /rtl_airband_build/build_dir/src/unittests /opt/rtl_airband/
+COPY --from=build /rtl_airband_build/build_dir/src/rtl_airband /opt/rtl_airband/
 RUN chmod a+x /opt/rtl_airband/unittests /opt/rtl_airband/rtl_airband
 
 # make sure unit tests pass

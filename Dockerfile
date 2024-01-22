@@ -47,8 +47,6 @@ COPY ./.git/ .git/
 COPY ./src/ src/
 COPY ./CMakeLists.txt .
 
-RUN find .
-
 # configure and build
 # TODO: detect platforms
 RUN uname -m && \

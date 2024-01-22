@@ -23,7 +23,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
       with:
-        fetch-depth: '0'
+        fetch-depth: '0' # need full history to get version from git tag
 
     - name: Install packaged dependencies
       run: .github/install_dependencies

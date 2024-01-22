@@ -43,9 +43,9 @@ WORKDIR /rtl_airband_build
 
 # copy in the rtl_airband source
 # WARNING: not copying in the whole repo, this may need to be updated if build files are added outside of src/
-COPY .git/ .git/
-COPY src/ src/
-COPY CMakeLists.txt .
+COPY ./.git/ .git/
+COPY ./src/ src/
+COPY ./CMakeLists.txt .
 
 RUN find .
 

@@ -6,7 +6,7 @@ execute_process(COMMAND git describe --tags --abbrev --dirty --always
    OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 if("${RTL_AIRBAND_VERSION}" STREQUAL "" )
-   message(FATAL_ERROR "Failed to detect RTL_AIRBAND_VERSION")
+   message(FATAL_ERROR "Failed to detect RTL_AIRBAND_VERSION, missing git repo history?")
 endif(NOT CMAKE_BUILD_TYPE)
 
 set (CMAKE_CXX_STANDARD 11)

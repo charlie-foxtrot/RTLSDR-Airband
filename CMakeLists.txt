@@ -6,11 +6,22 @@ execute_process(COMMAND git describe --tags --abbrev --dirty --always
    OUTPUT_STRIP_TRAILING_WHITESPACE
    ERROR_VARIABLE RTL_AIRBAND_VERSION_ERROR)
 
+#set (RTL_AIRBAND_VERSION "")
+
+message(STATUS "Version detected: \"${RTL_AIRBAND_VERSION}\"")
+message(STATUS "Version detected: \"${RTL_AIRBAND_VERSION_ERROR}\"")
+
+
 string(COMPARE EQUAL "${RTL_AIRBAND_VERSION}" "" RTL_AIRBAND_VERSION_UNSET)
 
 if(RTL_AIRBAND_VERSION_UNSET)
-   message(FATAL_ERROR "Failed to detect RTL_AIRBAND_VERSION, missing git repo history? Error: ${RTL_AIRBAND_VERSION_ERROR}")
+   message(FATAL_ERROR "Failed to detect RTL_AIRBAND_VERSION, missing git repo history? Error: \"${RTL_AIRBAND_VERSION_ERROR}\"")
 endif()
+
+
+message(FATAL_ERROR "END HERE")
+
+
 
 set (CMAKE_CXX_STANDARD 11)
 set (CXX_STANDARD_REQUIRED ON)

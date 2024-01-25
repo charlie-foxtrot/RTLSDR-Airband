@@ -1,6 +1,8 @@
 cmake_minimum_required (VERSION 3.1)
 project (RTLSDR-Airband CXX)
 
+message(STATUS "running ${PROJECT_SOURCE_DIR}/scripts/find_version")
+
 execute_process(COMMAND ${PROJECT_SOURCE_DIR}/scripts/find_version
    OUTPUT_VARIABLE RTL_AIRBAND_VERSION
    OUTPUT_STRIP_TRAILING_WHITESPACE

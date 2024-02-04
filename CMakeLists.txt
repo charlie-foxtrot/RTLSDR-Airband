@@ -1,7 +1,7 @@
 cmake_minimum_required (VERSION 3.1)
 project (RTLSDR-Airband CXX)
 
-execute_process(COMMAND git describe --tags --abbrev --dirty --always
+execute_process(COMMAND ${PROJECT_SOURCE_DIR}/scripts/find_version
    OUTPUT_VARIABLE RTL_AIRBAND_VERSION
    OUTPUT_STRIP_TRAILING_WHITESPACE
    ERROR_VARIABLE RTL_AIRBAND_VERSION_ERROR

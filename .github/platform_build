@@ -10,7 +10,7 @@ fi
 echo "running build for ${platform} on $(source /etc/os-release ; echo ${VERSION})"
 
 case "${platform}" in
-    rpi3)
+    rpi3b)
         CMAKE_ARGS="-DPLATFORM=rpiv2 -DCMAKE_BUILD_TYPE=Release -DNFM=TRUE -DBUILD_UNITTESTS=TRUE"
         ;;
 

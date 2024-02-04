@@ -16,3 +16,6 @@ target_include_directories(hello_fft PUBLIC
 	"${CMAKE_CURRENT_BINARY_DIR}/.." # needed for config.h
 	${BCM_VC_INCLUDE_DIRS}
 )
+
+# disable -Wcast-qual for this folder
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-cast-qual")

@@ -2,7 +2,7 @@ name: Run CI
 
 on:
   push:
-    branches: [main, unstable]
+    branches: [main]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -13,7 +13,7 @@ jobs:
   ci_build:
     strategy:
       matrix:
-        os: [ ubuntu-22.04, macos-12, rpi3b, macos-13, ubuntu-20.04 ]
+        os: [ ubuntu-22.04, macos-12, macos-13, ubuntu-20.04 ]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35 # runtime across all OSs, runs can get queued
     steps:

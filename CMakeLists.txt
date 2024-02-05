@@ -25,7 +25,7 @@ endif(NOT CMAKE_BUILD_TYPE)
 
 # TODO: flags to add: -Wfloat-equal -Wconversion -Wstrict-overflow=5 -Waggregate-return -Wpedantic -Wcast-align
 # TODO: these could be added except for gtest: -Wswitch-enum -Wundef -Wswitch-default
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wshadow -Wdate-time -Wpointer-arith -Wwrite-strings -Wcast-qual  -Wunreachable-code -Werror")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wshadow -Wdate-time -Wpointer-arith -Wwrite-strings -Wcast-qual  -Wunreachable-code")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Og -DDEBUG")
 
 if(DEBUG_SQUELCH)

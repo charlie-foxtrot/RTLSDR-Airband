@@ -25,7 +25,7 @@ cd build
 
 # configure and build
 cmake ${CMAKE_ARGS} ../
-make -j
+VERBOSE=1 make -j
 
 # run unit tests
 src/unittests

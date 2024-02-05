@@ -35,6 +35,14 @@ RUN git clone https://github.com/rtlsdrblog/rtl-sdr-blog && \
     dpkg -i librtlsdr-dev_*.deb && \
     dpkg -i rtl-sdr_*.deb
 
+# compile / install libmirisdr-4
+RUN git clone https://github.com/f4exb/libmirisdr-4 && \
+  cd libmirisdr-4 && \
+  mkdir build && \
+  cd build && \
+  cmake ../ && \
+  VERBOSE=1 make install && \
+  ldconfig
 
 # TODO: build anything from source?
 
@@ -89,6 +97,9 @@ RUN dpkg -i /tmp/librtlsdr0_*.deb && \
     echo 'blacklist dvb_usb_rtl28xxun' | tee --append /etc/modprobe.d/rtl_sdr.conf && \
     echo 'blacklist rtl2832' | tee --append /etc/modprobe.d/rtl_sdr.conf && \
     echo 'blacklist rtl2830' | tee --append /etc/modprobe.d/rtl_sdr.conf
+
+# install (from build container) libmirisdr-4
+COPY --from=build /usr/local/lib/libmirisdr.so.4 /usr/local/lib/
 
 # Copy rtl_airband from the build container
 COPY LICENSE /opt/rtl_airband/

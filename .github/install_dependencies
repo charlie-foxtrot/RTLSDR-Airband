@@ -18,6 +18,16 @@ case "${unameOut}" in
             librtlsdr-dev \
             libsoapysdr-dev \
             libpulse-dev
+
+        (
+            git clone https://github.com/f4exb/libmirisdr-4
+            cd libmirisdr-4
+            mkdir build
+            cd build
+            cmake ../
+            make install
+            ldconfig
+        )
         ;;
 
     Darwin*)

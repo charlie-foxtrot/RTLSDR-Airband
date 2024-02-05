@@ -69,13 +69,12 @@ static bool mirisdr_nearest_gain(mirisdr_dev_t *dev, int target_gain, int *neare
 }
 
 static int mirisdr_find_device_by_serial(char const * const s) {
-	int device_count;
 	char vendor[256] = {0}, product[256] = {0}, serial[256] = {0};
-	device_count = mirisdr_get_device_count();
-	if(device_count < 1) {
+	int count = mirisdr_get_device_count();
+	if(count < 1) {
 		return -1;
 	}
-	for(int i = 0; i < device_count; i++) {
+	for(int i = 0; i < count; i++) {
 		mirisdr_get_device_usb_strings(i, vendor, product, serial);
 		if (strcmp(s, serial) != 0) {
 			continue;
@@ -102,8 +101,11 @@ int mirisdr_init(input_t * const input) {
 		error();
 	}
 
+	char transfer_str[] = "BULK";
+	char sample_format_str[] = "504_S8";
+
 	mirisdr_dev_t *miri = dev_data->dev;
-	int r = mirisdr_set_transfer(miri, (char *)"BULK");
+	int r = mirisdr_set_transfer(miri, transfer_str);
 	if (r < 0) {
 		log(LOG_ERR, "Failed to set bulk transfer mode for MiriSDR device #%d: error %d\n", dev_data->index, r);
 		error();
@@ -132,7 +134,7 @@ int mirisdr_init(input_t * const input) {
 		log(LOG_INFO, "Device #%d: gain set to %d dB\n", dev_data->index,
 			mirisdr_get_tuner_gain(miri));
 	}
-	r = mirisdr_set_sample_format(miri, (char *)"504_S8");
+	r = mirisdr_set_sample_format(miri, sample_format_str);
 	if (r < 0) {
 		log(LOG_ERR, "Failed to set sample format for device #%d: error %d\n", dev_data->index, r);
 		error();

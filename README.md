@@ -1,17 +1,20 @@
 # RTLSDR-Airband
 
-![main](https://github.com/charlie-foxtrot/RTLSDR-Airband/actions/workflows/build.yml/badge.svg?branch=main)
+![main](https://github.com/charlie-foxtrot/RTLSDR-Airband/actions/workflows/ci_build.yml/badge.svg?branch=main)
+![main](https://github.com/charlie-foxtrot/RTLSDR-Airband/actions/workflows/platform_build.yml/badge.svg?branch=main)
+![main](https://github.com/charlie-foxtrot/RTLSDR-Airband/actions/workflows/build_docker_containers.yml/badge.svg?branch=main)
 
-**NOTE: Going forward a release tag will be automatically created on each merge to `main`.  For the latest version, see [here](https://github.com/charlie-foxtrot/RTLSDR-Airband/releases/latest).**
+NOTE: Changes as of v5.0.0:
+ - PRs will be opened directly against `main` and the `unstable` branch will no longer be used
+ - Version tags will be automatically created on each merge to `main`
+ - A release will be created on each `major` or `minor` version tag but not `minor` tags
+ - Checking out `main` is recommended over using a release artifact to stay on the latest version
+ - This repo has significantly diverged from the original project [microtony/RTLSDR-Airband](https://github.com/microtony/RTLSDR-Airband) so it has been been detached (ie no longer a fork).
+ - Specific build support for `rpiv1`, `armv7-generic`, and `armv8-generic` have been deprecated for the new default `native`, see [#447](https://github.com/charlie-foxtrot/RTLSDR-Airband/discussions/447)
 
-**NOTE: Going forward PRs will be opened directly against `main` and the `unstable` branch will no longer be used.**
+NOTE: Repo URL has moved to https://github.com/charlie-foxtrot/RTLSDR-Airband see [#342](https://github.com/charlie-foxtrot/RTLSDR-Airband/discussions/342) for info
 
-**NOTE: This repo has significantly diverged from the original project [microtony/RTLSDR-Airband](https://github.com/microtony/RTLSDR-Airband) so it has been been detached (ie no longer a fork).**
-
-**NOTE: As of version `v5.0.0` specific build support for `rpiv1`, `armv7-generic`, and `armv8-generic` have been deprecated for the new default `native`, see [#447](https://github.com/charlie-foxtrot/RTLSDR-Airband/discussions/447)**
-
-**NOTE: Repo URL has moved to https://github.com/charlie-foxtrot/RTLSDR-Airband see [#342](https://github.com/charlie-foxtrot/RTLSDR-Airband/discussions/342) for info**
-
+## Overview
 
 RTLSDR-Airband receives analog radio voice channels and produces
 audio streams which can be routed to various outputs, such as online

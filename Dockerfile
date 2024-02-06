@@ -23,8 +23,8 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
   
-# set working dir for building rtl-sdr support
-WORKDIR /rtl_sdr_build
+# set working dir for compiling dependencies
+WORKDIR /build_dependencies
  
 # compile / install rtl-sdr-blog version of rtl-sdr for v4 support
 RUN git clone https://github.com/rtlsdrblog/rtl-sdr-blog && \
@@ -88,7 +88,7 @@ RUN apt-get update && \
   rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # install (from build container) rtl-sdr-blog version of rtl-sdr for v4 support
-COPY --from=build /rtl_sdr_build/librtlsdr0_*.deb /rtl_sdr_build/librtlsdr-dev_*.deb /rtl_sdr_build/rtl-sdr_*.deb /tmp/
+COPY --from=build /build_dependencies/librtlsdr0_*.deb /build_dependencies/librtlsdr-dev_*.deb /build_dependencies/rtl-sdr_*.deb /tmp/
 RUN dpkg -i /tmp/librtlsdr0_*.deb && \
     dpkg -i /tmp/librtlsdr-dev_*.deb && \
     dpkg -i /tmp/rtl-sdr_*.deb && \
@@ -98,18 +98,19 @@ RUN dpkg -i /tmp/librtlsdr0_*.deb && \
     echo 'blacklist rtl2832' | tee --append /etc/modprobe.d/rtl_sdr.conf && \
     echo 'blacklist rtl2830' | tee --append /etc/modprobe.d/rtl_sdr.conf
 
-# install (from build container) libmirisdr-4
+# copy (from build container) libmirisdr-4 library
 COPY --from=build /usr/local/lib/libmirisdr.so.4 /usr/local/lib/
 
 # Copy rtl_airband from the build container
-COPY LICENSE /opt/rtl_airband/
-COPY --from=build /rtl_airband_build/build_dir/src/unittests /opt/rtl_airband/
-COPY --from=build /rtl_airband_build/build_dir/src/rtl_airband /opt/rtl_airband/
-RUN chmod a+x /opt/rtl_airband/unittests /opt/rtl_airband/rtl_airband
+COPY LICENSE /app/
+COPY --from=build /rtl_airband_build/build_dir/src/unittests /app/
+COPY --from=build /rtl_airband_build/build_dir/src/rtl_airband /app/
+RUN chmod a+x /app/unittests /app/rtl_airband
 
 # make sure unit tests pass
-RUN /opt/rtl_airband/unittests
+RUN /app/unittests
 
-# Use tini as init and run rtl_airband
+# Use tini as init and run rtl_airband from /app/
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["/opt/rtl_airband/rtl_airband", "-F", "-e"]
+WORKDIR /app/
+CMD ["/app/rtl_airband", "-F", "-e", "-c", "/app/rtl_airband.conf"]

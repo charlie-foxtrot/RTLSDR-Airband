@@ -18,11 +18,11 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <iostream>			// cerr
-#include <string.h>			// memcpy
-#include <pthread.h>		// pthread_mutex_lock, unlock
-#include "input-common.h"	// input_t
-#include "rtl_airband.h"	// debug_print
+#include <pthread.h>       // pthread_mutex_lock, unlock
+#include <string.h>        // memcpy
+#include <iostream>        // cerr
+#include "input-common.h"  // input_t
+#include "rtl_airband.h"   // debug_print
 
 /* Write input data into circular buffer input->buffer.
  * In general, input->buffer_size is not an exact multiple of len,
@@ -34,35 +34,32 @@
  * so that the signal windowing function could handle the whole FFT batch
  * without wrapping.
  */
-void circbuffer_append(input_t * const input, unsigned char *buf, size_t len) {
-	if(len == 0) return;
-	pthread_mutex_lock(&input->buffer_lock);
-	size_t space_left = input->buf_size - input->bufe;
-	if(space_left >= len) {
-		memcpy(input->buffer + input->bufe, buf, len);
-		if(input->bufe == 0) {
-			memcpy(input->buffer + input->buf_size, input->buffer,
-				std::min(len, 2 * input->bytes_per_sample * fft_size));
-			debug_print("tail_len=%zu bytes\n",
-				std::min(len, 2 * input->bytes_per_sample * fft_size));
-		}
-	} else {
-		memcpy(input->buffer + input->bufe, buf, space_left);
-		memcpy(input->buffer, buf + space_left, len - space_left);
-		memcpy(input->buffer + input->buf_size, input->buffer,
-			std::min(len - space_left, 2 * input->bytes_per_sample * fft_size));
-		debug_print("buf wrap: space_left=%zu len=%zu bufe=%zu wrap_len=%zu tail_len=%zu\n",
-			space_left, len, input->bufe, len - space_left,
-			std::min(len - space_left, 2 * input->bytes_per_sample * fft_size));
-	}
+void circbuffer_append(input_t* const input, unsigned char* buf, size_t len) {
+    if (len == 0)
+        return;
+    pthread_mutex_lock(&input->buffer_lock);
+    size_t space_left = input->buf_size - input->bufe;
+    if (space_left >= len) {
+        memcpy(input->buffer + input->bufe, buf, len);
+        if (input->bufe == 0) {
+            memcpy(input->buffer + input->buf_size, input->buffer, std::min(len, 2 * input->bytes_per_sample * fft_size));
+            debug_print("tail_len=%zu bytes\n", std::min(len, 2 * input->bytes_per_sample * fft_size));
+        }
+    } else {
+        memcpy(input->buffer + input->bufe, buf, space_left);
+        memcpy(input->buffer, buf + space_left, len - space_left);
+        memcpy(input->buffer + input->buf_size, input->buffer, std::min(len - space_left, 2 * input->bytes_per_sample * fft_size));
+        debug_print("buf wrap: space_left=%zu len=%zu bufe=%zu wrap_len=%zu tail_len=%zu\n", space_left, len, input->bufe, len - space_left,
+                    std::min(len - space_left, 2 * input->bytes_per_sample * fft_size));
+    }
 
-	size_t old_end = input->bufe;
-	input->bufe = (input->bufe + len) % input->buf_size;
-	if(old_end < input->bufs && input->bufe >= input->bufs) {
-		std::cerr << "Warning: buffer overflow\n";
-		input->overflow_count++;
-	}
-	pthread_mutex_unlock(&input->buffer_lock);
+    size_t old_end = input->bufe;
+    input->bufe = (input->bufe + len) % input->buf_size;
+    if (old_end < input->bufs && input->bufe >= input->bufs) {
+        std::cerr << "Warning: buffer overflow\n";
+        input->overflow_count++;
+    }
+    pthread_mutex_unlock(&input->buffer_lock);
 }
 
 // vim: ts=4

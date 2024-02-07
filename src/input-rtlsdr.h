@@ -17,17 +17,16 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <rtl-sdr.h>		// rtlsdr_dev_t
+#include <rtl-sdr.h>  // rtlsdr_dev_t
 #define RTLSDR_BUFSIZE 320000
 #define RTLSDR_DEFAULT_LIBUSB_BUFFER_COUNT 10
 #define RTLSDR_DEFAULT_SAMPLE_RATE 2560000
 
 typedef struct {
-	rtlsdr_dev_t *dev;	// pointer to librtlsdr device struct
-	char *serial;		// dongle serial number
-	int index;		// dongle index
-	int correction;		// PPM correction
-	int gain;		// gain in tenths of dB
-	int bufcnt;		// libusb buffer count
+    rtlsdr_dev_t* dev;  // pointer to librtlsdr device struct
+    char* serial;       // dongle serial number
+    int index;          // dongle index
+    int correction;     // PPM correction
+    int gain;           // gain in tenths of dB
+    int bufcnt;         // libusb buffer count
 } rtlsdr_dev_data_t;
-

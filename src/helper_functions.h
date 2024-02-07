@@ -20,13 +20,13 @@
 #ifndef _HELPER_FUNCTIONS_H
 #define _HELPER_FUNCTIONS_H
 
-#include <ctime> // struct tm
+#include <ctime>  // struct tm
 #include <string>
 
-bool dir_exists(const std::string &dir_path);
-bool file_exists(const std::string &file_path);
-bool make_dir(const std::string &dir_path);
-bool make_subdirs(const std::string &basedir, const std::string &subdirs);
-std::string make_dated_subdirs(const std::string &basedir, const struct tm *time);
+bool dir_exists(const std::string& dir_path);
+bool file_exists(const std::string& file_path);
+bool make_dir(const std::string& dir_path);
+bool make_subdirs(const std::string& basedir, const std::string& subdirs);
+std::string make_dated_subdirs(const std::string& basedir, const struct tm* time);
 
 #endif /* _HELPER_FUNCTIONS_H */

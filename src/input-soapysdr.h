@@ -17,20 +17,20 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <SoapySDR/Device.h>	// SoapySDRDevice
-#include <SoapySDR/Types.h>	// SoapySDRKwargs
+#include <SoapySDR/Device.h>  // SoapySDRDevice
+#include <SoapySDR/Types.h>   // SoapySDRKwargs
 #define SOAPYSDR_DEFAULT_SAMPLE_RATE 2560000
 #define SOAPYSDR_BUFSIZE 320000
 #define SOAPYSDR_READSTREAM_TIMEOUT_US 1000000L
 
 typedef struct {
-	SoapySDRDevice *dev;	// pointer to device struct
-	char const *device_string;	// SoapySDR device arg string
-	char const *sample_format;	// sample format
-	char const *antenna;		// antenna name
-	SoapySDRKwargs gains;		// gain elements and their values
-	double correction;	// PPM correction
-	double gain;		// gain in dB
-	size_t channel;		// HW channel number
-	bool agc;		// enable AGC
+    SoapySDRDevice* dev;        // pointer to device struct
+    char const* device_string;  // SoapySDR device arg string
+    char const* sample_format;  // sample format
+    char const* antenna;        // antenna name
+    SoapySDRKwargs gains;       // gain elements and their values
+    double correction;          // PPM correction
+    double gain;                // gain in dB
+    size_t channel;             // HW channel number
+    bool agc;                   // enable AGC
 } soapysdr_dev_data_t;

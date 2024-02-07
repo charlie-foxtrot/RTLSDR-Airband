@@ -24,13 +24,12 @@
 
 #include <string>
 
-class TestBaseClass : public ::testing::Test
-{
-protected:
-	void SetUp(void);
-	void TearDown(void);
+class TestBaseClass : public ::testing::Test {
+   protected:
+    void SetUp(void);
+    void TearDown(void);
 
-	std::string temp_dir;
+    std::string temp_dir;
 };
 
 #endif /* _TEST_BASE_CLASS_H */

@@ -18,7 +18,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "input-common.h"	// input_t
+#include "input-common.h"  // input_t
 
 // input-helpers.cpp
-void circbuffer_append(input_t * const input, unsigned char *buf, size_t len);
+void circbuffer_append(input_t* const input, unsigned char* buf, size_t len);

@@ -18,14 +18,14 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <string>
-#include <iostream>
 #include <fstream>
+#include <iostream>
+#include <string>
 
 typedef struct {
-	char *filepath;
-	FILE *input_file;
-	float speedup_factor;
+    char* filepath;
+    FILE* input_file;
+    float speedup_factor;
 } file_dev_data_t;
 
 // vim: ts=4

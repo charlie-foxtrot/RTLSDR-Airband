@@ -24,7 +24,7 @@
 
 #ifdef DEBUG_SQUELCH
 #include <stdio.h>  // needed for debug file output
-#endif /* DEBUG_SQUELCH */
+#endif              /* DEBUG_SQUELCH */
 
 #include "ctcss.h"
 
@@ -63,118 +63,118 @@
  CTCSS tone detection can be enabled.  If used, two tone detectors are created at different window lengths.
  The “fast” detector has less resolution but needs fewer samples while the “slow” detector is more accurate.
  When CTCSS is enabled, squelch remains CLOSED for an additional 0.05 sec until a tone is detected by the “fast”
- detector. 
+ detector.
  */
 
 class Squelch {
-public:
-	Squelch();
+   public:
+    Squelch();
 
-	void set_squelch_level_threshold(const float &level);
-	void set_squelch_snr_threshold(const float &db);
-	void set_ctcss_freq(const float &ctcss_freq, const float &sample_rate);
+    void set_squelch_level_threshold(const float& level);
+    void set_squelch_snr_threshold(const float& db);
+    void set_ctcss_freq(const float& ctcss_freq, const float& sample_rate);
 
-	void process_raw_sample(const float &sample);
-	void process_filtered_sample(const float &sample);
-	void process_audio_sample(const float &sample);
+    void process_raw_sample(const float& sample);
+    void process_filtered_sample(const float& sample);
+    void process_audio_sample(const float& sample);
 
-	bool is_open(void) const;
-	bool should_filter_sample(void);
-	bool should_process_audio(void);
+    bool is_open(void) const;
+    bool should_filter_sample(void);
+    bool should_process_audio(void);
 
-	bool first_open_sample(void) const;
-	bool last_open_sample(void) const;
-	bool signal_outside_filter(void);
+    bool first_open_sample(void) const;
+    bool last_open_sample(void) const;
+    bool signal_outside_filter(void);
 
-	const float & noise_level(void) const;
-	const float & signal_level(void) const;
-	const float & squelch_level(void);
+    const float& noise_level(void) const;
+    const float& signal_level(void) const;
+    const float& squelch_level(void);
 
-	const size_t & open_count(void) const;
-	const size_t & flappy_count(void) const;
-	const size_t & ctcss_count(void) const;
-	const size_t & no_ctcss_count(void) const;
+    const size_t& open_count(void) const;
+    const size_t& flappy_count(void) const;
+    const size_t& ctcss_count(void) const;
+    const size_t& no_ctcss_count(void) const;
 
 #ifdef DEBUG_SQUELCH
-	~Squelch(void);
-	void set_debug_file(const char *filepath);
+    ~Squelch(void);
+    void set_debug_file(const char* filepath);
 #endif /* DEBUG_SQUELCH */
 
-private:
-	enum State {
-		CLOSED,				// Audio is suppressed
-		OPENING,			// Transitioning closed -> open
-		CLOSING,			// Transitioning open -> closed
-		LOW_SIGNAL_ABORT,	// Like CLOSING but is_open() is false
-		OPEN				// Audio not suppressed
-	};
+   private:
+    enum State {
+        CLOSED,            // Audio is suppressed
+        OPENING,           // Transitioning closed -> open
+        CLOSING,           // Transitioning open -> closed
+        LOW_SIGNAL_ABORT,  // Like CLOSING but is_open() is false
+        OPEN               // Audio not suppressed
+    };
 
-	struct MovingAverage {
-		float full_;
-		float capped_;
-	};
+    struct MovingAverage {
+        float full_;
+        float capped_;
+    };
 
-	float noise_floor_;			// noise level
-	bool using_manual_level_;	// if using a manually set signal level threshold
-	float manual_signal_level_;	// manually configured squelch level, < 0 for disabled
-	float normal_signal_ratio_;	// signal-to-noise ratio for normal squelch - ratio, not in dB
-	float flappy_signal_ratio_;	// signal-to-noise ratio for flappy squelch - ratio, not in dB
+    float noise_floor_;          // noise level
+    bool using_manual_level_;    // if using a manually set signal level threshold
+    float manual_signal_level_;  // manually configured squelch level, < 0 for disabled
+    float normal_signal_ratio_;  // signal-to-noise ratio for normal squelch - ratio, not in dB
+    float flappy_signal_ratio_;  // signal-to-noise ratio for flappy squelch - ratio, not in dB
 
-	float moving_avg_cap_;		// the max value for capped moving average
-	MovingAverage pre_filter_;	// average signal level for reference sample
-	MovingAverage post_filter_;	// average signal level for post-filter sample
+    float moving_avg_cap_;       // the max value for capped moving average
+    MovingAverage pre_filter_;   // average signal level for reference sample
+    MovingAverage post_filter_;  // average signal level for post-filter sample
 
-	float squelch_level_;		// cached calculation of the squelch_level() value
+    float squelch_level_;  // cached calculation of the squelch_level() value
 
-	bool using_post_filter_;	// if the caller is providing filtered samples
-	float pre_vs_post_factor_;	// multiplier when doing pre vs post filter compaison
+    bool using_post_filter_;    // if the caller is providing filtered samples
+    float pre_vs_post_factor_;  // multiplier when doing pre vs post filter compaison
 
-	int open_delay_;			// how long to wait after signal level crosses squelch to open
-	int close_delay_;			// how long to wait after signal level crosses squelch to close
-	int low_signal_abort_;		// number of repeated samples below squelch to cause a close
+    int open_delay_;        // how long to wait after signal level crosses squelch to open
+    int close_delay_;       // how long to wait after signal level crosses squelch to close
+    int low_signal_abort_;  // number of repeated samples below squelch to cause a close
 
-	State next_state_;
-	State current_state_;
+    State next_state_;
+    State current_state_;
 
-	int delay_;				// samples to wait before making next squelch decision
-	size_t open_count_;		// number of times squelch is opened
-	size_t sample_count_;	// number of samples processed (for logging)
-	size_t flappy_count_;	// number of times squelch was detected as flapping OPEN/CLOSED
-	int low_signal_count_;	// number of repeated samples below squelch
+    int delay_;             // samples to wait before making next squelch decision
+    size_t open_count_;     // number of times squelch is opened
+    size_t sample_count_;   // number of samples processed (for logging)
+    size_t flappy_count_;   // number of times squelch was detected as flapping OPEN/CLOSED
+    int low_signal_count_;  // number of repeated samples below squelch
 
-	// Flap detection parameters
-	size_t recent_sample_size_;		// number of samples defined as "recent"
-	size_t flap_opens_threshold_;	// number of opens to count as flapping
-	size_t recent_open_count_;		// number of times squelch recently opened
-	size_t closed_sample_count_;	// number of continuous samples where squelch has been CLOSED
+    // Flap detection parameters
+    size_t recent_sample_size_;    // number of samples defined as "recent"
+    size_t flap_opens_threshold_;  // number of opens to count as flapping
+    size_t recent_open_count_;     // number of times squelch recently opened
+    size_t closed_sample_count_;   // number of continuous samples where squelch has been CLOSED
 
-	// Buffered pre-filtered values
-	int buffer_size_;		// size of buffer
-	int buffer_head_;		// index to add new values
-	int buffer_tail_;		// index to read buffered values
-	float *buffer_;			// buffer
+    // Buffered pre-filtered values
+    int buffer_size_;  // size of buffer
+    int buffer_head_;  // index to add new values
+    int buffer_tail_;  // index to read buffered values
+    float* buffer_;    // buffer
 
-	CTCSS ctcss_fast_;	  // ctcss tone detection
-	CTCSS ctcss_slow_;	  // ctcss tone detection
+    CTCSS ctcss_fast_;  // ctcss tone detection
+    CTCSS ctcss_slow_;  // ctcss tone detection
 
-	void set_state(State update);
-	void update_current_state(void);
-	bool has_pre_filter_signal(void);
-	bool has_post_filter_signal(void);
-	bool has_signal(void);
-	void calculate_noise_floor(void);
-	void calculate_moving_avg_cap(void);
-	void update_moving_avg(MovingAverage &avg, const float &sample);
-	bool currently_flapping(void) const;
+    void set_state(State update);
+    void update_current_state(void);
+    bool has_pre_filter_signal(void);
+    bool has_post_filter_signal(void);
+    bool has_signal(void);
+    void calculate_noise_floor(void);
+    void calculate_moving_avg_cap(void);
+    void update_moving_avg(MovingAverage& avg, const float& sample);
+    bool currently_flapping(void) const;
 
 #ifdef DEBUG_SQUELCH
-	FILE *debug_file_;
-	float raw_input_;
-	float filtered_input_;
-	float audio_input_;
-	void debug_value(const float &value);
-	void debug_value(const int &value);
-	void debug_state(void);
+    FILE* debug_file_;
+    float raw_input_;
+    float filtered_input_;
+    float audio_input_;
+    void debug_value(const float& value);
+    void debug_value(const int& value);
+    void debug_state(void);
 #endif /* DEBUG_SQUELCH */
 };
 

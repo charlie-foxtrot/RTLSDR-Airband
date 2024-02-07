@@ -36,7 +36,7 @@ jobs:
           --repo="$GITHUB_REPOSITORY" \
           --title="Version ${tag#v}" \
           --generate-notes
-  
+
     - name: Run CI on ${{ steps.tag.outputs.new_tag }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

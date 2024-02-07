@@ -33,8 +33,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define GPU_FFT_PI 3.14159265358979323846
 
-#define GPU_FFT_FWD 0 // forward FFT
-#define GPU_FFT_REV 1 // inverse FFT
+#define GPU_FFT_FWD 0  // forward FFT
+#define GPU_FFT_REV 1  // inverse FFT
 
 struct GPU_FFT_COMPLEX {
     float re, im;
@@ -42,17 +42,19 @@ struct GPU_FFT_COMPLEX {
 
 struct GPU_FFT_PTR {
     unsigned vc;
-    union { struct GPU_FFT_COMPLEX *cptr;
-            void                   *vptr;
-            char                   *bptr;
-            float                  *fptr;
-            unsigned               *uptr; } arm;
+    union {
+        struct GPU_FFT_COMPLEX* cptr;
+        void* vptr;
+        char* bptr;
+        float* fptr;
+        unsigned* uptr;
+    } arm;
 };
 
 struct GPU_FFT_BASE {
     int mb;
     unsigned handle, size, vc_msg, vc_code, vc_unifs[GPU_FFT_QPUS];
-    volatile unsigned *peri;
+    volatile unsigned* peri;
 };
 
 struct GPU_FFT {
@@ -61,41 +63,30 @@ struct GPU_FFT {
     int x, y, step;
 };
 
-int gpu_fft_prepare(
-    int mb,         // mailbox file_desc
-    int log2_N,     // log2(FFT_length) = 8...20
-    int direction,  // GPU_FFT_FWD: fft(); GPU_FFT_REV: ifft()
-    int jobs,       // number of transforms in batch
-    struct GPU_FFT **fft);
+int gpu_fft_prepare(int mb,         // mailbox file_desc
+                    int log2_N,     // log2(FFT_length) = 8...20
+                    int direction,  // GPU_FFT_FWD: fft(); GPU_FFT_REV: ifft()
+                    int jobs,       // number of transforms in batch
+                    struct GPU_FFT** fft);
 
-unsigned gpu_fft_execute(
-    struct GPU_FFT *info);
+unsigned gpu_fft_execute(struct GPU_FFT* info);
 
-void gpu_fft_release(
-    struct GPU_FFT *info);
+void gpu_fft_release(struct GPU_FFT* info);
 
 // private
-int           gpu_fft_twiddle_size(int, int *, int *, int *);
-void          gpu_fft_twiddle_data(int, int, float *);
-unsigned int  gpu_fft_shader_size(int);
-unsigned int *gpu_fft_shader_code(int);
+int gpu_fft_twiddle_size(int, int*, int*, int*);
+void gpu_fft_twiddle_data(int, int, float*);
+unsigned int gpu_fft_shader_size(int);
+unsigned int* gpu_fft_shader_code(int);
 
 // gpu_fft_base:
 
-unsigned gpu_fft_base_exec (
-    struct GPU_FFT_BASE *base,
-    unsigned num_qpus);
+unsigned gpu_fft_base_exec(struct GPU_FFT_BASE* base, unsigned num_qpus);
 
-int gpu_fft_alloc (
-    int mb,
-    unsigned size,
-    struct GPU_FFT_PTR *ptr);
+int gpu_fft_alloc(int mb, unsigned size, struct GPU_FFT_PTR* ptr);
 
-void gpu_fft_base_release(
-    struct GPU_FFT_BASE *base);
+void gpu_fft_base_release(struct GPU_FFT_BASE* base);
 
-unsigned gpu_fft_ptr_inc (
-    struct GPU_FFT_PTR *ptr,
-    int bytes);
+unsigned gpu_fft_ptr_inc(struct GPU_FFT_PTR* ptr, int bytes);
 
-#endif // __GPU_FFT__
+#endif  // __GPU_FFT__

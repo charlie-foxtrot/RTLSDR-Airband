@@ -7,4 +7,3 @@ docker build -t rtl_airband-dev -f .devcontainer/Dockerfile .
 
 # run bash in container
 docker run --rm -v $(pwd):/app/ -it --entrypoint bash rtl_airband-dev
-

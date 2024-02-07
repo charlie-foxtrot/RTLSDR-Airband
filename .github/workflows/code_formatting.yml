@@ -3,7 +3,7 @@ name: Code Formatting
 on:
   pull_request:
   schedule:
-    - cron: '39 13 * * *' # run daily 
+    - cron: '39 13 * * *' # run daily
 
 jobs:
   code_formatting:

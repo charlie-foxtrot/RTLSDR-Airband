@@ -7,7 +7,7 @@ on:
   pull_request:
   workflow_dispatch:
   schedule:
-    - cron: '29 13 * * *' # run daily 
+    - cron: '29 13 * * *' # run daily
 
 jobs:
   build_docker_containers:
@@ -51,4 +51,3 @@ jobs:
         push: true
         tags: ${{ steps.metadata.outputs.tags }}
         labels: ${{ steps.metadata.outputs.labels }}
-  

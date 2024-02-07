@@ -16,7 +16,7 @@ Please use this template to create your bug report. By providing as much info as
   - RTLSDR-Airband version you are using (stable release number or branch/commit):
   - `make` options used to build the program:
   - Hardware platform (eg. x86_64, Raspberry Pi v4):
-  - Operating system name and version: 
+  - Operating system name and version:
 
 **What happened?**
 

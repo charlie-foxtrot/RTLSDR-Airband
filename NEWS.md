@@ -6,7 +6,7 @@ Version 5.0.0 (Jan 21, 2024):
 
 * NOTE: Going forward a release tag will be automatically created on each merge to `main`, and changes will not be reflected in this file.  For changes between versions see the repo's [release history](https://github.com/charlie-foxtrot/RTLSDR-Airband/releases).
 * NOTE: Going forward PRs will be opened directly against `main` and the `unstable` branch will no longer be used.
-* NOTE: This repo has significantly diverged from the original project [microtony/RTLSDR-Airband](https://github.com/microtony/RTLSDR-Airband) so it has been been detached (ie no longer a fork). 
+* NOTE: This repo has significantly diverged from the original project [microtony/RTLSDR-Airband](https://github.com/microtony/RTLSDR-Airband) so it has been been detached (ie no longer a fork).
 
 * Changes in this release, see [#444](https://github.com/charlie-foxtrot/RTLSDR-Airband/pull/444):
   * build and publish docker containers

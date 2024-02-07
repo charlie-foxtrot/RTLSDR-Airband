@@ -1,23 +1,23 @@
-# 
+#
 # RTLSDR AM demodulator and streaming
-# 
+#
 # Copyright (c) 2014 Wong Man Hang <microtony@gmail.com>
 #
 # Updates for NEON coprocessor by Tomasz Lemiech <szpajder@gmail.com>
-# 
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-# 
+#
 
 .text
 .align  2
@@ -26,7 +26,7 @@
 .fpu    neon
 
 samplefft:
- 
+
 push {r4-r12, lr}
 vpush {d4-d15}
 
@@ -46,7 +46,7 @@ ldrb r11, [r1, #6]
 ldrb r12, [r1, #7]
 
 .a:
- 
+
 ldr r5, [r3, r5, LSL #2]
 ldr r6, [r3, r6, LSL #2]
 ldr r7, [r3, r7, LSL #2]
@@ -81,5 +81,3 @@ bne .a
 
 vpop {d4-d15}
 pop {r4-r12, pc}
-
-

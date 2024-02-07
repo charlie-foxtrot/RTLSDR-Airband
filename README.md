@@ -95,4 +95,3 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 * Copyright (C) 2012 by Steve Markgraf <steve@steve-m.de>
 * Copyright (C) 2015 by Kyle Keen <keenerd@gmail.com>
 * GNU General Public License Version 2
-

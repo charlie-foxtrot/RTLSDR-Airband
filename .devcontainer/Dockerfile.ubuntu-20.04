@@ -11,7 +11,7 @@ RUN DEBIAN_FRONTEND=noninteractive \
         git \
         sudo \
         gdb \
-        clang-format
+        clang-format-14
 
 WORKDIR /app
 COPY .github/install_dependencies /app/

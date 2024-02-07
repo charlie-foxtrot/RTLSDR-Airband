@@ -16,11 +16,10 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: working dir
-      run: find .
+    - name: Install Clang Format
+      run: sudo apt-get install clang-format-14
 
-    - name: clang-format
-      uses: RafikFarhad/clang-format-github-action@v3
-      with:
-        sources: "src/*.h,src/*.cpp"
-        style: "file"
+    - name: Run Clang Format
+      run: |
+        ./scripts/reformat_code
+        git diff --exit-code

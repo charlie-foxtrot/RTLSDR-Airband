@@ -22,7 +22,8 @@
 				"twxs.cmake",
 				"streetsidesoftware.code-spell-checker",
 				"ms-azuretools.vscode-docker",
-				"GitHub.vscode-github-actions"
+				"GitHub.vscode-github-actions",
+				"xaver.clang-format"
 			]
 		}
 	},

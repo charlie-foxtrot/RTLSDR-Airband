@@ -10,7 +10,8 @@ RUN DEBIAN_FRONTEND=noninteractive \
         tzdata\
         git \
         sudo \
-        gdb
+        gdb \
+        clang-format
 
 WORKDIR /app
 COPY .github/install_dependencies /app/

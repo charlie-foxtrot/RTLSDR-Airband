@@ -9,8 +9,18 @@ jobs:
   code_formatting:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: RafikFarhad/clang-format-github-action@v3
-        with:
-          sources: "src/*.h,src/*.cpp"
-          style: "file"
+
+    - name: Runner Info
+      run: printenv | sort
+
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: working dir
+      run: find .
+
+    - name: clang-format
+      uses: RafikFarhad/clang-format-github-action@v3
+      with:
+        sources: "src/*.h,src/*.cpp"
+        style: "file"

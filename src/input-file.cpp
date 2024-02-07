@@ -179,5 +179,3 @@ MODULE_EXPORT input_t* file_input_new() {
 
     return input;
 }
-
-// vim: ts=4

@@ -61,5 +61,3 @@ void circbuffer_append(input_t* const input, unsigned char* buf, size_t len) {
     }
     pthread_mutex_unlock(&input->buffer_lock);
 }
-
-// vim: ts=4

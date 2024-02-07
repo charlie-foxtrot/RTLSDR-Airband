@@ -1162,5 +1162,3 @@ int main(int argc, char* argv[]) {
 #endif /* WITH_PROFILING */
     return 0;
 }
-
-// vim: ts=4

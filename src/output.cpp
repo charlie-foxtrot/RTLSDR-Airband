@@ -1003,5 +1003,3 @@ void* output_check_thread(void*) {
     }
     return 0;
 }
-
-// vim: ts=4

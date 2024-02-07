@@ -399,5 +399,3 @@ void pulse_write_stream(pulse_data* pdata, mix_modes mode, const float* data_lef
 #endif /* WITH_PULSEAUDIO */
 
 #endif /* _RTL_AIRBAND_H */
-
-// vim: ts=4

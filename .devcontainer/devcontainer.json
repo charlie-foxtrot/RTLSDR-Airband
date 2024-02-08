@@ -6,11 +6,11 @@
 	// Sets the run context to one level up instead of the .devcontainer folder.
 	"context": "..",
 
-	"dockerFile": "Dockerfile.ubuntu-latest",
+	"dockerFile": "Dockerfile",
 
 	"updateContentCommand" : "apt-get install git",
 
-	"postCreateCommand" : "cmake -B /app/build -DCMAKE_BUILD_TYPE=Debug -DNFM=TRUE -DBUILD_UNITTESTS=true",
+	"postCreateCommand" : "cmake -B /app/build -DCMAKE_BUILD_TYPE=Debug -DNFM=TRUE -DBUILD_UNITTESTS=true ; pre-commit install",
 
 	// vs code extensions to install in the dev container
 	"customizations": {
@@ -22,7 +22,8 @@
 				"twxs.cmake",
 				"streetsidesoftware.code-spell-checker",
 				"ms-azuretools.vscode-docker",
-				"GitHub.vscode-github-actions"
+				"GitHub.vscode-github-actions",
+				"xaver.clang-format"
 			]
 		}
 	},

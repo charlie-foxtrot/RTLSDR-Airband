@@ -10,10 +10,14 @@ RUN DEBIAN_FRONTEND=noninteractive \
         tzdata\
         git \
         sudo \
-        gdb
+        gdb \
+        clang-format-14 \
+        python3-pip
 
 WORKDIR /app
 COPY .github/install_dependencies /app/
 RUN /app/install_dependencies
+
+RUN pip install pre-commit
 
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*

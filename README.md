@@ -3,6 +3,7 @@
 ![main](https://github.com/charlie-foxtrot/RTLSDR-Airband/actions/workflows/ci_build.yml/badge.svg?branch=main)
 ![main](https://github.com/charlie-foxtrot/RTLSDR-Airband/actions/workflows/platform_build.yml/badge.svg?branch=main)
 ![main](https://github.com/charlie-foxtrot/RTLSDR-Airband/actions/workflows/build_docker_containers.yml/badge.svg?branch=main)
+![main](https://github.com/charlie-foxtrot/RTLSDR-Airband/actions/workflows/code_formatting.yml/badge.svg?branch=main)
 
 NOTE: Changes as of v5.0.0:
  - PRs will be opened directly against `main` and the `unstable` branch will no longer be used
@@ -95,4 +96,3 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 * Copyright (C) 2012 by Steve Markgraf <steve@steve-m.de>
 * Copyright (C) 2015 by Kyle Keen <keenerd@gmail.com>
 * GNU General Public License Version 2
-

@@ -354,7 +354,7 @@ if(BUILD_UNITTESTS)
 	enable_testing()
 
 	file(GLOB_RECURSE TEST_FILES "test_*.cpp")
-	list(APPEND TEST_FILES 
+	list(APPEND TEST_FILES
 		squelch.cpp
 		logging.cpp
 		filters.cpp
@@ -383,4 +383,3 @@ if(BUILD_UNITTESTS)
 	gtest_discover_tests(unittests)
 
 endif()
-

@@ -20,20 +20,20 @@
 #ifndef _GENERATE_SIGNAL_H
 #define _GENERATE_SIGNAL_H
 
-#include <vector>
-#include <string>
 #include <random>
+#include <string>
+#include <vector>
 
 class Tone {
-public:
+   public:
     static float WEAK;
     static float NORMAL;
     static float STRONG;
 
-    Tone(int sample_rate, const float &freq, const float &ampl);
+    Tone(int sample_rate, const float& freq, const float& ampl);
     float get_sample(void);
 
-private:
+   private:
     int sample_rate_;
     float freq_;
     float ampl_;
@@ -41,32 +41,32 @@ private:
 };
 
 class Noise {
-public:
+   public:
     static float WEAK;
     static float NORMAL;
     static float STRONG;
 
-    Noise(const float &ampl);
+    Noise(const float& ampl);
     float get_sample(void);
 
-private:
+   private:
     float ampl_;
     std::mt19937 generator;
     std::normal_distribution<float> distribution;
 };
 
 class GenerateSignal {
-public:
+   public:
     GenerateSignal(int sample_rate);
 
-    void add_tone(const float &freq, const float &ampl);
-    void add_noise(const float &ampl);
+    void add_tone(const float& freq, const float& ampl);
+    void add_noise(const float& ampl);
 
     float get_sample(void);
 
-    void write_file(const std::string &filepath, const float &seconds);
+    void write_file(const std::string& filepath, const float& seconds);
 
-private:
+   private:
     int sample_rate_;
     std::vector<Tone> tones_;
     std::vector<Noise> noises_;

@@ -18,55 +18,54 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <cstdio>   // fopen()
-#include <cstring>  // strerror()
-#include <iostream> // cerr()
-#include <stdarg.h> // va_start() / va_end()
+#include <stdarg.h>  // va_start() / va_end()
+#include <cstdio>    // fopen()
+#include <cstring>   // strerror()
+#include <iostream>  // cerr()
 
 #include "logging.h"
 
 LogDestination log_destination = SYSLOG;
-FILE *debugf = NULL;
+FILE* debugf = NULL;
 
 void error() {
-	close_debug();
-	_Exit(1);
+    close_debug();
+    _Exit(1);
 }
 
-void init_debug (const char *file) {
+void init_debug(const char* file) {
 #ifdef DEBUG
-	if(!file) return;
-	if((debugf = fopen(file, "a")) == NULL) {
-
-		std::cerr << "Could not open debug file " << file << ": " << strerror(errno) << "\n";
-		error();
-	}
+    if (!file)
+        return;
+    if ((debugf = fopen(file, "a")) == NULL) {
+        std::cerr << "Could not open debug file " << file << ": " << strerror(errno) << "\n";
+        error();
+    }
 #else
-	UNUSED(file);
+    UNUSED(file);
 #endif /* DEBUG */
 }
 
 void close_debug() {
 #ifdef DEBUG
-	if(!debugf) return;
-	fclose(debugf);
+    if (!debugf)
+        return;
+    fclose(debugf);
 #endif /* DEBUG */
 }
 
-void log(int priority, const char *format, ...) {
-	va_list args;
-	va_start(args, format);
-	switch (log_destination)
-	{
-	case SYSLOG:
-		vsyslog(priority, format, args);
-		break;
-	case STDERR:
-		vfprintf(stderr, format, args);
-		break;
-	case NONE:
-		break;
-	}
-	va_end(args);
+void log(int priority, const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    switch (log_destination) {
+        case SYSLOG:
+            vsyslog(priority, format, args);
+            break;
+        case STDERR:
+            vfprintf(stderr, format, args);
+            break;
+        case NONE:
+            break;
+    }
+    va_end(args);
 }
-

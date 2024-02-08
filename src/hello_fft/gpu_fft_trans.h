@@ -32,14 +32,9 @@ struct GPU_FFT_TRANS {
     struct GPU_FFT_BASE base;
 };
 
-int gpu_fft_trans_prepare(
-    int mb,
-    struct GPU_FFT *src,
-    struct GPU_FFT *dst,
-    struct GPU_FFT_TRANS **out);
+int gpu_fft_trans_prepare(int mb, struct GPU_FFT* src, struct GPU_FFT* dst, struct GPU_FFT_TRANS** out);
 
-unsigned gpu_fft_trans_execute( // src->out ==> T ==> dst->in
-    struct GPU_FFT_TRANS *info);
+unsigned gpu_fft_trans_execute(  // src->out ==> T ==> dst->in
+    struct GPU_FFT_TRANS* info);
 
-void gpu_fft_trans_release(
-    struct GPU_FFT_TRANS *info);
+void gpu_fft_trans_release(struct GPU_FFT_TRANS* info);

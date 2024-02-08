@@ -21,31 +21,37 @@
 #ifndef _LOGGING_H
 #define _LOGGING_H 1
 
-#include <cstdio>   // FILE
-#include <syslog.h> // LOG_ERR
+#include <syslog.h>  // LOG_ERR
+#include <cstdio>    // FILE
 
-#define nop() do {} while (0)
+#define nop() \
+    do {      \
+    } while (0)
 #define UNUSED(x) (void)(x)
 
 #ifdef DEBUG
 #define DEBUG_PATH "rtl_airband_debug.log"
-#define debug_print(fmt, ...) \
-	do { fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); fflush(debugf); } while (0)
-#define debug_bulk_print(fmt, ...) \
-	do { fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); } while (0)
+#define debug_print(fmt, ...)                                 \
+    do {                                                      \
+        fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); \
+        fflush(debugf);                                       \
+    } while (0)
+#define debug_bulk_print(fmt, ...)                            \
+    do {                                                      \
+        fprintf(debugf, "%s(): " fmt, __func__, __VA_ARGS__); \
+    } while (0)
 #else
 #define debug_print(fmt, ...) nop()
 #define debug_bulk_print(fmt, ...) nop()
 #endif /* DEBUG */
 
-enum LogDestination { SYSLOG, STDERR, NONE};
+enum LogDestination { SYSLOG, STDERR, NONE };
 extern LogDestination log_destination;
-extern FILE *debugf;
+extern FILE* debugf;
 
 void error();
-void init_debug(const char *file);
+void init_debug(const char* file);
 void close_debug();
-void log(int priority, const char *format, ...);
+void log(int priority, const char* format, ...);
 
 #endif /* _LOGGING_H */
-

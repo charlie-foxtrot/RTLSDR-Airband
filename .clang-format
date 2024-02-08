@@ -1,0 +1,5 @@
+---
+BasedOnStyle: Chromium
+IndentWidth: 4
+ObjCBlockIndentWidth: 4
+ColumnLimit: 200

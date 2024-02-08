@@ -17,26 +17,26 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <cstddef> // size_t
-#include <cstring> // strerror
-#include <sys/stat.h> // struct stat, S_ISDIR
+#include <sys/stat.h>  // struct stat, S_ISDIR
+#include <cstddef>     // size_t
+#include <cstring>     // strerror
 
-#include "logging.h"
 #include "helper_functions.h"
+#include "logging.h"
 
 using namespace std;
 
-bool dir_exists(const string &dir_path) {
-	struct stat st;
-	return (stat(dir_path.c_str(), &st) == 0 && S_ISDIR(st.st_mode));
+bool dir_exists(const string& dir_path) {
+    struct stat st;
+    return (stat(dir_path.c_str(), &st) == 0 && S_ISDIR(st.st_mode));
 }
 
-bool file_exists(const string &file_path) {
-	struct stat st;
-	return (stat(file_path.c_str(), &st) == 0 && S_ISREG(st.st_mode));
+bool file_exists(const string& file_path) {
+    struct stat st;
+    return (stat(file_path.c_str(), &st) == 0 && S_ISREG(st.st_mode));
 }
 
-bool make_dir(const string &dir_path) {
+bool make_dir(const string& dir_path) {
     if (dir_exists(dir_path)) {
         return true;
     }
@@ -48,8 +48,7 @@ bool make_dir(const string &dir_path) {
     return true;
 }
 
-bool make_subdirs(const string &basedir, const string &subdirs) {
-
+bool make_subdirs(const string& basedir, const string& subdirs) {
     // if final directory exists then nothing to do
     const string delim = "/";
     const string final_path = basedir + delim + subdirs;
@@ -64,15 +63,14 @@ bool make_subdirs(const string &basedir, const string &subdirs) {
         if (!make_dir(basedir + delim + subdirs.substr(0, index))) {
             return false;
         }
-        index = subdirs.find_first_of(delim, index+1);
+        index = subdirs.find_first_of(delim, index + 1);
     }
 
     make_dir(final_path);
     return dir_exists(final_path);
 }
 
-string make_dated_subdirs(const string &basedir, const struct tm *time) {
-
+string make_dated_subdirs(const string& basedir, const struct tm* time) {
     // use the time to build the date subdirectories
     char date_path[11];
     strftime(date_path, sizeof(date_path), "%Y/%m/%d", time);

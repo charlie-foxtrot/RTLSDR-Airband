@@ -22,10 +22,10 @@ RUN apt-get update && \
       && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-  
+
 # set working dir for compiling dependencies
 WORKDIR /build_dependencies
- 
+
 # compile / install rtl-sdr-blog version of rtl-sdr for v4 support
 RUN git clone https://github.com/rtlsdrblog/rtl-sdr-blog && \
     cd rtl-sdr-blog/ && \

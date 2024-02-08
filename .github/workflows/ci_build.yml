@@ -7,7 +7,7 @@ on:
   pull_request:
   workflow_dispatch:
   schedule:
-    - cron: '39 13 * * *' # run daily 
+    - cron: '39 13 * * *' # run daily
 
 jobs:
   ci_build:

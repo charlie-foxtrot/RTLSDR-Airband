@@ -38,4 +38,3 @@ stop() {
 	    --pidfile "${RTLAIRBAND_PIDFILE}" --quiet
 	eend $?
 }
-
